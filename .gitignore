@@ -1,0 +1,11 @@
+# Local API keys — never commit. Copy js/env.example.js to js/env.js instead.
+js/env.js
+.env
+.env.local
+
+# Editor / OS noise
+.vscode/
+.idea/
+Thumbs.db
+desktop.ini
+.DS_Store

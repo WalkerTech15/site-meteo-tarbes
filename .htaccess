@@ -1,0 +1,44 @@
+# WeatherSphere — Apache config for Hostinger (public_html)
+
+# Disable directory listing (no "Index of /")
+Options -Indexes
+
+# Serve index.html for the root
+DirectoryIndex index.html
+
+# Do not serve local secret files if they are ever uploaded by mistake
+<FilesMatch "^\.env">
+  Require all denied
+</FilesMatch>
+
+# Baseline security headers
+<IfModule mod_headers.c>
+  # Never let the browser guess a MIME type different from the declared one
+  Header set X-Content-Type-Options "nosniff"
+  # Don't leak the full URL to third-party APIs (Open-Meteo, MapTiler, Pexels)
+  Header set Referrer-Policy "strict-origin-when-cross-origin"
+  # The site is never meant to be framed by another page
+  Header set X-Frame-Options "SAMEORIGIN"
+  # No camera/microphone/payment access is used anywhere; geolocation is
+  Header set Permissions-Policy "geolocation=(self), camera=(), microphone=(), payment=()"
+</IfModule>
+
+# Long-cache static assets. HTML is always revalidated so a new deploy is picked
+# up immediately; the ?v= query string on the CSS/JS tags in index.html is what
+# busts those caches (without it, a fix stays invisible for the full 7 days).
+<IfModule mod_expires.c>
+  ExpiresActive On
+  ExpiresByType text/html "access plus 0 seconds"
+  ExpiresByType text/css "access plus 7 days"
+  ExpiresByType application/javascript "access plus 7 days"
+  ExpiresByType image/svg+xml "access plus 30 days"
+</IfModule>
+
+<IfModule mod_headers.c>
+  <FilesMatch "\.html$">
+    Header set Cache-Control "no-cache"
+  </FilesMatch>
+</IfModule>
+
+# The site is a single index.html with in-page (hash) navigation.
+# No SPA rewrite rules are required — every route is client-side via "#".

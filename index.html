@@ -1,0 +1,646 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>WeatherSphere — Premium Weather Dashboard</title>
+<meta name="description" content="WeatherSphere — a premium, modern weather platform.">
+<link rel="preconnect" href="https://rsms.me/">
+<link rel="stylesheet" href="https://rsms.me/inter/inter.css">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🌤️</text></svg>">
+<link rel="stylesheet" href="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.css">
+<link rel="stylesheet" href="css/styles.css?v=18">
+</head>
+<body>
+<a class="skip-link" href="#main" data-i18n="skipToContent">Skip to content</a>
+
+<!-- ══════════ TOP NAVIGATION ══════════ -->
+<header class="topnav" role="banner">
+  <button class="icon-btn nav-burger" id="burgerBtn" aria-label="Open menu" data-i18n-aria="openMenu">
+    <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 7h16M4 12h16M4 17h16"/></svg>
+  </button>
+
+  <a class="logo" href="#" id="logoLink" aria-label="WeatherSphere home">
+    <span class="logo-mark" aria-hidden="true">
+      <svg viewBox="0 0 32 32" width="22" height="22">
+        <defs><linearGradient id="lg1" x1="0" y1="0" x2="1" y2="1">
+          <stop offset="0" stop-color="#60A5FA"/><stop offset="1" stop-color="#2563EB"/>
+        </linearGradient></defs>
+        <circle cx="16" cy="16" r="14" fill="url(#lg1)"/>
+        <path d="M9 19a4 4 0 0 1 .6-7.95A5.5 5.5 0 0 1 20.2 12 4.5 4.5 0 0 1 23 19H9z" fill="#fff" opacity=".95"/>
+      </svg>
+    </span>
+    <span class="logo-text">Weather<em>Sphere</em></span>
+  </a>
+
+  <!-- Search -->
+  <div class="search-wrap" id="searchWrap">
+    <div class="search-bar" role="combobox" aria-expanded="false" aria-haspopup="listbox" aria-owns="searchResults" id="searchCombo">
+      <svg class="search-ico" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>
+      <input type="search" id="searchInput" autocomplete="off" spellcheck="false"
+             placeholder="Search a city, state, province or country…"
+             data-i18n-ph="searchPlaceholder"
+             aria-label="Search location" data-i18n-aria="searchAria"
+             aria-autocomplete="list" aria-controls="searchResults">
+      <kbd class="search-kbd" aria-hidden="true">/</kbd>
+    </div>
+    <div class="search-panel" id="searchPanel" hidden>
+      <ul class="search-results" id="searchResults" role="listbox" aria-label="Search suggestions"></ul>
+    </div>
+  </div>
+
+  <div class="topnav-actions">
+    <!-- Simple / Detailed toggle -->
+    <div class="seg-toggle" role="radiogroup" aria-label="Display mode" data-i18n-aria="displayMode" id="modeToggle">
+      <span class="seg-thumb" aria-hidden="true"></span>
+      <button role="radio" aria-checked="true" data-mode="simple" data-i18n="modeSimple">Simple</button>
+      <button role="radio" aria-checked="false" data-mode="detailed" data-i18n="modeDetailed">Detailed</button>
+    </div>
+
+    <!-- Theme -->
+    <div class="theme-wrap">
+      <button class="icon-btn theme-btn" id="themeBtn" aria-haspopup="menu" aria-expanded="false" aria-controls="themeMenu" aria-label="Choose theme" data-i18n-aria="chooseTheme">
+        <span id="themeBtnIcon" aria-hidden="true"></span>
+      </button>
+      <div class="menu theme-menu" id="themeMenu" role="menu" hidden aria-label="Theme" data-i18n-aria="themeTitle">
+        <button role="menuitemradio" aria-checked="false" data-theme="light" tabindex="-1">
+          <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="4"/><path d="M12 3v2M12 19v2M5 5l1.4 1.4M17.6 17.6 19 19M3 12h2M19 12h2M5 19l1.4-1.4M17.6 6.4 19 5"/></svg>
+          <span data-i18n="themeLight">Light</span>
+        </button>
+        <button role="menuitemradio" aria-checked="false" data-theme="dark" tabindex="-1">
+          <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 14.5A8.5 8.5 0 1 1 9.5 4a7 7 0 0 0 10.5 10.5z"/></svg>
+          <span data-i18n="themeDark">Dark</span>
+        </button>
+        <button role="menuitemradio" aria-checked="false" data-theme="system" tabindex="-1">
+          <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="4" width="18" height="13" rx="2"/><path d="M8 21h8M12 17v4"/></svg>
+          <span data-i18n="themeSystem">System</span>
+        </button>
+      </div>
+    </div>
+
+    <!-- Language -->
+    <div class="lang-wrap">
+      <button class="icon-btn lang-btn" id="langBtn" aria-haspopup="menu" aria-expanded="false" aria-label="Change language" data-i18n-aria="changeLang">
+        <span aria-hidden="true">🌐</span>
+        <span class="lang-code" id="langCode">EN</span>
+      </button>
+      <div class="menu lang-menu" id="langMenu" role="menu" hidden>
+        <button role="menuitemradio" aria-checked="true" data-lang="en"><span data-flag="GB" aria-hidden="true"></span> English</button>
+        <button role="menuitemradio" aria-checked="false" data-lang="fr"><span data-flag="FR" aria-hidden="true"></span> Français</button>
+      </div>
+    </div>
+  </div>
+</header>
+
+<div class="shell">
+  <!-- ══════════ SIDEBAR ══════════ -->
+  <nav class="sidebar" id="sidebar" aria-label="Main navigation">
+    <ul class="side-list">
+      <li><button class="side-item is-active" data-view="home" aria-current="page">
+        <span class="side-ico ico-home" aria-hidden="true"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 10.5 12 3l9 7.5"/><path d="M5 9.5V21h14V9.5"/><path d="M10 21v-6h4v6"/></svg></span>
+        <span data-i18n="navHome">Home</span></button></li>
+      <li><button class="side-item" data-view="map">
+        <span class="side-ico ico-map" aria-hidden="true"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M9 4 3 6v14l6-2 6 2 6-2V4l-6 2-6-2z"/><path d="M9 4v14M15 6v14"/></svg></span>
+        <span data-i18n="navMap">Map</span></button></li>
+      <li><button class="side-item" data-view="forecast">
+        <span class="side-ico ico-forecast" aria-hidden="true"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M8 17a5 5 0 1 1 .8-9.94A6 6 0 0 1 20.5 9.5 4.5 4.5 0 0 1 19 17H8z"/><path d="M8 21h.01M12 21h.01M16 21h.01"/></svg></span>
+        <span data-i18n="navForecast">Forecast</span></button></li>
+      <li><button class="side-item" data-view="favorites">
+        <span class="side-ico ico-fav" aria-hidden="true"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="m12 3 2.7 5.6 6.3.9-4.5 4.4 1 6.1L12 17l-5.5 3 1-6.1L3 9.5l6.3-.9L12 3z"/></svg></span>
+        <span data-i18n="navFavorites">Favorites</span><span class="side-badge" id="favBadge" hidden></span></button></li>
+      <li><button class="side-item" data-view="about">
+        <span class="side-ico ico-about" aria-hidden="true"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><circle cx="12" cy="12" r="9"/><path d="M12 11v5M12 8h.01"/></svg></span>
+        <span data-i18n="navAbout">About</span></button></li>
+      <li><button class="side-item" data-view="settings">
+        <span class="side-ico ico-settings" aria-hidden="true"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .34 1.87l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.7 1.7 0 0 0-1.87-.34 1.7 1.7 0 0 0-1.03 1.56V21a2 2 0 1 1-4 0v-.09A1.7 1.7 0 0 0 9 19.35a1.7 1.7 0 0 0-1.87.34l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.7 1.7 0 0 0 4.65 15 1.7 1.7 0 0 0 3.09 14H3a2 2 0 1 1 0-4h.09A1.7 1.7 0 0 0 4.65 9a1.7 1.7 0 0 0-.34-1.87l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.7 1.7 0 0 0 9 4.65 1.7 1.7 0 0 0 10.03 3.09V3a2 2 0 1 1 4 0v.09A1.7 1.7 0 0 0 15 4.65a1.7 1.7 0 0 0 1.87-.34l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06A1.7 1.7 0 0 0 19.35 9c.24.57.8.97 1.42 1H21a2 2 0 1 1 0 4h-.09a1.7 1.7 0 0 0-1.51 1z"/></svg></span>
+        <span data-i18n="navSettings">Settings</span></button></li>
+    </ul>
+    <div class="side-foot">
+      <div class="seg-toggle side-mode" role="radiogroup" aria-label="Display mode" data-i18n-aria="displayMode" id="modeToggleSide">
+        <span class="seg-thumb" aria-hidden="true"></span>
+        <button role="radio" aria-checked="true" data-mode="simple" data-i18n="modeSimple">Simple</button>
+        <button role="radio" aria-checked="false" data-mode="detailed" data-i18n="modeDetailed">Detailed</button>
+      </div>
+      <div class="side-pos" id="sidePosBox" hidden>
+        <span class="side-pos-head">
+          <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 21s-7-6.1-7-11a7 7 0 1 1 14 0c0 4.9-7 11-7 11z"/><circle cx="12" cy="10" r="2.6"/></svg>
+          <span data-i18n="myPosition">My location</span>
+          <button class="side-pos-refresh" id="geoRetryBtn" aria-label="Update my location" data-i18n-aria="geoRefresh">
+            <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 11A8 8 0 1 0 18.9 15"/><path d="M20 5v6h-6"/></svg>
+          </button>
+        </span>
+        <button class="side-pos-body" id="sidePosBtn">
+          <span class="side-pos-name" id="sidePosName"></span>
+          <span class="side-pos-wx" id="sidePosWx"></span>
+        </button>
+      </div>
+    </div>
+  </nav>
+  <div class="sidebar-scrim" id="sidebarScrim" hidden></div>
+
+  <!-- ══════════ MAIN ══════════ -->
+  <main id="main" class="main" tabindex="-1">
+
+    <!-- ── HOME VIEW ── -->
+    <section class="view is-visible" id="view-home" aria-labelledby="heroCityName">
+      <div class="home-grid">
+        <!-- Hero -->
+        <article class="hero card" id="heroCard" aria-live="polite">
+          <div class="hero-bg" id="heroBg" aria-hidden="true"></div>
+          <div class="hero-landmark" id="heroLandmark" aria-hidden="true"></div>
+          <div class="hero-inner" id="heroInner"><!-- rendered by JS --></div>
+        </article>
+
+        <!-- Metrics -->
+        <aside class="metrics" aria-labelledby="metricsTitle">
+          <h2 class="sr-only" id="metricsTitle" data-i18n="conditions">Current conditions</h2>
+          <div class="metrics-grid" id="metricsGrid"><!-- rendered by JS; Simple mode --></div>
+          <div class="metrics-grid-detailed" id="metricsGridDetailed"><!-- rendered by JS; Detailed mode only --></div>
+        </aside>
+      </div>
+
+      <!-- Next hours (Simple mode only — Detailed keeps its "Next 24 hours" chart instead) -->
+      <section class="block simple-only" aria-labelledby="homeHourlyTitle">
+        <div class="block-head">
+          <h2 class="section-title sm" id="homeHourlyTitle" data-i18n="nextHours">Next hours</h2>
+        </div>
+        <div class="card hourly-card"><div class="hourly-strip" id="homeHourlyStrip" tabindex="0"></div></div>
+      </section>
+
+      <!-- Forecast -->
+      <section class="block" aria-labelledby="forecastTitle">
+        <div class="block-head">
+          <h2 class="section-title" id="forecastTitle" data-i18n="fiveDay">5-Day Forecast</h2>
+          <p class="section-sub" id="forecastSub"></p>
+        </div>
+        <div class="forecast-row" id="forecastRow"><!-- rendered by JS --></div>
+      </section>
+
+      <!-- Charts (detailed) -->
+      <section class="block detailed-only" aria-labelledby="chartsTitle">
+        <div class="block-head">
+          <h2 class="section-title" id="chartsTitle" data-i18n="next24h">Next 24 hours</h2>
+          <div class="chart-tabs" role="tablist" aria-label="Chart metric" id="chartTabs"></div>
+        </div>
+        <div class="card chart-card">
+          <div class="chart-host" id="chartHost" role="img"></div>
+        </div>
+      </section>
+
+      <!-- Insights + world map -->
+      <section class="block" aria-label="Insights and map">
+        <div class="home-duo">
+          <div class="duo-col detailed-only">
+            <h2 class="section-title sm" id="insightsTitle" data-i18n="insights">Weather insights</h2>
+            <div class="insights-list" id="insightsGrid"></div>
+          </div>
+          <div class="duo-col">
+            <h2 class="section-title sm" data-i18n="worldMapTitle">World map</h2>
+            <div class="card map-mini"><div id="homeMap"></div></div>
+          </div>
+        </div>
+      </section>
+
+      <!-- Explore -->
+      <section class="block" aria-labelledby="exploreTitle">
+        <div class="block-head">
+          <h2 class="section-title" id="exploreTitle" data-i18n="exploreWorld">Explore the world</h2>
+          <div class="carousel-nav">
+            <button class="icon-btn" id="exploreLeft" aria-label="Scroll left" data-i18n-aria="scrollLeft"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m14 6-6 6 6 6"/></svg></button>
+            <button class="icon-btn" id="exploreRight" aria-label="Scroll right" data-i18n-aria="scrollRight"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m10 6 6 6-6 6"/></svg></button>
+          </div>
+        </div>
+        <div class="carousel" id="exploreCarousel" tabindex="0" aria-label="Explore destinations"></div>
+      </section>
+    </section>
+
+    <!-- ── MAP VIEW ── -->
+    <section class="view" id="view-map" aria-labelledby="mapTitle" hidden>
+      <div class="block-head">
+        <div>
+          <h1 class="section-title" id="mapTitle" data-i18n="navMap">Map</h1>
+          <p class="section-sub" data-i18n="mapSub">Explore weather conditions across the world.</p>
+        </div>
+        <div class="map-actions map-filters">
+          <button class="chip is-active" data-jump="world" aria-pressed="true">
+            <span class="chip-icon" aria-hidden="true"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M3 12h18"/><path d="M12 3c2.5 2.6 4 6.1 4 9s-1.5 6.4-4 9c-2.5-2.6-4-6.1-4-9s1.5-6.4 4-9z"/></svg></span>
+            <span data-i18n="mapWorld">World</span>
+          </button>
+          <button class="chip" data-jump="france" aria-pressed="false">
+            <span class="chip-icon" aria-hidden="true"><span data-flag="FR"></span></span>
+            <span data-country="FR">France</span>
+          </button>
+          <button class="chip" data-jump="usa" aria-pressed="false">
+            <span class="chip-icon" aria-hidden="true"><span data-flag="US"></span></span>
+            <span data-country="US">United States</span>
+          </button>
+          <button class="chip" data-jump="canada" aria-pressed="false">
+            <span class="chip-icon" aria-hidden="true"><span data-flag="CA"></span></span>
+            <span data-country="CA">Canada</span>
+          </button>
+        </div>
+      </div>
+      <div class="card map-card" id="mapCard">
+        <!-- borders/labels now come from the MapTiler Hybrid style itself — legend removed -->
+        <div id="worldMap"></div>
+      </div>
+      <div class="map-info-grid">
+        <div class="card info-card" id="mapLocInfo"></div>
+        <div class="card info-card" id="mapConditions"></div>
+        <div class="card info-card" id="mapPopular"></div>
+      </div>
+    </section>
+
+    <!-- ── FORECAST VIEW ── -->
+    <section class="view" id="view-forecast" aria-labelledby="forecastViewTitle" hidden>
+      <div class="block-head">
+        <div>
+          <h1 class="section-title" id="forecastViewTitle" data-i18n="navForecast">Forecast</h1>
+          <p class="section-sub" id="forecastViewSub"></p>
+        </div>
+        <div class="map-actions">
+          <button class="icon-btn" id="fcPrev" aria-label="Scroll left" data-i18n-aria="scrollLeft"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m14 6-6 6 6 6"/></svg></button>
+          <button class="icon-btn" id="fcNext" aria-label="Scroll right" data-i18n-aria="scrollRight"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m10 6 6 6-6 6"/></svg></button>
+        </div>
+      </div>
+
+      <div class="forecast-carousel" id="forecastRow2" tabindex="0"></div>
+
+      <div class="fc-duo">
+        <div class="card fc-chart-card">
+          <div class="fc-card-head">
+            <h2 data-i18n="hourlyForecast">Hourly forecast</h2>
+            <div class="chart-tabs" role="tablist" aria-label="Hourly metric" id="fcTabs"></div>
+          </div>
+          <div class="chart-host sm" id="fcChartHost" role="img"></div>
+        </div>
+        <div class="card fc-chart-card">
+          <div class="fc-card-head">
+            <h2 data-i18n="precipitation">Precipitation</h2>
+            <span class="pill" data-i18n="rainPct">% rain</span>
+          </div>
+          <div class="chart-host sm" id="precipHost" role="img"></div>
+        </div>
+      </div>
+
+      <div class="fc-duo">
+        <div class="card info-card" id="dayDetails"></div>
+        <div class="card info-card" id="daySummary"></div>
+      </div>
+
+      <div class="block-head" style="margin-top:24px">
+        <h2 class="section-title sm" data-i18n="hourlyDetails">Hourly details</h2>
+        <div class="map-actions">
+          <button class="icon-btn" id="hsPrev" aria-label="Scroll left" data-i18n-aria="scrollLeft"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m14 6-6 6 6 6"/></svg></button>
+          <button class="icon-btn" id="hsNext" aria-label="Scroll right" data-i18n-aria="scrollRight"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m10 6 6 6-6 6"/></svg></button>
+        </div>
+      </div>
+      <div class="card hourly-card"><div class="hourly-strip" id="hourlyStrip" tabindex="0"></div></div>
+    </section>
+
+    <!-- ── FAVORITES VIEW ── -->
+    <section class="view" id="view-favorites" aria-labelledby="favTitle" hidden>
+      <div class="block-head">
+        <div>
+          <h1 class="section-title" id="favTitle"><span data-i18n="navFavorites">Favorites</span> <span aria-hidden="true">⭐</span></h1>
+          <p class="section-sub" data-i18n="favSub">Quickly find your favourite places and their weather conditions.</p>
+        </div>
+        <div class="map-actions">
+          <div class="seg-icons" role="radiogroup" aria-label="View">
+            <button role="radio" aria-checked="true" data-favview="grid" aria-label="Grid view" data-i18n-aria="viewGrid">
+              <svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><rect x="4" y="4" width="7" height="7" rx="1.5"/><rect x="13" y="4" width="7" height="7" rx="1.5"/><rect x="4" y="13" width="7" height="7" rx="1.5"/><rect x="13" y="13" width="7" height="7" rx="1.5"/></svg>
+            </button>
+            <button role="radio" aria-checked="false" data-favview="list" aria-label="List view" data-i18n-aria="viewList">
+              <svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M9 6h11M9 12h11M9 18h11M4 6h.01M4 12h.01M4 18h.01"/></svg>
+            </button>
+          </div>
+          <button class="btn-primary" id="favAddBtn">
+            <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>
+            <span data-i18n="addPlace">Add a place</span>
+          </button>
+        </div>
+      </div>
+
+      <div class="fav-grid" id="favGrid"></div>
+
+      <div class="fav-list-block" id="favListBlock" hidden>
+        <div class="block-head" style="margin-top:24px">
+          <h2 class="section-title sm" data-i18n="quickList">Quick list</h2>
+        </div>
+        <div class="card table-card">
+          <div class="table-scroll">
+            <table class="fav-table" id="favTable"></table>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ── ABOUT VIEW ── -->
+    <section class="view" id="view-about" aria-labelledby="aboutTitle" hidden>
+      <div class="card about-hero-card">
+        <div class="about-left">
+          <h1 class="section-title" id="aboutTitle" data-i18n="aboutTitle2">About WeatherSphere</h1>
+          <p class="about-tag" data-i18n="footerTag">Real-time weather, everywhere in the world.</p>
+          <p class="about-mission" data-i18n="aboutMission"></p>
+          <div class="about-meta">
+            <span class="pill">v1.0</span>
+            <span class="pill pill-heart"><span data-i18n="aboutMadeWith">Designed with care</span> <span aria-hidden="true">♥</span></span>
+          </div>
+        </div>
+        <div class="about-art" aria-hidden="true">
+          <span class="art-ring r1"></span>
+          <span class="art-ring r2"></span>
+          <span class="art-wicon w1" data-wicon="clear"></span>
+          <span class="art-wicon w2" data-wicon="partly"></span>
+          <span class="art-wicon w3" data-wicon="rain"></span>
+          <span class="art-wicon w4" data-wicon="storm"></span>
+        </div>
+      </div>
+
+      <div class="about-features">
+        <div class="card feature-card">
+          <span class="metric-ico tint-blue" aria-hidden="true"><svg viewBox="0 0 24 24" width="19" height="19" fill="none" stroke="currentColor" stroke-width="1.9"><circle cx="12" cy="12" r="8"/><circle cx="12" cy="12" r="3.5"/><circle cx="12" cy="12" r=".8" fill="currentColor"/></svg></span>
+          <h3 data-i18n="feat1T">Accurate data</h3>
+          <p data-i18n="feat1X"></p>
+        </div>
+        <div class="card feature-card">
+          <span class="metric-ico tint-emerald" aria-hidden="true"><svg viewBox="0 0 24 24" width="19" height="19" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linejoin="round"><path d="M13 2 4.5 13.5H11l-1 8.5L18.5 10.5H12L13 2z"/></svg></span>
+          <h3 data-i18n="feat2T">Real-time updates</h3>
+          <p data-i18n="feat2X"></p>
+        </div>
+        <div class="card feature-card">
+          <span class="metric-ico tint-violet" aria-hidden="true"><svg viewBox="0 0 24 24" width="19" height="19" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round"><path d="M12 21a9 9 0 1 1 9-9c0 2.2-1.8 3-3.2 3H15a2.5 2.5 0 0 0-1.8 4.2c.4.5.3 1.8-1.2 1.8z"/><circle cx="7.5" cy="11" r="1.2" fill="currentColor" stroke="none"/><circle cx="11" cy="7.5" r="1.2" fill="currentColor" stroke="none"/><circle cx="15.8" cy="8.6" r="1.2" fill="currentColor" stroke="none"/></svg></span>
+          <h3 data-i18n="feat3T">Elegant interface</h3>
+          <p data-i18n="feat3X"></p>
+        </div>
+        <div class="card feature-card">
+          <span class="metric-ico tint-amber" aria-hidden="true"><svg viewBox="0 0 24 24" width="19" height="19" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linejoin="round"><path d="M12 3 5 5.5v5c0 4.5 3 8.3 7 10 4-1.7 7-5.5 7-10v-5L12 3z"/><path d="m9.3 12 2 2 3.6-4" stroke-linecap="round"/></svg></span>
+          <h3 data-i18n="feat4T">Privacy</h3>
+          <p data-i18n="feat4X"></p>
+        </div>
+      </div>
+
+      <div class="about-duo">
+        <div class="card info-card">
+          <h2 class="info-title lg" data-i18n="techTitle">Technologies used</h2>
+          <p class="src-sub" data-i18n="techSub"></p>
+          <div class="tech-grid">
+            <div class="tech-item"><span class="tech-logo" style="background:#FDECE4;color:#E34F26">&lt;&gt;</span>HTML5</div>
+            <div class="tech-item"><span class="tech-logo" style="background:#E4F0FA;color:#1572B6">#</span>CSS3</div>
+            <div class="tech-item"><span class="tech-logo" style="background:#FDF7DC;color:#8a7500">JS</span>JavaScript</div>
+            <div class="tech-item"><span class="tech-logo" style="background:#F3EEFD;color:#7C3AED">SVG</span>SVG</div>
+            <div class="tech-item"><span class="tech-logo" style="background:#E8F0FE;color:#295FCC">ML</span>MapLibre GL JS</div>
+            <div class="tech-item"><span class="tech-logo" style="background:#E7F5F1;color:#0E9F6E">MT</span>MapTiler</div>
+            <div class="tech-item"><span class="tech-logo" style="background:#E9F2FB;color:#2563EB">OM</span>Open-Meteo</div>
+            <div class="tech-item"><span class="tech-logo" style="background:#E7F7F1;color:#05A081">Px</span>Pexels</div>
+          </div>
+        </div>
+        <div class="card info-card">
+          <h2 class="info-title lg" data-i18n="srcTitle">Data sources</h2>
+          <p class="src-sub" data-i18n="srcSub"></p>
+          <div class="src-list">
+            <div class="src-row">
+              <span class="src-logo" style="background:linear-gradient(135deg,#38BDF8,#2563EB)">OM</span>
+              <span class="src-body"><b>Open-Meteo</b><span data-i18n="srcOm"></span></span>
+              <a class="link-chip" href="https://open-meteo.com" target="_blank" rel="noopener">open-meteo.com <svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M7 17 17 7M9 7h8v8"/></svg></a>
+            </div>
+            <div class="src-row">
+              <span class="src-logo" style="background:linear-gradient(135deg,#A3E635,#4D7C0F)">OSM</span>
+              <span class="src-body"><b>OpenStreetMap</b><span data-i18n="srcOsm"></span></span>
+              <a class="link-chip" href="https://www.openstreetmap.org" target="_blank" rel="noopener">openstreetmap.org <svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M7 17 17 7M9 7h8v8"/></svg></a>
+            </div>
+            <div class="src-row">
+              <span class="src-logo" style="background:linear-gradient(135deg,#22C55E,#0E7490)">MT</span>
+              <span class="src-body"><b>MapTiler</b><span data-i18n="srcMaptiler"></span></span>
+              <a class="link-chip" href="https://www.maptiler.com" target="_blank" rel="noopener">maptiler.com <svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M7 17 17 7M9 7h8v8"/></svg></a>
+            </div>
+            <div class="src-row">
+              <span class="src-logo" style="background:linear-gradient(135deg,#05A081,#0F766E)">Px</span>
+              <span class="src-body"><b>Pexels</b><span data-i18n="srcPexels"></span></span>
+              <a class="link-chip" href="https://www.pexels.com" target="_blank" rel="noopener">pexels.com <svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M7 17 17 7M9 7h8v8"/></svg></a>
+            </div>
+          </div>
+          <p class="src-note" data-i18n="srcNote"></p>
+        </div>
+      </div>
+    </section>
+
+    <!-- ── SETTINGS VIEW ── -->
+    <section class="view" id="view-settings" aria-labelledby="settingsTitle" hidden>
+      <div class="block-head">
+        <div>
+          <h1 class="section-title" id="settingsTitle" data-i18n="navSettings">Settings</h1>
+          <p class="section-sub" data-i18n="settingsSub">Customise your WeatherSphere experience.</p>
+        </div>
+      </div>
+
+      <div class="set-grid">
+        <!-- Units -->
+        <div class="card set-card">
+          <div class="set-head">
+            <span class="metric-ico tint-blue" aria-hidden="true"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round"><path d="M10 13.5V5a2 2 0 1 1 4 0v8.5a4.5 4.5 0 1 1-4 0z"/></svg></span>
+            <div><h2 data-i18n="setUnits">Units</h2><p data-i18n="setUnitsSub"></p></div>
+          </div>
+          <div class="uchip-groups">
+            <div class="uchip-group">
+              <span class="ulabel" data-i18n="temperature">Temperature</span>
+              <div class="uchips" role="radiogroup" id="chipTemp">
+                <button role="radio" data-ut="c">°C</button>
+                <button role="radio" data-ut="f">°F</button>
+              </div>
+            </div>
+            <div class="uchip-group">
+              <span class="ulabel" data-i18n="windSpeed">Wind speed</span>
+              <div class="uchips" role="radiogroup" id="chipWind">
+                <button role="radio" data-uw="kmh">km/h</button>
+                <button role="radio" data-uw="ms">m/s</button>
+                <button role="radio" data-uw="mph">mph</button>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Language -->
+        <div class="card set-card">
+          <div class="set-head">
+            <span class="metric-ico tint-violet" aria-hidden="true"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3c2.5 2.6 3.8 5.7 3.8 9S14.5 18.4 12 21c-2.5-2.6-3.8-5.7-3.8-9S9.5 5.6 12 3z"/></svg></span>
+            <div><h2 data-i18n="setLang">Language</h2><p data-i18n="setLangSub"></p></div>
+          </div>
+          <div class="set-tiles" id="langTiles">
+            <button class="set-tile" data-lang="fr">
+              <span data-flag="FR" aria-hidden="true"></span> <b>Français</b>
+              <span class="tile-check" aria-hidden="true"><svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="#fff" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="m5 12 5 5 9-10"/></svg></span>
+            </button>
+            <button class="set-tile" data-lang="en">
+              <span data-flag="GB" aria-hidden="true"></span> <b>English</b>
+              <span class="tile-check" aria-hidden="true"><svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="#fff" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="m5 12 5 5 9-10"/></svg></span>
+            </button>
+          </div>
+        </div>
+
+        <!-- Display mode -->
+        <div class="card set-card">
+          <div class="set-head">
+            <span class="metric-ico tint-sky" aria-hidden="true"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M8 17a5 5 0 1 1 .8-9.94A6 6 0 0 1 20.5 9.5 4.5 4.5 0 0 1 19 17H8z"/></svg></span>
+            <div><h2 data-i18n="setMode">Display mode</h2><p data-i18n="setModeSub"></p></div>
+          </div>
+          <div class="set-tiles" id="modeTiles">
+            <button class="set-tile tall" data-mode="detailed">
+              <span class="tile-ico tint-blue" aria-hidden="true"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round"><path d="M4 20V10M10 20V4M16 20v-7M21 20H3"/></svg></span>
+              <span class="tile-txt"><b data-i18n="modeDetailed">Detailed</b><span data-i18n="modeDetailedDesc"></span></span>
+              <span class="tile-check" aria-hidden="true"><svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="#fff" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="m5 12 5 5 9-10"/></svg></span>
+            </button>
+            <button class="set-tile tall" data-mode="simple">
+              <span class="tile-ico tint-emerald" aria-hidden="true"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round"><rect x="4" y="4" width="7" height="7" rx="1.5"/><rect x="13" y="13" width="7" height="7" rx="1.5"/></svg></span>
+              <span class="tile-txt"><b data-i18n="modeSimple">Simple</b><span data-i18n="modeSimpleDesc"></span></span>
+              <span class="tile-check" aria-hidden="true"><svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="#fff" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="m5 12 5 5 9-10"/></svg></span>
+            </button>
+          </div>
+        </div>
+
+        <!-- Theme -->
+        <div class="card set-card">
+          <div class="set-head">
+            <span class="metric-ico tint-emerald" aria-hidden="true"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v2M12 19v2M5 5l1.4 1.4M17.6 17.6 19 19M3 12h2M19 12h2M5 19l1.4-1.4M17.6 6.4 19 5"/><circle cx="12" cy="12" r="4"/></svg></span>
+            <div><h2 data-i18n="themeTitle">Theme</h2><p data-i18n="themeSub"></p></div>
+          </div>
+          <div class="set-tiles theme-tiles" id="themeTiles">
+            <button class="set-tile theme" data-theme="light">
+              <span class="tprev tprev-light" aria-hidden="true">☀️<i></i><i></i></span>
+              <b data-i18n="themeLight">Light</b>
+              <span class="tile-check" aria-hidden="true"><svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="#fff" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="m5 12 5 5 9-10"/></svg></span>
+            </button>
+            <button class="set-tile theme" data-theme="dark">
+              <span class="tprev tprev-dark" aria-hidden="true">🌙<i></i><i></i></span>
+              <b data-i18n="themeDark">Dark</b>
+              <span class="tile-check" aria-hidden="true"><svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="#fff" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="m5 12 5 5 9-10"/></svg></span>
+            </button>
+            <button class="set-tile theme" data-theme="system">
+              <span class="tprev tprev-sys" aria-hidden="true">🖥️<i></i><i></i></span>
+              <b data-i18n="themeSystem">System</b>
+              <span class="tile-check" aria-hidden="true"><svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="#fff" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="m5 12 5 5 9-10"/></svg></span>
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Notifications -->
+      <div class="card set-card set-wide">
+        <div class="set-head">
+          <div>
+            <h2><span data-i18n="notifTitle">Notifications</span> <span class="pill proto-pill" data-i18n="prototypeBadge">Prototype</span></h2>
+            <p data-i18n="notifSub"></p>
+          </div>
+        </div>
+        <div class="notif-grid">
+          <div class="notif-item">
+            <span class="metric-ico tint-blue" aria-hidden="true"><svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M18 9a6 6 0 1 0-12 0c0 6-2.5 7-2.5 7h17S18 15 18 9zM10.3 20a2 2 0 0 0 3.4 0"/></svg></span>
+            <div class="notif-txt"><b id="notifLbl1" data-i18n="notif1T"></b><span data-i18n="notif1X"></span></div>
+            <button class="switch" role="switch" aria-checked="true" aria-labelledby="notifLbl1" data-notif="alerts"></button>
+          </div>
+          <div class="notif-item">
+            <span class="metric-ico tint-sky" aria-hidden="true"><svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5" width="18" height="16" rx="3"/><path d="M8 3v4M16 3v4M3 10h18"/></svg></span>
+            <div class="notif-txt"><b id="notifLbl2" data-i18n="notif2T"></b><span data-i18n="notif2X"></span></div>
+            <button class="switch" role="switch" aria-checked="true" aria-labelledby="notifLbl2" data-notif="daily"></button>
+          </div>
+          <div class="notif-item">
+            <span class="metric-ico tint-emerald" aria-hidden="true"><svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M8 17a5 5 0 1 1 .8-9.94A6 6 0 0 1 20.5 9.5 4.5 4.5 0 0 1 19 17H8z"/></svg></span>
+            <div class="notif-txt"><b id="notifLbl3" data-i18n="notif3T"></b><span data-i18n="notif3X"></span></div>
+            <button class="switch" role="switch" aria-checked="true" aria-labelledby="notifLbl3" data-notif="changes"></button>
+          </div>
+          <div class="notif-item">
+            <span class="metric-ico tint-rose" aria-hidden="true"><svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="8" width="18" height="4" rx="1"/><path d="M12 8v13M5 12v9h14v-9M12 8s-2-5-5-5a2.5 2.5 0 0 0 0 5M12 8s2-5 5-5a2.5 2.5 0 0 1 0 5"/></svg></span>
+            <div class="notif-txt"><b id="notifLbl4" data-i18n="notif4T"></b><span data-i18n="notif4X"></span></div>
+            <button class="switch" role="switch" aria-checked="false" aria-labelledby="notifLbl4" data-notif="features"></button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Data & privacy -->
+      <div class="card set-card set-wide">
+        <div class="set-head">
+          <div><h2 data-i18n="privTitle">Data & privacy</h2><p data-i18n="privSub"></p></div>
+        </div>
+        <div class="priv-grid">
+          <button class="priv-tile" data-priv="location">
+            <span class="metric-ico tint-blue" aria-hidden="true"><svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M12 21s-7-6.1-7-11a7 7 0 1 1 14 0c0 4.9-7 11-7 11z"/><circle cx="12" cy="10" r="2.6"/></svg></span>
+            <span class="priv-txt"><b data-i18n="priv1T"></b><span data-i18n="priv1X"></span></span>
+          </button>
+          <button class="priv-tile" data-priv="privacy">
+            <span class="metric-ico tint-violet" aria-hidden="true"><svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linejoin="round"><path d="M12 3 5 5.5v5c0 4.5 3 8.3 7 10 4-1.7 7-5.5 7-10v-5L12 3z"/></svg></span>
+            <span class="priv-txt"><b data-i18n="priv2T"></b><span data-i18n="priv2X"></span></span>
+          </button>
+          <button class="priv-tile" data-priv="cache">
+            <span class="metric-ico tint-amber" aria-hidden="true"><svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7h16M9 7V5a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2M6 7l1 13a1 1 0 0 0 1 1h8a1 1 0 0 0 1-1l1-13"/></svg></span>
+            <span class="priv-txt"><b data-i18n="priv3T"></b><span data-i18n="priv3X"></span></span>
+          </button>
+          <button class="priv-tile" data-priv="export">
+            <span class="metric-ico tint-emerald" aria-hidden="true"><svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v12M7 10l5 5 5-5M4 19h16"/></svg></span>
+            <span class="priv-txt"><b data-i18n="priv4T"></b><span data-i18n="priv4X"></span></span>
+          </button>
+        </div>
+      </div>
+    </section>
+
+  </main>
+</div>
+
+<!-- ══════════ FOOTER ══════════ -->
+<footer class="footer" role="contentinfo">
+  <div class="footer-inner">
+    <div class="footer-grid">
+      <div class="footer-brand">
+        <span class="logo-row">
+          <span class="logo-mark sm" aria-hidden="true">
+            <svg viewBox="0 0 32 32" width="18" height="18">
+              <circle cx="16" cy="16" r="14" fill="#2563EB"/>
+              <path d="M9 19a4 4 0 0 1 .6-7.95A5.5 5.5 0 0 1 20.2 12 4.5 4.5 0 0 1 23 19H9z" fill="#fff" opacity=".95"/>
+            </svg>
+          </span>
+          <span class="logo-text sm">Weather<em>Sphere</em></span>
+        </span>
+        <p data-i18n="footerTag">Real-time weather, everywhere in the world.</p>
+      </div>
+      <nav class="footer-col" aria-label="Product">
+        <h3 data-i18n="footProduct">Product</h3>
+        <button data-view="home" data-i18n="navHome">Home</button>
+        <button data-view="forecast" data-i18n="navForecast">Forecast</button>
+        <button data-view="map" data-i18n="navMap">Map</button>
+        <button data-view="favorites" data-i18n="navFavorites">Favorites</button>
+      </nav>
+      <nav class="footer-col" aria-label="About">
+        <h3 data-i18n="navAbout">About</h3>
+        <button data-view="about" data-i18n="footMission">Our mission</button>
+        <button data-view="about" data-i18n="footWeatherData">Weather data</button>
+      </nav>
+      <nav class="footer-col" aria-label="Resources">
+        <h3 data-i18n="footResources">Resources</h3>
+        <button data-view="about" data-i18n="footHelp">Help centre</button>
+        <button data-view="settings" data-i18n="footPrivacy">Privacy</button>
+        <a href="https://open-meteo.com" target="_blank" rel="noopener">Open-Meteo</a>
+      </nav>
+      <div class="footer-col">
+        <h3 data-i18n="footContact">Contact</h3>
+        <p class="foot-contact" data-i18n="contactNote">WeatherSphere is a student project built for school. It has no support address.</p>
+      </div>
+    </div>
+    <div class="footer-bottom">
+      <p class="footer-note">© 2026 WeatherSphere. <span data-i18n="footRights">All rights reserved.</span></p>
+      <p class="footer-note"><span data-i18n="footerData">Data</span>: Open-Meteo · OpenStreetMap</p>
+    </div>
+  </div>
+</footer>
+
+<div class="toast" id="toast" role="status" aria-live="polite" hidden></div>
+
+<script src="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.js"></script>
+<!-- ?v= is the cache-buster: .htaccess caches JS/CSS for 7 days, so bump this
+     number on every deploy or returning visitors keep running the old code. -->
+<script src="js/env.js?v=18"></script>
+<script src="js/data.js?v=18"></script>
+<script src="js/i18n.js?v=18"></script>
+<script src="js/icons.js?v=18"></script>
+<script src="js/charts.js?v=18"></script>
+<script src="js/app.js?v=18"></script>
+</body>
+</html>
