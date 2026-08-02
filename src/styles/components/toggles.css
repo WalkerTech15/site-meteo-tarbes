@@ -1,0 +1,133 @@
+/* Toggle-style controls: segmented toggle, icon segmented control,
+   on/off switch, and unit chips. */
+
+.seg-toggle {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  padding: 4px;
+  border-radius: 999px;
+  background: rgba(15, 23, 42, 0.055);
+  border: 1px solid rgba(15, 23, 42, 0.04);
+}
+body[data-theme="dark"] .seg-toggle {
+  background: rgba(148, 163, 184, 0.12);
+}
+.seg-toggle button {
+  position: relative;
+  z-index: 1;
+  padding: 7px 16px;
+  border-radius: 999px;
+  font-size: 13.5px;
+  font-weight: 600;
+  color: var(--text-2);
+  transition: color 0.25s;
+  white-space: nowrap;
+}
+.seg-toggle button[aria-checked="true"] {
+  color: var(--text);
+}
+.seg-thumb {
+  position: absolute;
+  top: 4px;
+  bottom: 4px;
+  left: 4px;
+  z-index: 0;
+  width: 60px;
+  border-radius: 999px;
+  background: var(--card);
+  box-shadow:
+    0 1px 3px rgba(15, 23, 42, 0.12),
+    0 4px 12px rgba(15, 23, 42, 0.06);
+  transition:
+    transform 0.35s var(--ease),
+    width 0.35s var(--ease);
+}
+body[data-theme="dark"] .seg-thumb {
+  background: #24314d;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.4);
+}
+
+.seg-icons {
+  display: inline-flex;
+  gap: 4px;
+  padding: 4px;
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  box-shadow: var(--shadow-sm);
+}
+.seg-icons button {
+  display: grid;
+  place-items: center;
+  width: 34px;
+  height: 30px;
+  border-radius: 8px;
+  color: var(--text-2);
+  transition:
+    background 0.2s,
+    color 0.2s;
+}
+.seg-icons button:hover {
+  color: var(--text);
+}
+.seg-icons button[aria-checked="true"] {
+  background: var(--primary-soft);
+  color: var(--primary-600);
+}
+
+.switch {
+  position: relative;
+  flex-shrink: 0;
+  margin-left: auto;
+  width: 40px;
+  height: 23px;
+  border-radius: 999px;
+  background: rgba(100, 116, 139, 0.35);
+  transition: background 0.25s;
+}
+.switch::after {
+  content: "";
+  position: absolute;
+  top: 2.5px;
+  left: 2.5px;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: #fff;
+  box-shadow: 0 1px 3px rgba(15, 23, 42, 0.3);
+  transition: translate 0.25s var(--ease);
+}
+.switch[aria-checked="true"] {
+  background: var(--primary);
+}
+.switch[aria-checked="true"]::after {
+  translate: 17px 0;
+}
+
+.uchips {
+  display: inline-flex;
+  gap: 6px;
+}
+.uchips button {
+  padding: 7px 14px;
+  border-radius: 10px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-2);
+  background: var(--bg);
+  border: 1px solid var(--border);
+  transition:
+    background 0.2s,
+    color 0.2s,
+    border-color 0.2s;
+}
+.uchips button:hover {
+  color: var(--text);
+}
+.uchips button[aria-checked="true"] {
+  background: var(--primary);
+  border-color: var(--primary);
+  color: #fff;
+  box-shadow: 0 2px 8px rgba(37, 99, 235, 0.3);
+}

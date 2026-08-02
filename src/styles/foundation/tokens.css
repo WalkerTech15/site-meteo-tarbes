@@ -1,0 +1,81 @@
+/* Design tokens — 8pt spacing · Inter · radius 20–28 · soft shadows.
+   Every color/spacing/radius value used anywhere else in the app should
+   route through one of these custom properties. */
+
+:root {
+  /* Color tokens */
+  --bg: #f8fafc;
+  --card: #ffffff;
+  --text: #0f172a;
+  --text-2: #64748b;
+  --text-3: #94a3b8;
+  --border: rgba(15, 23, 42, 0.08);
+  --primary: #2563eb;
+  --primary-600: #1d4ed8;
+  --primary-soft: #eff4fe;
+  --sky: #0284c7;
+  --sky-soft: #e8f5fd;
+  --amber: #d97706;
+  --amber-soft: #fdf3e3;
+  --emerald: #059669;
+  --emerald-soft: #e6f7f0;
+  --violet: #7c3aed;
+  --violet-soft: #f3eefd;
+  --rose: #e11d48;
+  --rose-soft: #fdedf1;
+
+  /* Chart ink */
+  --grid-line: #edf1f6;
+  --axis-ink: #94a3b8;
+
+  /* Elevation */
+  --shadow-sm: 0 1px 2px rgba(15, 23, 42, 0.04), 0 2px 8px rgba(15, 23, 42, 0.04);
+  --shadow-md: 0 2px 4px rgba(15, 23, 42, 0.04), 0 12px 32px rgba(15, 23, 42, 0.08);
+  --shadow-lg: 0 4px 8px rgba(15, 23, 42, 0.05), 0 24px 56px rgba(15, 23, 42, 0.13);
+
+  /* Radii */
+  --r-sm: 12px;
+  --r-md: 20px;
+  --r-lg: 24px;
+  --r-xl: 28px;
+
+  /* Spacing (8pt) */
+  --s-1: 8px;
+  --s-2: 16px;
+  --s-3: 24px;
+  --s-4: 32px;
+  --s-5: 40px;
+  --s-6: 48px;
+  --s-8: 64px;
+
+  --font: "Inter", "InterVariable", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --ease: cubic-bezier(0.22, 1, 0.36, 1);
+  --topnav-h: 72px;
+
+  /* Notched-phone safe areas */
+  --sal: env(safe-area-inset-left, 0px);
+  --sar: env(safe-area-inset-right, 0px);
+}
+
+/* Dark theme — same token names, redefined. Toggled via body[data-theme]
+   (JS resolves "system" to a concrete light/dark value before setting it),
+   not read directly from prefers-color-scheme in CSS. */
+body[data-theme="dark"] {
+  --bg: #0b1220;
+  --card: #151e31;
+  --text: #f1f5f9;
+  --text-2: #b3c0d4; /* raised from #94A3B8 for readable secondary text on dark */
+  --text-3: #8b99ae; /* raised from #64748B for better muted-text contrast */
+  --border: rgba(148, 163, 184, 0.14);
+  --primary-soft: rgba(59, 130, 246, 0.16);
+  --sky-soft: rgba(2, 132, 199, 0.18);
+  --amber-soft: rgba(217, 119, 6, 0.18);
+  --emerald-soft: rgba(5, 150, 105, 0.18);
+  --violet-soft: rgba(124, 58, 237, 0.18);
+  --rose-soft: rgba(225, 29, 72, 0.18);
+  --grid-line: #22304b;
+  --axis-ink: #64748b;
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.25), 0 2px 8px rgba(0, 0, 0, 0.25);
+  --shadow-md: 0 2px 4px rgba(0, 0, 0, 0.3), 0 12px 32px rgba(0, 0, 0, 0.4);
+  --shadow-lg: 0 4px 8px rgba(0, 0, 0, 0.35), 0 24px 56px rgba(0, 0, 0, 0.5);
+}

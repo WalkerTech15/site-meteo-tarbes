@@ -1,0 +1,146 @@
+/* Animated weather icon SVGs (js/data/icons.js's weatherIcon()). */
+
+.wi {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+.wi .sun-core {
+  transform-origin: 32px 32px;
+}
+.wi .sun-rays {
+  transform-origin: 32px 32px;
+  animation: spinSlow 26s linear infinite;
+}
+@keyframes spinSlow {
+  to {
+    transform: rotate(360deg);
+  }
+}
+.wi .cloud-a {
+  animation: drift 8s ease-in-out infinite alternate;
+}
+.wi .cloud-b {
+  animation: drift 10s ease-in-out infinite alternate-reverse;
+}
+@keyframes drift {
+  from {
+    transform: translateX(-1px);
+  }
+  to {
+    transform: translateX(1.4px);
+  }
+}
+.wi .drop {
+  animation: dropFall 1.8s ease-in infinite;
+  opacity: 0;
+}
+.wi .drop.d3 {
+  animation-delay: 0.9s;
+}
+.wi .drop-fix {
+  opacity: 0.9;
+} /* always visible — the icon never stops reading as rain */
+.wi .flake-fix {
+  opacity: 0.95;
+} /* same for snow */
+@keyframes dropFall {
+  0% {
+    opacity: 0;
+    transform: translateY(-2px);
+  }
+  25% {
+    opacity: 1;
+  }
+  75% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0;
+    transform: translateY(7px);
+  }
+}
+.wi .flake {
+  animation: flakeFall 2.6s linear infinite;
+  opacity: 0;
+  transform-origin: center;
+}
+.wi .flake.d2 {
+  animation-delay: 0.8s;
+}
+.wi .flake.d3 {
+  animation-delay: 1.7s;
+}
+@keyframes flakeFall {
+  0% {
+    opacity: 0;
+    transform: translateY(-2px) rotate(0deg);
+  }
+  20% {
+    opacity: 1;
+  }
+  80% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0;
+    transform: translateY(8px) rotate(120deg);
+  }
+}
+/* gentle glow instead of a hard blink */
+.wi .bolt {
+  transform-origin: center;
+  animation: boltFlash 6s ease-in-out infinite;
+}
+@keyframes boltFlash {
+  0%,
+  78%,
+  92%,
+  100% {
+    opacity: 1;
+  }
+  84% {
+    opacity: 0.55;
+  }
+}
+.wi .moon {
+  transform-origin: 32px 32px;
+  animation: moonSway 9s ease-in-out infinite alternate;
+}
+@keyframes moonSway {
+  from {
+    transform: rotate(-1.5deg);
+  }
+  to {
+    transform: rotate(2deg);
+  }
+}
+.wi .star {
+  animation: twinkle 3.2s ease-in-out infinite alternate;
+}
+.wi .star.d2 {
+  animation-delay: 1.1s;
+}
+@keyframes twinkle {
+  from {
+    opacity: 0.55;
+  }
+  to {
+    opacity: 1;
+  }
+}
+.wi .fog-line {
+  animation: fogSlide 4.5s ease-in-out infinite alternate;
+}
+.wi .fog-line.d2 {
+  animation-delay: 0.8s;
+  animation-direction: alternate-reverse;
+}
+@keyframes fogSlide {
+  from {
+    transform: translateX(-2.5px);
+  }
+  to {
+    transform: translateX(2.5px);
+  }
+}

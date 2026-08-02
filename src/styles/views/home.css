@@ -1,0 +1,706 @@
+/* Home view: hero card, metrics, forecast strip, insights, home mini-map,
+   and the explore carousel. */
+
+.home-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1.15fr) minmax(340px, 1fr);
+  gap: var(--s-3);
+  align-items: stretch;
+}
+
+.hero {
+  position: relative;
+  overflow: hidden;
+  border-radius: var(--r-xl);
+  min-height: 460px;
+  display: flex;
+  color: #fff;
+  border: 0;
+  box-shadow: var(--shadow-md);
+  isolation: isolate;
+}
+.hero-bg {
+  position: absolute;
+  inset: 0;
+  z-index: -2;
+  background: linear-gradient(150deg, #3b82f6, #1d4ed8);
+  transition: opacity 0.6s;
+}
+.hero-bg::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background:
+    radial-gradient(120% 90% at 85% -10%, rgba(255, 255, 255, 0.28), transparent 55%),
+    radial-gradient(90% 70% at 10% 110%, rgba(2, 6, 23, 0.38), transparent 60%);
+}
+/* layered mountain silhouettes — evokes the scenery photo of the reference */
+.hero-bg::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: 52%;
+  background: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 400 200' preserveAspectRatio='none'%3E%3Cpath d='M0 200V128l55-46 50 40 62-60 53 48 55-32 52 38 73-28v112z' fill='%23020617' fill-opacity='.20'/%3E%3Cpath d='M0 200v-46l70-40 65 36 70-48 65 40 65-26 65 32v52z' fill='%23020617' fill-opacity='.30'/%3E%3C/svg%3E")
+    bottom / 100% 100% no-repeat;
+}
+.hero-landmark {
+  position: absolute;
+  right: -8px;
+  bottom: -26px;
+  z-index: -1;
+  width: 380px;
+  height: 300px;
+  opacity: 0.28;
+  filter: saturate(0.9);
+  transform: rotate(-4deg);
+  animation: landmarkIn 1s var(--ease);
+  user-select: none;
+  pointer-events: none;
+}
+.hero-landmark .loc-photo-fallback {
+  font-size: 230px;
+  line-height: 1;
+}
+@keyframes landmarkIn {
+  from {
+    opacity: 0;
+    transform: rotate(-4deg) translateY(30px) scale(0.92);
+  }
+  to {
+    opacity: 0.28;
+    transform: rotate(-4deg) translateY(0) scale(1);
+  }
+}
+/* When a real photo is present: the hero photo covers the WHOLE card — no
+   rotation, no partial width, full opacity. (Fallback watermark keeps the
+   tilted look above.) The hero still clips to its rounded corners via overflow. */
+.hero-landmark:has(.loc-photo.has-photo) {
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  opacity: 1;
+  filter: none;
+  transform: none;
+  animation: none;
+}
+/* dark left→right overlay so the location + weather text stay readable */
+.loc-photo.hero-photo.has-photo::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  border-radius: inherit;
+  background: linear-gradient(
+    to right,
+    rgba(2, 6, 23, 0.74) 0%,
+    rgba(2, 6, 23, 0.48) 42%,
+    rgba(2, 6, 23, 0.12) 100%
+  );
+}
+/* hide the decorative mountain silhouette while a real photo is active */
+.hero:has(.hero-landmark .loc-photo.has-photo) .hero-bg::before {
+  display: none;
+}
+
+.hero-inner {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  padding: var(--s-4);
+}
+.hero-top {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: var(--s-2);
+}
+.hero-head {
+  margin-top: 6px;
+}
+.hero-main {
+  margin-top: auto;
+  padding-top: var(--s-3);
+}
+.hero-updated {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  margin-top: var(--s-3);
+  font-size: 13px;
+  opacity: 0.92;
+}
+.hero-live {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin-left: auto;
+  font-weight: 600;
+}
+.hero-loc-kicker {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  background: rgba(255, 255, 255, 0.16);
+  border: 1px solid rgba(255, 255, 255, 0.22);
+  -webkit-backdrop-filter: blur(8px);
+  backdrop-filter: blur(8px);
+  border-radius: 999px;
+  padding: 6px 14px;
+}
+.hero-clock {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  background: rgba(255, 255, 255, 0.16);
+  border: 1px solid rgba(255, 255, 255, 0.22);
+  -webkit-backdrop-filter: blur(8px);
+  backdrop-filter: blur(8px);
+  border-radius: 999px;
+  padding: 6px 12px;
+}
+.hero-city {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  font-size: 42px;
+  font-weight: 800;
+  letter-spacing: -0.03em;
+  line-height: 1.08;
+  margin-top: 16px;
+  text-shadow: 0 2px 24px rgba(2, 6, 23, 0.25);
+}
+.hero-region {
+  margin-top: 8px;
+  font-size: 15px;
+  font-weight: 500;
+  opacity: 0.92;
+}
+
+.hero-fav-btn {
+  display: grid;
+  place-items: center;
+  width: 38px;
+  height: 38px;
+  border-radius: 12px;
+  flex-shrink: 0;
+  color: rgba(255, 255, 255, 0.85);
+  transition:
+    transform 0.2s var(--ease),
+    background 0.2s,
+    color 0.2s;
+}
+.hero-fav-btn:hover {
+  background: rgba(255, 255, 255, 0.18);
+  color: #fff;
+  transform: scale(1.08);
+}
+.hero-fav-btn:active {
+  transform: scale(0.92);
+}
+.hero-fav-btn.is-fav svg {
+  fill: #fbbf24;
+  stroke: #fbbf24;
+}
+
+/* icon sits on the same row as the temperature, optically centered on it */
+.hero-now {
+  display: flex;
+  align-items: center;
+  gap: 18px;
+}
+.hero-now-txt {
+  min-width: 0;
+}
+.hero-wicon {
+  width: 88px;
+  height: 88px;
+  flex-shrink: 0;
+  filter: drop-shadow(0 6px 16px rgba(2, 6, 23, 0.25));
+}
+.hero-temp {
+  font-size: 68px;
+  font-weight: 800;
+  letter-spacing: -0.04em;
+  line-height: 1;
+  text-shadow: 0 2px 24px rgba(2, 6, 23, 0.2);
+}
+.hero-temp sup {
+  font-size: 0.42em;
+  font-weight: 700;
+  vertical-align: 14px;
+  opacity: 0.9;
+}
+.hero-desc {
+  font-size: 20px;
+  font-weight: 600;
+  margin-top: 6px;
+}
+.hero-hl {
+  display: flex;
+  gap: 16px;
+  margin-top: 10px;
+  font-size: 15px;
+  font-weight: 500;
+  opacity: 0.95;
+}
+.hero-hl b {
+  font-weight: 700;
+}
+.pulse-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: #4ade80;
+  box-shadow: 0 0 0 0 rgba(74, 222, 128, 0.6);
+  animation: pulse 2.4s 3; /* brief attention cue, then a calm static dot */
+}
+@keyframes pulse {
+  0% {
+    box-shadow: 0 0 0 0 rgba(74, 222, 128, 0.55);
+  }
+  70% {
+    box-shadow: 0 0 0 7px rgba(74, 222, 128, 0);
+  }
+  100% {
+    box-shadow: 0 0 0 0 rgba(74, 222, 128, 0);
+  }
+}
+
+/* Hero weather variants */
+.hero-bg[data-sky="clear-day"] {
+  background: linear-gradient(150deg, #38bdf8 0%, #2563eb 78%);
+}
+.hero-bg[data-sky="clear-night"] {
+  background: linear-gradient(150deg, #1e293b 0%, #0f172a 80%);
+}
+.hero-bg[data-sky="cloudy-day"] {
+  background: linear-gradient(150deg, #64748b 0%, #334155 85%);
+}
+.hero-bg[data-sky="cloudy-night"] {
+  background: linear-gradient(150deg, #334155 0%, #0f172a 85%);
+}
+.hero-bg[data-sky="rain"] {
+  background: linear-gradient(150deg, #475569 0%, #1e3a8a 90%);
+}
+.hero-bg[data-sky="snow"] {
+  background: linear-gradient(150deg, #94a3b8 0%, #475569 90%);
+}
+.hero-bg[data-sky="storm"] {
+  background: linear-gradient(150deg, #3730a3 0%, #111827 90%);
+}
+.hero-bg[data-sky="fog"] {
+  background: linear-gradient(150deg, #94a3b8 0%, #64748b 90%);
+}
+
+/* ── Metrics ── */
+
+.metrics {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-2);
+  min-width: 0;
+}
+.metrics-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: var(--s-2);
+}
+
+.metric-card {
+  position: relative;
+  padding: 16px;
+  border-radius: var(--r-md);
+  background: var(--card);
+  border: 1px solid var(--border);
+  box-shadow: var(--shadow-sm);
+  transition:
+    transform 0.3s var(--ease),
+    box-shadow 0.3s var(--ease);
+  animation: cardIn 0.5s var(--ease) backwards;
+}
+.metric-card:hover {
+  transform: translateY(-3px);
+  box-shadow: var(--shadow-md);
+}
+.metric-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.metric-label {
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: 0.015em;
+  color: var(--text-2);
+}
+.metric-value {
+  margin-top: 10px;
+  font-size: 24px;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  display: flex;
+  align-items: baseline;
+  gap: 4px;
+}
+.metric-value .unit {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text-2);
+}
+.metric-foot {
+  margin-top: 4px;
+  font-size: 13px;
+  color: var(--text-2);
+}
+
+/* Simple/Detailed reveal */
+.detailed-only {
+  display: none;
+}
+body[data-mode="detailed"] .detailed-only {
+  display: block;
+  animation: viewIn 0.5s var(--ease);
+}
+.metric-card.detailed-only {
+  display: none;
+}
+body[data-mode="detailed"] .metric-card.detailed-only {
+  display: block;
+}
+/* mirror of the above: Simple's compact hourly strip replaces Detailed's
+   "Next 24 hours" chart, so it must never show alongside it */
+.simple-only {
+  display: none;
+}
+body[data-mode="simple"] .simple-only {
+  display: block;
+  animation: viewIn 0.5s var(--ease);
+}
+
+/* Detailed-mode grouped metrics — #metricsGrid (Simple, 4 cards) and
+   #metricsGridDetailed (Detailed, 8 grouped cards) are two independent
+   containers so compacting one can never affect the other's markup or
+   layout math. Only display toggles by mode here. */
+#metricsGridDetailed {
+  display: none;
+}
+body[data-mode="detailed"] #metricsGrid {
+  display: none;
+}
+body[data-mode="detailed"] #metricsGridDetailed {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: var(--s-2);
+}
+/* Simple keeps the grid's default align-items:stretch (hero height already
+   tuned to it); Detailed's hero gets an explicit height instead — stretch
+   would otherwise still inflate it to match whatever the metrics column
+   needs, undoing the compaction below. align-items:start is a no-op once
+   .home-grid drops to a single column (≤1080px, existing shared rule) since
+   hero and metrics each get their own full-width row either way — the fixed
+   height is guarded to the same ≥1081px range where side-by-side actually
+   happens, so mobile/tablet Detailed keeps its normal stacked hero height. */
+body[data-mode="detailed"] .home-grid {
+  align-items: start;
+}
+@media (min-width: 1081px) {
+  body[data-mode="detailed"] .hero {
+    min-height: 0;
+    height: 590px;
+  } /* ~1024–1439px target */
+}
+@media (min-width: 1241px) {
+  body[data-mode="detailed"] .hero {
+    height: 650px;
+  } /* ~1440px+ target, matches the app's own 1240px hero-scale breakpoint */
+}
+
+.metric-group {
+  padding: 15px 16px;
+  border-radius: var(--r-md);
+  background: var(--card);
+  border: 1px solid var(--border);
+  box-shadow: var(--shadow-sm);
+  transition:
+    transform 0.3s var(--ease),
+    box-shadow 0.3s var(--ease);
+  animation: cardIn 0.5s var(--ease) backwards;
+}
+.metric-group:hover {
+  transform: translateY(-2px);
+  box-shadow: var(--shadow-md);
+}
+.mg-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.mg-head .metric-ico {
+  width: 26px;
+  height: 26px;
+  font-size: 13px;
+}
+.mg-title {
+  font-size: 12.5px;
+  font-weight: 600;
+  letter-spacing: 0.015em;
+  color: var(--text-2);
+}
+.mg-primary {
+  margin-top: 9px;
+  font-size: 21px;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+}
+.mg-primary .unit {
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--text-2);
+}
+.mg-rows {
+  margin-top: 9px;
+  padding-top: 9px;
+  border-top: 1px solid var(--border);
+}
+.mg-row {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  font-size: 12.5px;
+  line-height: 1.7;
+}
+.mg-row .metric-ico {
+  width: 18px;
+  height: 18px;
+  font-size: 10px;
+  margin-right: 2px;
+}
+.mg-row-label {
+  color: var(--text-2);
+}
+.mg-row-value {
+  margin-left: auto;
+  font-weight: 600;
+}
+.mg-status {
+  margin-top: 8px;
+  font-size: 12px;
+  color: var(--text-2);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+/* Sun cycle: sunrise/sunset carry equal weight — two plain rows, no single
+   dominant primary value (unlike every other group here) */
+.mg-rows-eq {
+  margin-top: 4px;
+  padding-top: 0;
+  border-top: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.mg-rows-eq .mg-row {
+  font-size: 13px;
+}
+.mg-rows-eq .mg-row-value {
+  font-weight: 700;
+}
+/* longer FR labels/values ("Direction du vent", "Lever du soleil", "6 h 22")
+   wrap awkwardly against a same-line label+value pair once the 2-col mobile
+   card narrows — stack label above value instead of a cramped wrap. */
+@media (max-width: 480px) {
+  .mg-row {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 0;
+  }
+  .mg-row-value {
+    margin-left: 0;
+  }
+}
+
+/* ── Forecast strip (home only — see views/forecast.css for the carousel) ── */
+
+.forecast-row {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: var(--s-2);
+}
+
+/* ── Insights + home mini-map ── */
+
+.home-duo {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1.3fr);
+  gap: var(--s-3);
+  align-items: start;
+}
+body[data-mode="simple"] .home-duo {
+  grid-template-columns: minmax(0, 1fr);
+}
+.duo-col .section-title {
+  margin-bottom: var(--s-2);
+}
+
+.insights-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-2);
+}
+.insight-card {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 16px 18px;
+  border-radius: var(--r-md);
+  background: var(--card);
+  border: 1px solid var(--border);
+  box-shadow: var(--shadow-sm);
+  animation: cardIn 0.5s var(--ease) backwards;
+}
+.insight-emoji {
+  display: grid;
+  place-items: center;
+  flex-shrink: 0;
+  width: 44px;
+  height: 44px;
+  font-size: 22px;
+  border-radius: 50%;
+}
+.insight-body {
+  min-width: 0;
+}
+.insight-card h3 {
+  font-size: 14.5px;
+  font-weight: 700;
+}
+.insight-card p {
+  font-size: 13px;
+  color: var(--text-2);
+  margin-top: 3px;
+  line-height: 1.45;
+}
+.insight-value {
+  margin-left: auto;
+  text-align: right;
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+.insight-value b {
+  font-size: 17px;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+}
+.insight-value span {
+  font-size: 11.5px;
+  color: var(--text-2);
+}
+
+.map-mini {
+  padding: 12px;
+  border-radius: var(--r-lg);
+}
+#homeMap {
+  height: 372px;
+  border-radius: var(--r-sm);
+  overflow: hidden;
+  background: #0b2545;
+  z-index: 0;
+}
+
+/* ── Explore carousel ── */
+
+.carousel-nav {
+  display: flex;
+  gap: 8px;
+}
+.carousel {
+  display: flex;
+  gap: var(--s-2);
+  overflow-x: auto;
+  padding: 6px 4px 18px;
+  scroll-snap-type: x mandatory;
+  /* scrollbar is hidden entirely — see utilities/responsive.css */
+}
+
+.explore-card {
+  position: relative;
+  flex: 0 0 220px;
+  height: 260px;
+  border-radius: var(--r-md);
+  overflow: hidden;
+  scroll-snap-align: start;
+  color: #fff;
+  text-align: left;
+  box-shadow: var(--shadow-sm);
+  transition:
+    transform 0.35s var(--ease),
+    box-shadow 0.35s var(--ease);
+  isolation: isolate;
+}
+.explore-card:hover {
+  transform: translateY(-6px) scale(1.02);
+  box-shadow: var(--shadow-lg);
+}
+.explore-card:active {
+  transform: translateY(-2px) scale(1);
+}
+.explore-bg {
+  position: absolute;
+  inset: 0;
+  z-index: -2;
+}
+.explore-bg::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(180deg, rgba(2, 6, 23, 0) 30%, rgba(2, 6, 23, 0.55) 100%);
+}
+.explore-emoji {
+  position: absolute;
+  right: -6px;
+  top: 14px;
+  z-index: -1;
+  font-size: 108px;
+  line-height: 1;
+  opacity: 0.85;
+  transform: rotate(-6deg);
+  transition: transform 0.45s var(--ease);
+  user-select: none;
+}
+.explore-card:hover .explore-emoji {
+  transform: rotate(0deg) scale(1.08);
+}
+.explore-txt {
+  position: absolute;
+  left: 18px;
+  right: 18px;
+  bottom: 16px;
+}
+.explore-name {
+  font-size: 18px;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+  text-shadow: 0 1px 12px rgba(2, 6, 23, 0.4);
+}
+.explore-country {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+  opacity: 0.92;
+  margin-top: 2px;
+}

@@ -1,0 +1,37 @@
+/* WeatherSphere — stylesheet entry point.
+   Import order is the cascade order: foundation → layout → components →
+   views → utilities. Later files may rely on custom properties and base
+   element styles defined earlier, so don't reorder these groups. */
+
+/* Foundation */
+@import "./foundation/tokens.css";
+@import "./foundation/reset.css";
+@import "./foundation/base.css";
+
+/* Layout */
+@import "./layout/topnav.css";
+@import "./layout/sidebar.css";
+@import "./layout/main.css";
+@import "./layout/footer.css";
+
+/* Components */
+@import "./components/buttons.css";
+@import "./components/toggles.css";
+@import "./components/forms.css";
+@import "./components/cards.css";
+@import "./components/toast.css";
+@import "./components/charts.css";
+@import "./components/flags.css";
+@import "./components/weather-icons.css";
+
+/* Views */
+@import "./views/home.css";
+@import "./views/map.css";
+@import "./views/forecast.css";
+@import "./views/favorites.css";
+@import "./views/about.css";
+@import "./views/settings.css";
+
+/* Utilities */
+@import "./utilities/accessibility.css";
+@import "./utilities/responsive.css";

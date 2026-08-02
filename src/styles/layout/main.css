@@ -1,0 +1,33 @@
+/* App shell grid (sidebar + main) and the view show/hide mechanism. */
+
+.shell {
+  display: grid;
+  grid-template-columns: 248px minmax(0, 1fr);
+  max-width: 1520px;
+  margin: 0 auto;
+  min-height: calc(100vh - var(--topnav-h));
+}
+
+.main {
+  padding: var(--s-4) var(--s-4) var(--s-6);
+  min-width: 0;
+  outline: none;
+}
+
+.view {
+  display: none;
+}
+.view.is-visible {
+  display: block;
+  animation: viewIn 0.45s var(--ease);
+}
+@keyframes viewIn {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}

@@ -1,0 +1,230 @@
+/* Cross-view responsive overrides, grouped by breakpoint (not by component).
+   Component-specific breakpoints that only ever touch one file (e.g. the
+   #worldMap height steps in views/map.css) stay co-located there instead —
+   this file is only for the shared breakpoints below, where a single media
+   query changes several unrelated components/views together. Kept as one
+   file rather than fragmented across ~15 component/view files so the exact
+   original breakpoint behavior is easy to verify in one place. */
+
+@media (max-width: 1240px) {
+  .home-grid {
+    grid-template-columns: minmax(0, 1.45fr) minmax(300px, 1fr);
+  }
+  .hero-temp {
+    font-size: 72px;
+  }
+  .hero-city {
+    font-size: 40px;
+  }
+}
+
+@media (max-width: 1080px) {
+  .home-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .metrics-grid {
+    grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+  }
+  /* Simple mode only has 4 cards — keep them a clean 2×2 instead of the
+     auto-fill flow above, which exists for Detailed's larger 12-card set */
+  body[data-mode="simple"] .metrics-grid {
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  }
+  .home-duo {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  /* 5 cards no longer fit — switch to a swipeable row instead of wrapping 4+1 */
+  .forecast-row {
+    display: flex;
+    overflow-x: auto;
+    scroll-snap-type: x mandatory;
+    padding: 4px 4px 14px;
+    /* scrollbar is hidden entirely — see the rule at the bottom of this file */
+  }
+  .forecast-row .forecast-card {
+    flex: 0 0 162px;
+    scroll-snap-align: start;
+  }
+  .seg-toggle button {
+    padding: 7px 12px;
+  }
+  .footer-grid {
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  }
+  .map-info-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .fc-duo {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .about-hero-card {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .about-features {
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  }
+  .about-duo {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .set-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .notif-grid,
+  .priv-grid {
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  }
+}
+
+@media (max-width: 900px) {
+  .topnav {
+    padding: 0 var(--s-2);
+    gap: var(--s-2);
+  }
+  .nav-burger {
+    display: inline-flex;
+  }
+  .shell {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .sidebar {
+    position: fixed;
+    left: 0;
+    top: var(--topnav-h);
+    z-index: 95;
+    width: 268px;
+    background: var(--card);
+    border-right: 1px solid var(--border);
+    box-shadow: var(--shadow-lg);
+    transform: translateX(-105%);
+    transition: transform 0.38s var(--ease);
+    padding-top: var(--s-3);
+  }
+  .sidebar.is-open {
+    transform: none;
+  }
+  .sidebar-scrim:not([hidden]) {
+    display: block;
+  }
+  .side-mode {
+    display: inline-flex;
+  }
+  .search-kbd {
+    display: none;
+  }
+  #modeToggle {
+    display: none;
+  }
+  .main {
+    padding: var(--s-3) var(--s-2) var(--s-5);
+  }
+}
+
+@media (max-width: 640px) {
+  .logo-text {
+    display: none;
+  }
+  .hero {
+    min-height: 420px;
+  }
+  .hero-inner {
+    padding: var(--s-3);
+  }
+  .hero-city {
+    font-size: 30px;
+  }
+  .hero-temp {
+    font-size: 54px;
+  }
+  .hero-wicon {
+    width: 72px;
+    height: 72px;
+  }
+  .hero-now {
+    gap: 14px;
+  }
+  .fc-icon {
+    width: 40px;
+    height: 40px;
+  }
+  .hero-landmark {
+    font-size: 150px;
+  }
+  .section-title {
+    font-size: 22px;
+  }
+  .metrics-grid {
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  }
+  /* compact two-column footer on phones */
+  .footer-grid {
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+    gap: var(--s-3) var(--s-2);
+  }
+  .footer-brand {
+    grid-column: 1 / -1;
+  }
+  .footer-inner {
+    padding: var(--s-4) var(--s-2) var(--s-2);
+  }
+  #homeMap {
+    height: 280px;
+  }
+  .about-features {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .about-art {
+    min-height: 220px;
+  }
+  /* data-source rows: chip drops to its own line instead of crushing the text */
+  .src-row {
+    flex-wrap: wrap;
+  }
+  .src-row .link-chip {
+    margin-left: 58px;
+  }
+  .notif-grid,
+  .priv-grid,
+  .set-tiles {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .theme-tiles {
+    grid-template-columns: repeat(3, 1fr);
+  }
+  .map-card,
+  .chart-card,
+  .fc-chart-card,
+  .info-card,
+  .set-card,
+  .about-hero-card {
+    padding: var(--s-2);
+  }
+  .fav-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .explore-card {
+    flex-basis: 180px;
+    height: 220px;
+  }
+  .lang-menu {
+    right: -60px;
+  }
+}
+
+/* Hide the horizontal scrollbar on carousels — mouse/touch/keyboard scrolling
+   still works and the arrow buttons remain. (.table-scroll deliberately
+   keeps its thin scrollbar — see views/favorites.css.) */
+.carousel,
+.forecast-carousel,
+.hourly-strip,
+.forecast-row {
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+.carousel::-webkit-scrollbar,
+.forecast-carousel::-webkit-scrollbar,
+.hourly-strip::-webkit-scrollbar,
+.forecast-row::-webkit-scrollbar {
+  display: none;
+  width: 0;
+  height: 0;
+}

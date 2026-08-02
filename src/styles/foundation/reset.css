@@ -1,0 +1,30 @@
+/* Minimal reset — only what the app's own components rely on. */
+
+* {
+  box-sizing: border-box;
+}
+html {
+  scroll-behavior: smooth;
+}
+h1,
+h2,
+h3,
+h4,
+p {
+  margin: 0;
+}
+button {
+  font: inherit;
+  color: inherit;
+  background: none;
+  border: 0;
+  cursor: pointer;
+}
+ul {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+input {
+  font: inherit;
+}

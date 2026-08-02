@@ -1,0 +1,38 @@
+{
+  "name": "weathersphere",
+  "version": "1.0.0",
+  "private": true,
+  "description": "WeatherSphere — a premium, modern weather dashboard built with vanilla JS and Vite.",
+  "type": "module",
+  "engines": {
+    "node": "^20.19.0 || >=22.12.0"
+  },
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "lint": "eslint . && stylelint \"src/**/*.css\"",
+    "lint:fix": "eslint . --fix && stylelint \"src/**/*.css\" --fix",
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
+    "check": "npm run lint && npm run format:check && npm run test && npm run build",
+    "optimize:flags": "svgo -rf public/assets/flags --multipass"
+  },
+  "dependencies": {
+    "maplibre-gl": "^4.7.1"
+  },
+  "devDependencies": {
+    "@eslint/js": "^9.18.0",
+    "eslint": "^9.18.0",
+    "eslint-config-prettier": "^9.1.0",
+    "globals": "^15.14.0",
+    "prettier": "^3.4.2",
+    "stylelint": "^16.13.2",
+    "stylelint-config-standard": "^36.0.1",
+    "svgo": "^3.3.2",
+    "vite": "^8.0.0",
+    "vitest": "^4.1.10"
+  }
+}

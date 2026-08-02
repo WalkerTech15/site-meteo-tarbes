@@ -1,7 +1,11 @@
-# Local API keys — never commit. Copy js/env.example.js to js/env.js instead.
-js/env.js
+# Local API keys — never commit. Copy .env.local.example to .env.local instead.
 .env
 .env.local
+.env.*.local
+
+# Build output & dependencies
+node_modules/
+dist/
 
 # Editor / OS noise
 .vscode/

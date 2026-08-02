@@ -1,0 +1,310 @@
+/* Generic reusable "atoms" shared across several views: the base card
+   surface, section headings, icon badges, pills, empty states, loading
+   skeletons, the forecast-day card, the labeled info panel, and the
+   location-photo container (hero/explore/favorites/map all show one). */
+
+.section-title {
+  font-size: 28px;
+  font-weight: 700;
+  letter-spacing: -0.025em;
+}
+.section-title.sm {
+  font-size: 18px;
+  letter-spacing: -0.015em;
+}
+.section-sub {
+  color: var(--text-2);
+  font-size: 14.5px;
+  margin-top: 4px;
+}
+
+.block {
+  margin-top: var(--s-6);
+}
+.block-head {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: var(--s-2);
+  margin-bottom: var(--s-3);
+  flex-wrap: wrap;
+}
+
+.card {
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: var(--r-lg);
+  box-shadow: var(--shadow-sm);
+}
+
+/* Icon badge used by metric cards, grouped metrics, forecast/day-summary
+   rows, notification/privacy tiles, and the about-page feature cards. */
+.metric-ico {
+  display: grid;
+  place-items: center;
+  width: 34px;
+  height: 34px;
+  border-radius: 50%;
+  font-size: 16px;
+  flex-shrink: 0;
+}
+.tint-blue {
+  background: var(--primary-soft);
+  color: var(--primary);
+}
+.tint-sky {
+  background: var(--sky-soft);
+  color: var(--sky);
+}
+.tint-amber {
+  background: var(--amber-soft);
+  color: var(--amber);
+}
+.tint-emerald {
+  background: var(--emerald-soft);
+  color: var(--emerald);
+}
+.tint-violet {
+  background: var(--violet-soft);
+  color: var(--violet);
+}
+.tint-rose {
+  background: var(--rose-soft);
+  color: var(--rose);
+}
+
+.pill {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-2);
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  padding: 5px 12px;
+}
+
+.empty-state {
+  grid-column: 1 / -1;
+  padding: var(--s-8) var(--s-3);
+  text-align: center;
+  border: 1.5px dashed rgba(15, 23, 42, 0.14);
+  border-radius: var(--r-lg);
+  color: var(--text-2);
+}
+.empty-state .big {
+  font-size: 44px;
+  margin-bottom: 12px;
+}
+.empty-state h3 {
+  color: var(--text);
+  font-size: 17px;
+  margin-bottom: 4px;
+}
+body[data-theme="dark"] .empty-state {
+  border-color: rgba(148, 163, 184, 0.25);
+}
+
+.skeleton {
+  position: relative;
+  overflow: hidden;
+  background: rgba(15, 23, 42, 0.06);
+  border-radius: 10px;
+  color: transparent !important;
+}
+.skeleton::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.65), transparent);
+  transform: translateX(-100%);
+  animation: shimmer 1.4s infinite;
+}
+.hero .skeleton {
+  background: rgba(255, 255, 255, 0.22);
+}
+.hero .skeleton::after {
+  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.35), transparent);
+}
+@keyframes shimmer {
+  to {
+    transform: translateX(100%);
+  }
+}
+body[data-theme="dark"] .skeleton {
+  background: rgba(148, 163, 184, 0.12);
+}
+
+/* Forecast-day card — used on both the home 5-day strip and the forecast
+   view's carousel (each view sizes/lays out its own container). */
+.forecast-card {
+  padding: var(--s-3) var(--s-2);
+  text-align: center;
+  border-radius: var(--r-md);
+  background: var(--card);
+  border: 1px solid var(--border);
+  box-shadow: var(--shadow-sm);
+  transition:
+    transform 0.3s var(--ease),
+    box-shadow 0.3s var(--ease),
+    border-color 0.3s;
+  animation: cardIn 0.5s var(--ease) backwards;
+}
+@keyframes cardIn {
+  from {
+    opacity: 0;
+    transform: translateY(12px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+.forecast-card:hover {
+  transform: translateY(-4px);
+  box-shadow: var(--shadow-md);
+}
+.forecast-card.is-today {
+  border-color: rgba(37, 99, 235, 0.35);
+  background: linear-gradient(180deg, #fbfdff, #f3f7fe);
+}
+body[data-theme="dark"] .forecast-card.is-today {
+  background: linear-gradient(180deg, #17233c, #151e31);
+}
+.fc-day {
+  font-size: 14px;
+  font-weight: 700;
+}
+.fc-date {
+  font-size: 13px;
+  color: var(--text-2);
+  margin-top: 2px;
+}
+.fc-icon {
+  width: 44px;
+  height: 44px;
+  margin: 12px auto 8px;
+}
+.fc-icon .wi {
+  filter: drop-shadow(0 2px 4px rgba(15, 23, 42, 0.12));
+}
+.fc-desc {
+  font-size: 13px;
+  color: var(--text-2);
+  min-height: 2.6em;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.fc-temps {
+  margin-top: 8px;
+  display: flex;
+  justify-content: center;
+  gap: 10px;
+  font-size: 15px;
+}
+.fc-temps .hi {
+  font-weight: 700;
+}
+.fc-temps .lo {
+  color: var(--text-2);
+  font-weight: 500;
+}
+.fc-rain {
+  margin-top: 10px;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--sky);
+  background: var(--sky-soft);
+  border-radius: 999px;
+  padding: 3px 10px;
+}
+
+/* Labeled info panel — used by the map view's location/conditions/popular
+   cards and the forecast view's day-details/summary cards. */
+.info-card {
+  padding: var(--s-3);
+  border-radius: var(--r-lg);
+}
+.info-title {
+  font-size: 15px;
+  font-weight: 700;
+  margin-bottom: var(--s-2);
+}
+.info-head {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  margin-bottom: var(--s-2);
+}
+
+/* Location photo container (Pexels) — fixed ratio, cover, no layout shift.
+   Shared by the home hero, explore cards, favorites cards, and map info. */
+.loc-photo {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+  border-radius: inherit;
+}
+.loc-photo-fallback {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  transition: opacity 0.3s ease;
+}
+.loc-photo-img {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  object-position: center;
+  opacity: 0;
+  transition: opacity 0.45s ease;
+  border-radius: inherit;
+}
+.loc-photo.has-photo .loc-photo-img {
+  opacity: 1;
+}
+.loc-photo.has-photo .loc-photo-fallback {
+  opacity: 0;
+}
+.loc-photo.loading::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background: linear-gradient(
+    100deg,
+    transparent 30%,
+    rgba(255, 255, 255, 0.16) 50%,
+    transparent 70%
+  );
+  background-size: 220% 100%;
+  animation: locShimmer 1.15s linear infinite;
+}
+@keyframes locShimmer {
+  from {
+    background-position: 180% 0;
+  }
+  to {
+    background-position: -80% 0;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .loc-photo.loading::after {
+    animation: none;
+  }
+}
+/* location image (curated / future Unsplash) fills its visual container */
+.loc-img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  border-radius: inherit;
+  display: block;
+}

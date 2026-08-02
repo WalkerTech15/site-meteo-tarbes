@@ -1,0 +1,19 @@
+/* Document-level base styles. */
+
+body {
+  margin: 0;
+  font-family: var(--font);
+  font-size: 16px;
+  line-height: 1.5;
+  color: var(--text);
+  background: var(--bg);
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+
+::selection {
+  background: rgba(37, 99, 235, 0.18);
+}
+body[data-theme="dark"] ::selection {
+  background: rgba(96, 165, 250, 0.3);
+}

@@ -1,0 +1,247 @@
+/* Settings view: unit/language/mode/theme tiles, notifications, privacy. */
+
+.set-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1.15fr) minmax(0, 1fr);
+  gap: var(--s-2);
+  align-items: stretch;
+}
+.set-card {
+  padding: var(--s-3);
+  border-radius: var(--r-lg);
+}
+.set-wide {
+  margin-top: var(--s-2);
+}
+.set-head {
+  display: flex;
+  align-items: flex-start;
+  gap: 14px;
+  margin-bottom: var(--s-3);
+}
+.set-head .metric-ico {
+  width: 42px;
+  height: 42px;
+  border-radius: 13px;
+}
+.set-head h2 {
+  font-size: 16.5px;
+  font-weight: 700;
+}
+.set-head p {
+  font-size: 13px;
+  color: var(--text-2);
+  margin-top: 2px;
+}
+
+.uchip-groups {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--s-3) var(--s-4);
+}
+.ulabel {
+  display: block;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-2);
+  margin-bottom: 8px;
+}
+
+.set-tiles {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: var(--s-2);
+}
+.theme-tiles {
+  grid-template-columns: repeat(3, 1fr);
+}
+.set-tile {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 16px;
+  border-radius: var(--r-sm);
+  background: var(--bg);
+  border: 1.5px solid var(--border);
+  font-size: 14px;
+  text-align: left;
+  transition:
+    border-color 0.2s,
+    background 0.2s,
+    transform 0.2s var(--ease);
+}
+.set-tile:hover {
+  transform: translateY(-1px);
+}
+.set-tile[aria-checked="true"] {
+  border-color: var(--primary);
+  background: var(--primary-soft);
+}
+.set-tile .flag {
+  width: 22px;
+}
+.set-tile.tall {
+  align-items: flex-start;
+}
+.tile-ico {
+  display: grid;
+  place-items: center;
+  flex-shrink: 0;
+  width: 38px;
+  height: 38px;
+  border-radius: 11px;
+}
+.tile-txt {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+.tile-txt b {
+  font-size: 14px;
+}
+.tile-txt span {
+  font-size: 12px;
+  color: var(--text-2);
+  line-height: 1.45;
+}
+.tile-check {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  display: none;
+  place-items: center;
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  background: var(--primary);
+}
+.set-tile[aria-checked="true"] .tile-check {
+  display: grid;
+}
+
+.set-tile.theme {
+  flex-direction: column;
+  align-items: stretch;
+  gap: 8px;
+  font-weight: 600;
+  font-size: 13px;
+}
+.tprev {
+  position: relative;
+  display: block;
+  height: 56px;
+  border-radius: 9px;
+  font-size: 15px;
+  padding: 8px;
+  border: 1px solid var(--border);
+}
+.tprev i {
+  display: block;
+  height: 5px;
+  border-radius: 3px;
+  margin: 5px 0 0 28px;
+}
+.tprev-light {
+  background: #f3f7fc;
+}
+.tprev-light i {
+  background: #cbd8e8;
+}
+.tprev-dark {
+  background: #1e293b;
+}
+.tprev-dark i {
+  background: #475569;
+}
+.tprev-sys {
+  background: linear-gradient(100deg, #f3f7fc 50%, #1e293b 50%);
+}
+.tprev-sys i {
+  background: linear-gradient(100deg, #cbd8e8 55%, #475569 55%);
+}
+
+.notif-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: var(--s-2);
+}
+.notif-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 14px;
+  border-radius: var(--r-sm);
+  border: 1px solid var(--border);
+  background: var(--bg);
+}
+.notif-item .metric-ico {
+  flex-shrink: 0;
+}
+.notif-txt {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+.notif-txt b {
+  font-size: 13px;
+}
+.notif-txt span {
+  font-size: 11.5px;
+  color: var(--text-2);
+  line-height: 1.4;
+}
+
+.priv-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: var(--s-2);
+}
+.priv-tile {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 14px;
+  border-radius: var(--r-sm);
+  text-align: left;
+  border: 1px solid var(--border);
+  background: var(--bg);
+  transition:
+    border-color 0.2s,
+    transform 0.2s var(--ease),
+    box-shadow 0.2s;
+}
+.priv-tile:hover {
+  border-color: rgba(37, 99, 235, 0.4);
+  transform: translateY(-2px);
+  box-shadow: var(--shadow-sm);
+}
+.priv-tile .metric-ico {
+  flex-shrink: 0;
+}
+.priv-txt {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+.priv-txt b {
+  font-size: 13px;
+}
+.priv-txt span {
+  font-size: 11.5px;
+  color: var(--text-2);
+  line-height: 1.4;
+}
+
+/* "Prototype" badge on the notifications card */
+.proto-pill {
+  margin-left: 8px;
+  vertical-align: 2px;
+  font-size: 11px;
+  padding: 3px 9px;
+  color: var(--amber);
+  background: var(--amber-soft);
+  border-color: rgba(217, 119, 6, 0.35);
+}

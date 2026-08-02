@@ -1,0 +1,110 @@
+/* Country/region flags (hand-drawn placeholder SVGs and the real SVG
+   assets under public/assets/flags/), plus their per-context sizing. */
+
+.flag {
+  display: inline-block;
+  /* aspect-ratio: auto → use the element's OWN intrinsic ratio (real flag
+     <img> ≈ 1.9:1, the hand-drawn placeholder <svg viewBox="0 0 24 18"> 4:3)
+     instead of forcing every flag into a fixed 4:3 box, which stretched real
+     images (e.g. the US 50-star flag) out of proportion. */
+  width: 21px;
+  aspect-ratio: auto;
+  height: auto;
+  object-fit: contain;
+  border-radius: 3px;
+  clip-path: inset(0 round 3px); /* rounds the drawn flag without SVG clipPath ids */
+  vertical-align: -3px;
+  flex-shrink: 0;
+}
+.flag-txt {
+  width: auto;
+  aspect-ratio: auto;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  color: var(--text-2);
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: 1px 4px;
+  vertical-align: 1px;
+}
+.hero-loc-kicker .flag {
+  width: 20px;
+  vertical-align: -4px;
+}
+.hero-region .flag {
+  width: 18px;
+  vertical-align: -3px;
+}
+.si-visual .flag {
+  width: 30px;
+  border-radius: 4px;
+}
+.explore-emoji .flag {
+  width: 120px;
+  border-radius: 12px;
+  box-shadow: 0 8px 24px rgba(2, 6, 23, 0.3);
+}
+.explore-country .flag {
+  width: 17px;
+  vertical-align: -3px;
+}
+.fav-emoji .flag {
+  width: 84px;
+  border-radius: 10px;
+}
+.fav-kind .flag {
+  width: 16px;
+  vertical-align: -3px;
+}
+.hero-landmark .flag {
+  width: 260px;
+  border-radius: 24px;
+}
+.menu .flag,
+.seg-toggle .flag {
+  width: 19px;
+  vertical-align: -3px;
+}
+
+/* Regional flags (real SVG assets under public/assets/flags/). Each flag
+   lives in its OWN fixed-height wrapper, so the country flag and the
+   state/province flag keep their DIFFERENT natural widths (US 19:10,
+   California 3:2, …). Flags size purely by height (width auto) → natural
+   aspect ratio, never squared/equal-width. */
+.location-flags {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px; /* 6–8px between the two flags */
+  flex-wrap: nowrap;
+  vertical-align: -0.32em; /* sit centered on the location text line */
+}
+.location-flag-wrap {
+  height: 25px; /* hero: 24–26px. Fixed height reserves row space (no shift) */
+  width: auto;
+  display: inline-flex;
+  align-items: center;
+  flex: 0 0 auto;
+  overflow: visible;
+}
+.location-flags--small .location-flag-wrap {
+  height: 19px;
+} /* search / popup / small cards: 18–20px */
+/* the flag itself (img OR inline <svg>) fills the wrapper height, width auto */
+.location-flag-wrap img,
+.location-flag-wrap > .flag {
+  height: 100% !important;
+  width: auto !important;
+  max-width: none !important;
+  min-width: 0 !important;
+  aspect-ratio: auto !important;
+  object-fit: contain;
+  display: block;
+  flex-shrink: 0;
+  transform: none;
+  background: transparent;
+}
+.location-flag-wrap img {
+  border-radius: 2.5px;
+} /* subtle rounding, no artwork crop */

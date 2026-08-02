@@ -1,0 +1,94 @@
+/* Chart tabs, chart host (SVG line/bar charts from js/ui/charts.js), and
+   the pointer/touch tooltip they draw into. */
+
+.chart-tabs {
+  display: inline-flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  padding: 4px;
+  background: rgba(15, 23, 42, 0.055);
+  border-radius: 999px;
+}
+body[data-theme="dark"] .chart-tabs {
+  background: rgba(148, 163, 184, 0.12);
+}
+.chart-tabs button {
+  padding: 7px 16px;
+  border-radius: 999px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-2);
+  transition:
+    background 0.25s,
+    color 0.25s,
+    box-shadow 0.25s;
+}
+.chart-tabs button:hover {
+  color: var(--text);
+}
+.chart-tabs button[aria-selected="true"] {
+  background: var(--card);
+  color: var(--text);
+  box-shadow: 0 1px 3px rgba(15, 23, 42, 0.12);
+}
+body[data-theme="dark"] .chart-tabs button[aria-selected="true"] {
+  background: #24314d;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.4);
+}
+
+.chart-card {
+  padding: var(--s-3);
+  border-radius: var(--r-lg);
+}
+.chart-host {
+  position: relative;
+  width: 100%;
+  height: 300px;
+}
+.chart-host svg {
+  display: block;
+  width: 100%;
+  height: 100%;
+  overflow: visible;
+}
+
+.chart-tooltip {
+  position: absolute;
+  z-index: 5;
+  pointer-events: none;
+  background: var(--text);
+  color: #fff;
+  border-radius: 12px;
+  padding: 10px 14px;
+  font-size: 13px;
+  line-height: 1.35;
+  box-shadow: var(--shadow-lg);
+  opacity: 0;
+  transform: translate(-50%, -8px);
+  transition:
+    opacity 0.15s,
+    transform 0.2s var(--ease);
+  white-space: nowrap;
+}
+body[data-theme="dark"] .chart-tooltip {
+  background: #24314d;
+}
+.chart-tooltip.on {
+  opacity: 1;
+  transform: translate(-50%, -14px);
+}
+.chart-tooltip .tt-val {
+  font-size: 17px;
+  font-weight: 700;
+}
+.chart-tooltip .tt-time {
+  opacity: 0.72;
+  font-size: 11.5px;
+}
+
+.chart-cross {
+  transition: opacity 0.15s;
+}
+.chart-dot {
+  transition: opacity 0.15s;
+}
