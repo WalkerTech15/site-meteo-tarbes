@@ -20,6 +20,7 @@
 @import "./components/forms.css";
 @import "./components/cards.css";
 @import "./components/toast.css";
+@import "./components/dialog.css";
 @import "./components/charts.css";
 @import "./components/flags.css";
 @import "./components/weather-icons.css";

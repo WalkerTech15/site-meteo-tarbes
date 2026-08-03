@@ -486,15 +486,22 @@ test.describe("explore carousel photos", () => {
 });
 
 test.describe("favorites", () => {
-  /* Adds the current location, opens it from the favorites view, then removes
-     it — the full lifecycle through the refactored (non-nested) controls. */
-  test("6. add, open and remove a favorite", async ({ app }) => {
+  /* Adds the current location, opens it, safely confirms removal, then uses
+     the toast action to restore it. */
+  test("6. removing a favorite asks for confirmation and can be undone", async ({ app }) => {
     await app.locator("#heroFavBtn").click();
     await expect(app.locator("#heroFavBtn")).toHaveAttribute("aria-pressed", "true");
 
     await app.locator('.side-item[data-view="favorites"]').click();
     const card = app.locator("#favGrid .favx-card");
     await expect(card).toHaveCount(1);
+
+    /* Saved places use the same protected photo proxy as the hero. The image
+       is decorative because the card's open button already names the place. */
+    await expect(card.locator("img.loc-photo-img")).toHaveCount(1);
+    await expect(card.locator("img.loc-photo-img")).toHaveAttribute("alt", "");
+    await expect(card.locator("a.favx-credit")).toBeVisible();
+    await expect(card.locator("a.favx-credit")).toContainText(PEXELS_PHOTOGRAPHER);
 
     /* the card is a plain <article>: the open control and the remove control
        are siblings, neither nested inside the other */
@@ -507,9 +514,28 @@ test.describe("favorites", () => {
     await expect(app.locator("#heroFavBtn")).toHaveAttribute("aria-pressed", "true");
 
     await app.locator('.side-item[data-view="favorites"]').click();
-    await app.locator("#favGrid .favx-star").click();
+    const remove = app.locator("#favGrid .favx-star");
+    await remove.click();
+    await expect(remove).toHaveClass(/is-confirming/);
+    await expect(app.locator("#confirmDialog")).toBeVisible();
+    await expect(app.locator("#confirmDialogConfirm")).toHaveClass(/confirm-dialog-danger/);
+    const dialogBox = await app.locator("#confirmDialog").boundingBox();
+    expect(dialogBox.width).toBeLessThanOrEqual(380);
+
+    /* Cancel is safe and returns focus to the original remove control. */
+    await app.locator("#confirmDialogCancel").click();
+    await expect(app.locator("#favGrid .favx-card")).toHaveCount(1);
+    await expect(remove).toBeFocused();
+
+    await remove.click();
+    await app.locator("#confirmDialogConfirm").click();
     await expect(app.locator("#favGrid .favx-card")).toHaveCount(0);
     await expect(app.locator("#favGrid .empty-state")).toBeVisible();
+
+    /* The actionable toast restores the same favorite and its card. */
+    await expect(app.locator("#toast .toast-action")).toContainText("Annuler la suppression");
+    await app.locator("#toast .toast-action").click();
+    await expect(app.locator("#favGrid .favx-card")).toHaveCount(1);
   });
 
   test("7. grid and list views are mutually exclusive", async ({ app }) => {
@@ -528,6 +554,11 @@ test.describe("favorites", () => {
     const row = app.locator("#favTable tbody tr").first();
     await expect(row).not.toHaveAttribute("tabindex", "0");
     await expect(row.locator(".ft-open")).toHaveCount(1);
+    await expect(row.locator(".ft-visual img.loc-photo-img")).toHaveAttribute("alt", "");
+    await expect(row.locator(".ft-place-cell > a.ft-credit")).toBeVisible();
+    /* The attribution remains a sibling of the location button, never an
+       invalid interactive link nested inside a button. */
+    await expect(row.locator(".ft-open a")).toHaveCount(0);
 
     await app.locator('[data-favview="grid"]').click();
     await expect(app.locator("#favGrid")).toBeVisible();

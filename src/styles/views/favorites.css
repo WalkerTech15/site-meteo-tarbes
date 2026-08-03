@@ -44,10 +44,12 @@
   inset: 0;
   z-index: -2;
 }
-.favx-bg::after {
+.favx-bg::before {
   content: "";
   position: absolute;
   inset: 0;
+  z-index: 1;
+  pointer-events: none;
   background: linear-gradient(
     180deg,
     rgba(2, 6, 23, 0.18) 0%,
@@ -66,6 +68,9 @@
   transform: rotate(-6deg);
   transition: transform 0.45s var(--ease);
   user-select: none;
+}
+.favx-bg.has-photo .favx-emoji {
+  opacity: 0;
 }
 .favx-card:hover .favx-emoji {
   transform: rotate(0) scale(1.06);
@@ -116,6 +121,12 @@
 .favx-star:hover {
   background: rgba(255, 255, 255, 0.4);
   transform: scale(1.1);
+}
+.favx-star.is-confirming,
+.fav-remove-s.is-confirming {
+  color: #fff;
+  background: var(--rose);
+  box-shadow: 0 0 0 4px var(--rose-soft);
 }
 .favx-main {
   margin-top: auto;
@@ -171,6 +182,13 @@
   font-size: 12px;
   opacity: 0.92;
   background: rgba(2, 6, 23, 0.3);
+}
+.favx-credit {
+  right: 8px;
+  bottom: 42px;
+  z-index: 3;
+  max-width: calc(100% - 16px);
+  border-radius: 7px;
 }
 
 /* quick list table */
@@ -251,6 +269,11 @@
 }
 .ft-visual .flag {
   width: 26px;
+}
+.ft-credit {
+  margin: 3px 0 0 58px;
+  font-size: 9.5px;
+  line-height: 1.25;
 }
 .ft-names {
   display: flex;

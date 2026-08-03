@@ -7,9 +7,10 @@ import { wmo, wxDesc } from "../data/weather-codes.js";
 import { fmtTemp, tempUnit, fmtWind, windUnit } from "../core/units.js";
 import { locName, locCountry, kindLabel, flagsHtml } from "../core/location.js";
 import { flagHtml } from "../data/flags.js";
-import { gradBg, locVisual } from "../services/photo-api.js";
+import { gradBg, locVisual, hydrateLocPhoto } from "../services/photo-api.js";
 import { favWx, favWxAt, persistFavs } from "../features/favorites.js";
 import { showToast } from "./notifications.js";
+import { confirmAction } from "./confirm-dialog.js";
 import { selectLocation } from "../features/location.js";
 import { switchView } from "./navigation.js";
 import { renderHero } from "./render-home.js";
@@ -26,6 +27,47 @@ function favAgoText() {
   return mins < 1 ? t("justNow") : t("agoMin").replace("{m}", mins);
 }
 
+let favPhotoObserver;
+
+/* Favorite cards can exist while their view is hidden, so hydrate them only
+   when they approach the viewport. Re-rendering replaces the cards; disconnect
+   the previous observer so detached cards never trigger stale photo requests. */
+function hydrateFavoritePhotos(grid, table) {
+  favPhotoObserver?.disconnect();
+  favPhotoObserver = null;
+
+  const targets = [...grid.querySelectorAll(".favx-card"), ...table.querySelectorAll("tbody tr")];
+  const hydrate = (target) => {
+    const isRow = target.matches("tr");
+    const locId = isRow ? target.dataset.loc : target.dataset.favId;
+    const loc = state.favorites.find((item) => item.id === locId);
+    hydrateLocPhoto(target.querySelector(isRow ? ".ft-visual" : ".favx-bg"), loc, {
+      creditHost: isRow ? target.querySelector(".ft-place-cell") : target,
+      creditClass: isRow ? "loc-credit--inline ft-credit" : "favx-credit",
+      decorative: true,
+      raceGuard: false,
+      sizes: isRow ? "46px" : "(max-width: 640px) 100vw, 320px",
+    });
+  };
+
+  if (!("IntersectionObserver" in window)) {
+    targets.forEach(hydrate);
+    return;
+  }
+
+  favPhotoObserver = new IntersectionObserver(
+    (entries, observer) => {
+      entries.forEach((entry) => {
+        if (!entry.isIntersecting) return;
+        observer.unobserve(entry.target);
+        hydrate(entry.target);
+      });
+    },
+    { rootMargin: "160px" },
+  );
+  targets.forEach((target) => favPhotoObserver.observe(target));
+}
+
 function favCardHtml(loc, i) {
   const w = favWx[loc.id];
   const openLabel = esc(t("openLocation").replace("{name}", locName(loc)));
@@ -34,9 +76,10 @@ function favCardHtml(loc, i) {
      previous role="button" wrapper nested the remove control inside another
      control, which is invalid and made the card unusable with a screen reader. */
   return `
-    <article class="favx-card" style="animation-delay:${i * 60}ms">
-      <span class="favx-bg" style="${gradBg(loc)}" aria-hidden="true"></span>
-      <span class="favx-emoji" aria-hidden="true">${locVisual(loc)}</span>
+    <article class="favx-card" data-fav-id="${esc(loc.id)}" style="animation-delay:${i * 60}ms">
+      <span class="favx-bg loc-photo loading" style="${gradBg(loc)}" aria-hidden="true">
+        <span class="loc-photo-fallback favx-emoji">${locVisual(loc)}</span>
+      </span>
       <span class="favx-top">
         ${flagsHtml(loc, "small")}
         <span class="favx-names"><b>${esc(locName(loc))}</b><span>${favSubtitle(loc)}</span></span>
@@ -69,9 +112,11 @@ function favRowHtml(loc) {
   const w = favWx[loc.id];
   return `
     <tr data-loc="${esc(loc.id)}">
-      <td>
+      <td class="ft-place-cell">
         <button class="ft-open ft-place">
-          <span class="ft-visual" style="${gradBg(loc)}" aria-hidden="true">${locVisual(loc)}</span>
+          <span class="ft-visual loc-photo loading" style="${gradBg(loc)}" aria-hidden="true">
+            <span class="loc-photo-fallback">${locVisual(loc)}</span>
+          </span>
           <span class="ft-names">${flagHtml(loc.cc, "", state.lang)} <b>${esc(locName(loc))}</b><span>${favSubtitle(loc)}</span></span>
         </button>
       </td>
@@ -89,15 +134,43 @@ function favRowHtml(loc) {
     </tr>`;
 }
 
-function favClickHandler(e) {
+async function favClickHandler(e) {
+  /* Attribution links are independent controls; following one must not also
+     select the table row's location. */
+  if (e.target.closest(".loc-credit")) return;
   const rm = e.target.closest("[data-remove]");
   if (rm) {
     e.stopPropagation();
-    state.favorites = state.favorites.filter((f) => f.id !== rm.dataset.remove);
+    const index = state.favorites.findIndex((favorite) => favorite.id === rm.dataset.remove);
+    if (index < 0) return;
+    const removed = state.favorites[index];
+
+    rm.classList.add("is-confirming");
+    const accepted = await confirmAction({
+      title: t("removeFavTitle"),
+      message: t("removeFavConfirm").replace("{name}", locName(removed)),
+      confirmLabel: t("removeAction"),
+      cancelLabel: t("cancelAction"),
+      trigger: rm,
+    });
+    rm.classList.remove("is-confirming");
+    if (!accepted) return;
+
+    state.favorites.splice(index, 1);
     persistFavs();
     renderFavorites();
     if (state.loc) renderHero();
-    showToast(t("removedFav"));
+    showToast(t("removedFav"), {
+      actionLabel: t("undoAction"),
+      onAction: () => {
+        if (state.favorites.some((favorite) => favorite.id === removed.id)) return;
+        state.favorites.splice(Math.min(index, state.favorites.length), 0, removed);
+        persistFavs();
+        renderFavorites();
+        if (state.loc) renderHero();
+        showToast(t("restoredFav"));
+      },
+    });
     return;
   }
   const host = e.target.closest("[data-loc]");
@@ -141,6 +214,7 @@ export function renderFavorites() {
       <th>${t("updated")}</th><th></th>
     </tr></thead>
     <tbody>${state.favorites.map(favRowHtml).join("")}</tbody>`;
+  hydrateFavoritePhotos(grid, $("#favTable"));
 
   /* every interactive target is now a real <button>, so Enter/Space activate
      natively and no synthetic keydown handler is needed */

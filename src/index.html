@@ -1639,6 +1639,26 @@
       </div>
     </footer>
 
+    <dialog
+      class="confirm-dialog"
+      id="confirmDialog"
+      aria-labelledby="confirmDialogTitle"
+      aria-describedby="confirmDialogMessage"
+    >
+      <div class="confirm-dialog-card">
+        <h2 id="confirmDialogTitle"></h2>
+        <p id="confirmDialogMessage"></p>
+        <div class="confirm-dialog-actions">
+          <button class="confirm-dialog-btn" id="confirmDialogCancel" type="button"></button>
+          <button
+            class="confirm-dialog-btn confirm-dialog-danger"
+            id="confirmDialogConfirm"
+            type="button"
+          ></button>
+        </div>
+      </div>
+    </dialog>
+
     <div class="toast" id="toast" role="status" aria-live="polite" hidden></div>
 
     <script type="module" src="/js/main.js"></script>

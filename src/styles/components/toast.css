@@ -18,6 +18,28 @@
   box-shadow: var(--shadow-lg);
   animation: toastIn 0.35s var(--ease);
 }
+.toast.has-action {
+  display: flex;
+  align-items: center;
+  gap: 18px;
+  text-align: left;
+  pointer-events: auto;
+}
+.toast-action {
+  flex-shrink: 0;
+  padding: 4px 7px;
+  border-radius: 7px;
+  color: #93c5fd;
+  font: inherit;
+  font-weight: 750;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+.toast-action:hover,
+.toast-action:focus-visible {
+  color: #fff;
+  background: rgba(255, 255, 255, 0.13);
+}
 @keyframes toastIn {
   from {
     opacity: 0;
