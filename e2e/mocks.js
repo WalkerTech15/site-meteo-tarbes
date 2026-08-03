@@ -19,32 +19,46 @@ const hourIso = (i) => `${DAY}T${String(i % 24).padStart(2, "0")}:00`;
 
 export const WEATHER_TEMP_C = 21.4;
 
-function weatherPayload() {
+/* Weather "shapes" the advisory banner is tested against. `calm` is ordinary
+   weather that must never raise an advisory; the others cross exactly one or
+   two documented metric thresholds. Values stay canonical metric — Open-Meteo's
+   own units — because that is what the app normalises from. */
+const WEATHER_KINDS = {
+  calm: { code: 1, feels: 20.1, gust: 24, visibility: 20000 },
+  /* thunderstorm (WMO 95) + 88 km/h gusts → two advisories, storm ranked first */
+  storm: { code: 95, feels: 18, gust: 88, visibility: 20000 },
+  heat: { code: 0, feels: 43.5, gust: 18, visibility: 20000 },
+};
+
+function weatherPayload(kind = "calm") {
+  const w = WEATHER_KINDS[kind] || WEATHER_KINDS.calm;
   return {
     timezone: "Europe/Paris",
     current: {
       time: `${DAY}T00:00`,
       temperature_2m: WEATHER_TEMP_C,
       relative_humidity_2m: 55,
-      apparent_temperature: 20.1,
+      apparent_temperature: w.feels,
       is_day: 1,
-      weather_code: 1,
+      weather_code: w.code,
       wind_speed_10m: 12.5,
+      wind_gusts_10m: w.gust,
       wind_direction_10m: 220,
       surface_pressure: 1014,
     },
     hourly: {
       time: HOURS.map(hourIso),
       temperature_2m: HOURS.map((i) => 18 + (i % 8)),
-      apparent_temperature: HOURS.map((i) => 17 + (i % 8)),
+      apparent_temperature: HOURS.map(() => w.feels),
       relative_humidity_2m: HOURS.map(() => 55),
       wind_speed_10m: HOURS.map((i) => 10 + (i % 5)),
+      wind_gusts_10m: HOURS.map(() => w.gust),
       surface_pressure: HOURS.map(() => 1014),
       dew_point_2m: HOURS.map(() => 11),
       precipitation_probability: HOURS.map((i) => (i % 10) * 5),
-      visibility: HOURS.map(() => 20000),
+      visibility: HOURS.map(() => w.visibility),
       uv_index: HOURS.map(() => 4),
-      weather_code: HOURS.map(() => 1),
+      weather_code: HOURS.map(() => w.code),
       is_day: HOURS.map((i) => (i % 24 >= 7 && i % 24 <= 20 ? 1 : 0)),
     },
     daily: {
@@ -145,6 +159,10 @@ const json = (body) => ({
 
 export async function installMocks(page, overrides = {}) {
   const { weatherStatus = 200, photoProxy } = overrides;
+  /* "calm" by default. Pass a function to vary the weather per request — the
+     URL carries the coordinates, which is how a test gives two cities two
+     different forecasts. */
+  const { weatherKind = "calm" } = overrides;
 
   /* Registered FIRST on purpose: Playwright resolves routes in reverse
      registration order, so the specific handlers below override this one.
@@ -157,11 +175,17 @@ export async function installMocks(page, overrides = {}) {
     return route.abort();
   });
 
-  await page.route("**://api.open-meteo.com/**", (route) =>
-    weatherStatus === 200
-      ? route.fulfill(json(weatherPayload()))
-      : route.fulfill({ status: weatherStatus, contentType: "text/plain", body: "mocked failure" }),
-  );
+  await page.route("**://api.open-meteo.com/**", (route, request) => {
+    if (weatherStatus !== 200)
+      return route.fulfill({
+        status: weatherStatus,
+        contentType: "text/plain",
+        body: "mocked failure",
+      });
+    const kind =
+      typeof weatherKind === "function" ? weatherKind(request.url()) || "calm" : weatherKind;
+    return route.fulfill(json(weatherPayload(kind)));
+  });
   await page.route("**://air-quality-api.open-meteo.com/**", (route) =>
     route.fulfill(json({ current: { european_aqi: 31 } })),
   );

@@ -28,7 +28,10 @@ function _sun(cx = 32, cy = 32, r = 13) {
       y2 = cy + Math.sin(a) * (r + 10);
     rays += `<line x1="${x1.toFixed(1)}" y1="${y1.toFixed(1)}" x2="${x2.toFixed(1)}" y2="${y2.toFixed(1)}" stroke="#FBBF24" stroke-width="3.4" stroke-linecap="round"/>`;
   }
-  return `<g class="sun-rays">${rays}</g><circle class="sun-core" cx="${cx}" cy="${cy}" r="${r}" fill="url(#wiSun)"/>`;
+  /* Pass the real centre to CSS. The partly-cloudy icon places its sun at
+     (24, 23), so rotating every ray group around the clear-sky centre (32, 32)
+     made that sun orbit and wobble instead of spinning in place. */
+  return `<g class="sun-rays" style="--sun-cx:${cx}px;--sun-cy:${cy}px">${rays}</g><circle class="sun-core" cx="${cx}" cy="${cy}" r="${r}" fill="url(#wiSun)"/>`;
 }
 
 function _moon(cx = 32, cy = 32) {
@@ -111,4 +114,18 @@ export const METRIC_ICONS = {
   sunset: `<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M4 18h16M7 15a5 5 0 0 1 10 0"/><path d="M12 8V3M9.5 5.5 12 8l2.5-2.5"/></svg>`,
   rain: `<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M7 14a5 5 0 0 1 .8-9.94A6 6 0 0 1 19.5 6.5 4.5 4.5 0 0 1 18 14H7z"/><path d="M8 17.5 7 20M12.5 17.5l-1 2.5M17 17.5 16 20"/></svg>`,
   dew: `<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M12 4s5 5.4 5 8.9A5 5 0 1 1 7 12.9C7 9.4 12 4 12 4z"/><path d="M4.5 19.5h15"/></svg>`,
+};
+
+/* One icon per forecast-advisory type (features/advisories.js). Same stroke
+   style as METRIC_ICONS and drawn in `currentColor`, so each one picks up its
+   severity colour. Purely decorative — every banner states its hazard in text,
+   so the renderer marks these aria-hidden. */
+export const ADVISORY_ICONS = {
+  thunderstorm: `<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M7 14a5 5 0 0 1 .8-9.94A6 6 0 0 1 19.5 6.5 4.5 4.5 0 0 1 18 14"/><path d="m13 11-3.5 5H13l-1.5 4.5"/></svg>`,
+  extremeHeat: METRIC_ICONS.temperature,
+  extremeCold: `<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2.5v19M3.8 7.2l16.4 9.6M20.2 7.2 3.8 16.8"/><path d="M12 6.5 9.6 4.4M12 6.5l2.4-2.1M12 17.5l-2.4 2.1M12 17.5l2.4 2.1"/></svg>`,
+  strongWind: METRIC_ICONS.wind,
+  heavySnow: `<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M7 13.5a5 5 0 0 1 .8-9.94A6 6 0 0 1 19.5 6 4.5 4.5 0 0 1 18 13.5H7z"/><path d="M8 17.5h.01M12 19.5h.01M16 17.5h.01M10 21h.01M14 21h.01"/></svg>`,
+  heavyRain: METRIC_ICONS.rain,
+  denseFog: `<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M6.5 11a4.5 4.5 0 0 1 .7-8.95A5.5 5.5 0 0 1 18 4.5 4 4 0 0 1 17.5 11"/><path d="M4 14.5h16M6 18h12M9 21.5h9"/></svg>`,
 };

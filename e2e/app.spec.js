@@ -186,6 +186,169 @@ test.describe("bilingual accessible names", () => {
   });
 });
 
+/* In-page forecast advisories. Nothing here may ask for a notification
+   permission or register a service worker — the banner is on-page only. */
+test.describe("forecast advisory banner", () => {
+  const region = (page) => page.locator("#advisoryRegion");
+  const cards = (page) => page.locator("#advisoryList .advisory");
+
+  /* Records any attempt to reach for the browser's notification machinery. */
+  async function watchNotificationApis(page) {
+    await page.addInitScript(() => {
+      window.__notifyCalls = [];
+      const record = (what) => window.__notifyCalls.push(what);
+      if (window.Notification)
+        window.Notification.requestPermission = () => {
+          record("Notification.requestPermission");
+          return Promise.resolve("denied");
+        };
+      if (navigator.serviceWorker) {
+        const register = navigator.serviceWorker.register.bind(navigator.serviceWorker);
+        navigator.serviceWorker.register = (...a) => {
+          record("serviceWorker.register");
+          return register(...a);
+        };
+      }
+    });
+  }
+
+  test("20. no banner for ordinary weather", async ({ app }) => {
+    await expect(region(app)).toBeHidden();
+    await expect(cards(app)).toHaveCount(0);
+  });
+
+  test("21. hazardous weather raises a banner, most urgent first", async ({ page }) => {
+    const errors = [];
+    page.on("console", (m) => m.type() === "error" && errors.push(m.text()));
+    await installMocks(page, { weatherKind: "storm" });
+    await page.goto("/");
+    await expect(page.locator("#heroCityName")).not.toBeEmpty();
+
+    await expect(region(page)).toBeVisible();
+    /* storm outranks the 88 km/h gusts that the same forecast also triggers */
+    await expect(cards(page).first()).toContainText("Orages");
+    await expect(cards(page).nth(1)).toContainText("Vent fort");
+    await expect(cards(page)).toHaveCount(2);
+    /* never more than three, however many hazards coincide */
+    expect(await cards(page).count()).toBeLessThanOrEqual(3);
+    /* the blocked third-party webfont is the suite's own doing, not the app's */
+    expect(errors.filter((e) => !/Failed to load resource/i.test(e))).toEqual([]);
+  });
+
+  test("22. it is announced politely and reads without colour", async ({ page }) => {
+    await installMocks(page, { weatherKind: "storm" });
+    await page.goto("/");
+    await expect(region(page)).toBeVisible();
+
+    const list = page.locator("#advisoryList");
+    await expect(list).toHaveAttribute("role", "status");
+    await expect(list).toHaveAttribute("aria-live", "polite");
+    /* the region is labelled, and the severity is spelled out, not just tinted */
+    await expect(region(page)).toHaveAttribute("aria-labelledby", "advisoryRegionTitle");
+    await expect(page.locator("#advisoryRegionTitle")).toHaveText("Conseils météo");
+    await expect(cards(page).first().locator(".adv-sev")).toHaveText("Élevé");
+    /* every card states its window and its advice in words */
+    await expect(cards(page).first()).toContainText("Période");
+    await expect(cards(page).first()).toContainText("Conseil");
+    /* the icon adds nothing a screen reader needs */
+    await expect(cards(page).first().locator(".adv-icon")).toHaveAttribute("aria-hidden", "true");
+  });
+
+  test("23. the wording is forecast-based and says it is not official", async ({ page }) => {
+    await installMocks(page, { weatherKind: "storm" });
+    await page.goto("/");
+    await expect(region(page)).toBeVisible();
+
+    const disclaimer = page.locator("#advisoryList .adv-disclaimer");
+    await expect(disclaimer).toHaveText(
+      "Basé sur les prévisions, ce message n'est pas une alerte officielle.",
+    );
+    await expect(cards(page).first()).toContainText("Conseil météo basé sur les prévisions");
+    await expect(cards(page).first()).toContainText("Des orages sont possibles.");
+    /* "alerte officielle" may appear only inside the phrase that denies it */
+    const text = await region(page).innerText();
+    expect((text.match(/alerte officielle/g) || []).length).toBe(
+      (text.match(/n'est pas une alerte officielle/g) || []).length,
+    );
+    await expect(region(page)).not.toContainText(/urgence|garanti/i);
+
+    await page.locator("#langBtn").click();
+    await page.locator('#langMenu button[data-lang="en"]').click();
+    await expect(disclaimer).toHaveText("Based on forecast data, not an official emergency alert.");
+    await expect(cards(page).first()).toContainText("Forecast advisory");
+    await expect(cards(page).first()).toContainText("Thunderstorms");
+    await expect(cards(page).first()).toContainText("Thunderstorms are possible.");
+  });
+
+  test("24. values follow the chosen units, detection does not", async ({ page }) => {
+    await installMocks(page, { weatherKind: "storm" });
+    await page.goto("/");
+    const wind = cards(page).nth(1);
+    await expect(wind).toContainText("88 km/h");
+
+    await page.locator('.side-item[data-view="settings"]').click();
+    await page.locator('#chipWind button[data-uw="mph"]').click();
+    await page.locator('.side-item[data-view="home"]').click();
+
+    /* 88 km/h ≈ 55 mph: the number changes, the advisory itself does not */
+    await expect(wind).toContainText("55 mph");
+    await expect(cards(page)).toHaveCount(2);
+  });
+
+  test("25. changing location updates the banner and leaves nothing stale", async ({ page }) => {
+    /* Paris (the default) is stormy; the searched city is calm. */
+    await installMocks(page, {
+      weatherKind: (url) => (url.includes("latitude=64.1355") ? "calm" : "storm"),
+    });
+    await page.goto("/");
+    await expect(region(page)).toBeVisible();
+    await expect(cards(page).first()).toContainText("Orages");
+
+    await page.locator("#searchInput").fill(GEOCODE_LABEL);
+    await page.locator("#searchResults .search-item").first().click();
+    await expect(page.locator("#heroCityName")).toContainText(GEOCODE_LABEL);
+
+    /* the previous city's storm must not survive the move */
+    await expect(region(page)).toBeHidden();
+    await expect(cards(page)).toHaveCount(0);
+  });
+
+  test("26. it survives Simple and Detailed without disturbing the layout", async ({ page }) => {
+    await installMocks(page, { weatherKind: "storm" });
+    await page.goto("/");
+    await expect(region(page)).toBeVisible();
+
+    const box = async () => (await region(page).boundingBox()) || { y: 0, height: 0 };
+    for (const mode of ["detailed", "simple"]) {
+      await page.locator(`#modeToggle button[data-mode="${mode}"]`).click();
+      await expect(page.locator("body")).toHaveAttribute("data-mode", mode);
+      await expect(region(page)).toBeVisible();
+      const advisory = await box();
+      const grid = (await page.locator(".home-grid").boundingBox()) || { y: 0, height: 0 };
+      /* directly under the current conditions, with no gap left over */
+      expect(advisory.y).toBeGreaterThan(grid.y);
+      expect(advisory.y - (grid.y + grid.height)).toBeLessThan(40);
+      expect(advisory.height).toBeGreaterThan(0);
+    }
+  });
+
+  test("27. it asks for no notification permission and registers no worker", async ({ page }) => {
+    await watchNotificationApis(page);
+    await installMocks(page, { weatherKind: "storm" });
+    await page.goto("/");
+    await expect(region(page)).toBeVisible();
+    /* flipping a prototype notification switch must not change that either */
+    await page.locator('.side-item[data-view="settings"]').click();
+    await page.locator('#view-settings .switch[data-notif="alerts"]').click();
+
+    expect(await page.evaluate(() => window.__notifyCalls)).toEqual([]);
+    expect(await page.evaluate(() => (window.Notification || {}).permission ?? "default")).not.toBe(
+      "granted",
+    );
+    expect(await page.evaluate(() => navigator.serviceWorker?.controller ?? null)).toBeNull();
+  });
+});
+
 /* The explore carousel shows a real photograph per city, hydrated lazily after
    the cards are already on screen. */
 test.describe("explore carousel photos", () => {

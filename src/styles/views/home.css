@@ -5,7 +5,7 @@
   display: grid;
   grid-template-columns: minmax(0, 1.15fr) minmax(340px, 1fr);
   gap: var(--s-3);
-  align-items: stretch;
+  align-items: center;
 }
 
 .hero {
@@ -402,16 +402,17 @@ body[data-mode="detailed"] #metricsGridDetailed {
   grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
   gap: var(--s-2);
 }
-/* Simple keeps the grid's default align-items:stretch (hero height already
-   tuned to it); Detailed's hero gets an explicit height instead — stretch
-   would otherwise still inflate it to match whatever the metrics column
-   needs, undoing the compaction below. align-items:start is a no-op once
+/* Centre the metrics column against the hero in both modes. This distributes
+   Simple's unavoidable spare height evenly above and below its compact 2×2
+   grid instead of leaving one awkward empty block underneath. Detailed's hero
+   gets an explicit height; centring keeps its denser grid balanced beside it.
+   align-items:center is effectively a no-op once
    .home-grid drops to a single column (≤1080px, existing shared rule) since
    hero and metrics each get their own full-width row either way — the fixed
    height is guarded to the same ≥1081px range where side-by-side actually
    happens, so mobile/tablet Detailed keeps its normal stacked hero height. */
 body[data-mode="detailed"] .home-grid {
-  align-items: start;
+  align-items: center;
 }
 @media (min-width: 1081px) {
   body[data-mode="detailed"] .hero {
@@ -527,6 +528,116 @@ body[data-mode="detailed"] .home-grid {
   }
   .mg-row-value {
     margin-left: 0;
+  }
+}
+
+/* ── Forecast advisory banner ── */
+
+/* Sits between the home grid and the first .block. Its own top margin is
+   smaller than .block's --s-6 so the banner reads as attached to the current
+   conditions above it rather than opening a new section — and when it is
+   hidden ([hidden] wins globally) it contributes no spacing at all, leaving
+   the tuned hero/metrics rhythm exactly as it was. */
+.advisory-region {
+  margin-top: var(--s-3);
+}
+.advisory-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-1);
+}
+.advisory {
+  display: flex;
+  gap: 12px;
+  padding: 14px var(--s-2);
+  background: var(--card);
+  border: 1px solid var(--border);
+  /* the severity is also carried by a coloured edge, a tinted icon, and the
+     spelled-out level in the kicker — never by colour alone */
+  border-left: 4px solid var(--adv-accent);
+  border-radius: var(--r-sm);
+  box-shadow: var(--shadow-sm);
+}
+.adv--high {
+  --adv-accent: var(--rose);
+  --adv-soft: var(--rose-soft);
+}
+.adv--moderate {
+  --adv-accent: var(--amber);
+  --adv-soft: var(--amber-soft);
+}
+.adv--low {
+  --adv-accent: var(--sky);
+  --adv-soft: var(--sky-soft);
+}
+.adv-icon {
+  display: grid;
+  place-items: center;
+  width: 34px;
+  height: 34px;
+  flex-shrink: 0;
+  border-radius: 10px;
+  color: var(--adv-accent);
+  background: var(--adv-soft);
+}
+.adv-icon svg {
+  width: 19px;
+  height: 19px;
+}
+.adv-body {
+  min-width: 0;
+}
+.adv-kicker {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  font-size: 11.5px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+  color: var(--text-2);
+}
+.adv-sev {
+  padding: 1px 8px;
+  font-size: 11px;
+  color: var(--adv-accent);
+  background: var(--adv-soft);
+  border-radius: 999px;
+}
+.adv-title {
+  margin: 4px 0 0;
+  font-size: 16px;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+}
+.adv-desc {
+  margin: 3px 0 0;
+  font-size: 13.5px;
+  color: var(--text);
+}
+.adv-meta {
+  margin: 3px 0 0;
+  font-size: 12.5px;
+  color: var(--text-2);
+}
+.adv-meta b {
+  font-weight: 600;
+  color: var(--text);
+}
+.adv-disclaimer {
+  margin: 2px 0 0;
+  font-size: 11.5px;
+  color: var(--text-3);
+}
+
+@media (max-width: 560px) {
+  .advisory {
+    padding: 12px 14px;
+    gap: 10px;
+  }
+  .adv-kicker {
+    font-size: 11px;
   }
 }
 

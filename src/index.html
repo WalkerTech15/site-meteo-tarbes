@@ -442,6 +442,20 @@
             </aside>
           </div>
 
+          <!-- Forecast advisories: in-page only, filled by JS when the current
+               conditions or the next 24 hours cross a hazard threshold. -->
+          <section
+            class="advisory-region"
+            id="advisoryRegion"
+            aria-labelledby="advisoryRegionTitle"
+            hidden
+          >
+            <h2 class="sr-only" id="advisoryRegionTitle" data-i18n="advRegion">
+              Forecast advisories
+            </h2>
+            <div class="advisory-list" id="advisoryList" role="status" aria-live="polite"></div>
+          </section>
+
           <!-- Next hours (Simple mode only — Detailed keeps its "Next 24 hours" chart instead) -->
           <section class="block simple-only" aria-labelledby="homeHourlyTitle">
             <div class="block-head">

@@ -18,10 +18,13 @@ export async function fetchWeatherRaw(loc) {
   url.search = new URLSearchParams({
     latitude: loc.lat,
     longitude: loc.lon,
+    /* wind_gusts_10m is what the severe-weather advisory thresholds are
+       defined against (sustained wind understates a squall). Added to the
+       SAME request — no extra round trip. */
     current:
-      "temperature_2m,relative_humidity_2m,apparent_temperature,is_day,weather_code,wind_speed_10m,wind_direction_10m,surface_pressure",
+      "temperature_2m,relative_humidity_2m,apparent_temperature,is_day,weather_code,wind_speed_10m,wind_gusts_10m,wind_direction_10m,surface_pressure",
     hourly:
-      "temperature_2m,apparent_temperature,relative_humidity_2m,wind_speed_10m,surface_pressure,dew_point_2m,precipitation_probability,visibility,uv_index,weather_code,is_day",
+      "temperature_2m,apparent_temperature,relative_humidity_2m,wind_speed_10m,wind_gusts_10m,surface_pressure,dew_point_2m,precipitation_probability,visibility,uv_index,weather_code,is_day",
     daily:
       "weather_code,temperature_2m_max,temperature_2m_min,sunrise,sunset,precipitation_probability_max,uv_index_max,wind_speed_10m_max",
     forecast_days: "8",
@@ -57,6 +60,10 @@ export async function fetchWeatherRaw(loc) {
       feels: d.hourly.apparent_temperature?.[i] ?? d.hourly.temperature_2m[i],
       humidity: d.hourly.relative_humidity_2m[i],
       wind: d.hourly.wind_speed_10m[i],
+      /* null, not 0, when the provider omits them: the advisory checks skip a
+         missing field rather than reading it as "calm" or "clear" */
+      gust: d.hourly.wind_gusts_10m?.[i] ?? null,
+      vis: d.hourly.visibility?.[i] != null ? d.hourly.visibility[i] / 1000 : null, // km, like current.visibility
       pressure: d.hourly.surface_pressure[i],
       rainProb: d.hourly.precipitation_probability?.[i] ?? 0,
       code: d.hourly.weather_code[i],
@@ -82,6 +89,7 @@ export async function fetchWeatherRaw(loc) {
       feels: d.current.apparent_temperature,
       humidity: d.current.relative_humidity_2m,
       windSpeed: d.current.wind_speed_10m,
+      gust: d.current.wind_gusts_10m ?? null,
       windDir: d.current.wind_direction_10m,
       pressure: d.current.surface_pressure,
       code: d.current.weather_code,
@@ -135,6 +143,8 @@ export function demoWeather(loc) {
       feels: base + diurnal - 1 + rnd() * 3,
       humidity: Math.min(96, Math.max(28, 62 - diurnal * 3 + rnd() * 10)),
       wind: 8 + rnd() * 14 + Math.sin(i / 4) * 4,
+      gust: (8 + rnd() * 14 + Math.sin(i / 4) * 4) * 1.45,
+      vis: 8 + rnd() * 14,
       pressure: 1013 + Math.sin(i / 7 + seed) * 6 + rnd() * 2,
       rainProb: code >= 61 ? 40 + rnd() * 45 : rnd() * 22,
       code,
@@ -165,6 +175,7 @@ export function demoWeather(loc) {
       feels: cur.temp - 1.5 + rnd() * 3,
       humidity: cur.humidity,
       windSpeed: cur.wind,
+      gust: cur.gust,
       windDir: rnd() * 360,
       pressure: cur.pressure,
       code,

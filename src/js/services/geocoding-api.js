@@ -7,6 +7,7 @@
    country from the feature's own context — never by guessing from the query
    text. */
 import { state } from "../core/state.js";
+import { normalize } from "../data/locations.js";
 import {
   MAPTILER_KEY,
   FETCH_TIMEOUT_MS,
@@ -113,6 +114,104 @@ function mtCacheKey(q) {
   return `${state.lang}::${q}`;
 }
 
+/* MapTiler's fuzzy autocomplete can return attractive but unrelated places
+   for nonsense input (for example, a query ending in "place" produced several
+   French addresses named "Place …"). Keep typo-tolerance, but require every
+   meaningful query token to match the returned name/region/country. */
+const GENERIC_SEARCH_WORDS = new Set([
+  "a",
+  "an",
+  "at",
+  "city",
+  "country",
+  "de",
+  "des",
+  "du",
+  "en",
+  "etat",
+  "in",
+  "la",
+  "le",
+  "les",
+  "meteo",
+  "near",
+  "of",
+  "pays",
+  "place",
+  "province",
+  "region",
+  "state",
+  "the",
+  "town",
+  "village",
+  "ville",
+  "weather",
+]);
+
+function searchTokens(value) {
+  return normalize(String(value || ""))
+    .replace(/[^a-z0-9]+/g, " ")
+    .trim()
+    .split(/\s+/)
+    .filter(Boolean);
+}
+
+function editDistance(a, b) {
+  const prev = Array.from({ length: b.length + 1 }, (_, i) => i);
+  for (let i = 1; i <= a.length; i++) {
+    let diagonal = prev[0];
+    prev[0] = i;
+    for (let j = 1; j <= b.length; j++) {
+      const above = prev[j];
+      prev[j] = Math.min(prev[j] + 1, prev[j - 1] + 1, diagonal + (a[i - 1] === b[j - 1] ? 0 : 1));
+      diagonal = above;
+    }
+  }
+  return prev[b.length];
+}
+
+function adjacentSwap(a, b) {
+  if (a.length !== b.length) return false;
+  const diffs = [];
+  for (let i = 0; i < a.length; i++) if (a[i] !== b[i]) diffs.push(i);
+  return (
+    diffs.length === 2 &&
+    diffs[1] === diffs[0] + 1 &&
+    a[diffs[0]] === b[diffs[1]] &&
+    a[diffs[1]] === b[diffs[0]]
+  );
+}
+
+function tokenMatches(queryToken, candidateToken) {
+  if (queryToken === candidateToken) return true;
+  /* Preserve useful autocomplete such as "Tar" → "Tarbes". */
+  if (queryToken.length >= 3 && candidateToken.startsWith(queryToken)) return true;
+  if (queryToken.length < 4 || candidateToken.length < 4) return false;
+  if (adjacentSwap(queryToken, candidateToken)) return true;
+  const tolerance = Math.max(queryToken.length, candidateToken.length) <= 5 ? 1 : 2;
+  return editDistance(queryToken, candidateToken) <= tolerance;
+}
+
+export function isRelevantGeocodeResult(query, loc) {
+  const queryTokens = searchTokens(query).filter((token) => !GENERIC_SEARCH_WORDS.has(token));
+  if (!queryTokens.length || !loc) return false;
+  const candidateTokens = searchTokens(
+    [
+      loc.name && (loc.name.en || loc.name.fr),
+      loc.region && (loc.region.en || loc.region.fr),
+      loc.country && (loc.country.en || loc.country.fr),
+      loc.fullName,
+      loc.cc,
+      loc.regionCode,
+    ]
+      .filter(Boolean)
+      .join(" "),
+  );
+  return queryTokens.every((token) =>
+    candidateTokens.some((candidate) => tokenMatches(token, candidate)),
+  );
+}
+
 /* Forward autocomplete. Caller supplies an AbortSignal so stale requests are
    cancelled. Returns [] on any failure (offline / bad key / aborted). */
 export async function maptilerGeocode(query, signal) {
@@ -126,7 +225,9 @@ export async function maptilerGeocode(query, signal) {
   const res = await fetch(url, { signal });
   if (!res.ok) throw new Error("HTTP " + res.status);
   const d = await res.json();
-  const locs = (d.features || []).map(featureToLoc);
+  const locs = (d.features || [])
+    .map(featureToLoc)
+    .filter((loc) => isRelevantGeocodeResult(q, loc));
   mtCache.set(mtCacheKey(q), locs);
   return locs;
 }

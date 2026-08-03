@@ -18,6 +18,7 @@ import {
   renderInsights,
   renderHomeHourly,
 } from "../ui/render-home.js";
+import { renderAdvisory, clearAdvisory } from "../ui/render-advisory.js";
 import { renderHourly, renderForecastPage } from "../ui/render-forecast.js";
 import { renderMap } from "./map.js";
 import { renderMapInfo } from "../ui/render-map.js";
@@ -30,6 +31,8 @@ export async function selectLocation(loc) {
   bumpPhotoToken(); /* invalidate any in-flight photo swap from the previous place */
   setJSON(KEYS.lastLocation, loc);
   renderHeroSkeleton();
+  /* the previous city's hazards must not hang over the one now loading */
+  clearAdvisory();
   try {
     state.wx = await fetchWeather(loc);
     state.isDemo = false;
@@ -57,6 +60,7 @@ export async function selectLocation(loc) {
 export function renderAllWeather() {
   if (!state.wx) return;
   renderHero();
+  renderAdvisory();
   renderMetrics();
   renderGroupedMetrics();
   renderForecast();

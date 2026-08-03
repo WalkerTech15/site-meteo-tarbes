@@ -9,7 +9,9 @@
   transform-origin: 32px 32px;
 }
 .wi .sun-rays {
-  transform-origin: 32px 32px;
+  /* Each icon supplies its own centre: clear is 32/32, partly cloudy is 24/23. */
+  transform-box: view-box;
+  transform-origin: var(--sun-cx, 32px) var(--sun-cy, 32px);
   animation: spinSlow 26s linear infinite;
 }
 @keyframes spinSlow {
