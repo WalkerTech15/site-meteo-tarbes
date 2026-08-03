@@ -26,6 +26,12 @@ test.describe("advisory banner on a phone", () => {
     }));
     expect(overflow.doc).toBeLessThanOrEqual(0);
     expect(overflow.card).toBeLessThanOrEqual(0);
+
+    /* Compact desktop columns become a clean single stack on a phone. */
+    const first = await page.locator("#advisoryList .advisory").first().boundingBox();
+    const second = await page.locator("#advisoryList .advisory").nth(1).boundingBox();
+    expect(Math.abs(first.x - second.x)).toBeLessThanOrEqual(1);
+    expect(second.y).toBeGreaterThan(first.y + first.height);
   });
 
   test("29. it stays readable in dark mode", async ({ page }) => {

@@ -434,7 +434,10 @@
 
             <!-- Metrics -->
             <aside class="metrics" aria-labelledby="metricsTitle">
-              <h2 class="sr-only" id="metricsTitle" data-i18n="conditions">Current conditions</h2>
+              <div class="metrics-heading">
+                <h2 id="metricsTitle" data-i18n="todayBrief">Today at a glance</h2>
+                <span data-i18n="updatedNow">Updated now</span>
+              </div>
               <div class="metrics-grid" id="metricsGrid"><!-- rendered by JS; Simple mode --></div>
               <div class="metrics-grid-detailed" id="metricsGridDetailed">
                 <!-- rendered by JS; Detailed mode only -->
@@ -450,14 +453,14 @@
             aria-labelledby="advisoryRegionTitle"
             hidden
           >
-            <h2 class="sr-only" id="advisoryRegionTitle" data-i18n="advRegion">
+            <h2 class="advisory-region-title" id="advisoryRegionTitle" data-i18n="advRegion">
               Forecast advisories
             </h2>
             <div class="advisory-list" id="advisoryList" role="status" aria-live="polite"></div>
           </section>
 
           <!-- Next hours (Simple mode only — Detailed keeps its "Next 24 hours" chart instead) -->
-          <section class="block simple-only" aria-labelledby="homeHourlyTitle">
+          <section class="block simple-only home-hourly-block" aria-labelledby="homeHourlyTitle">
             <div class="block-head">
               <h2 class="section-title sm" id="homeHourlyTitle" data-i18n="nextHours">
                 Next hours
@@ -571,7 +574,7 @@
         <section class="view" id="view-map" aria-labelledby="mapTitle" hidden>
           <div class="block-head">
             <div>
-              <h1 class="section-title" id="mapTitle" data-i18n="navMap">Map</h1>
+              <h1 class="section-title" id="mapTitle" data-i18n="mapPageTitle">Weather map</h1>
               <p class="section-sub" data-i18n="mapSub">
                 Explore weather conditions across the world.
               </p>
@@ -612,14 +615,60 @@
             </div>
           </div>
           <div class="card map-card" id="mapCard">
-            <!-- borders/labels now come from the MapTiler Hybrid style itself — legend removed -->
+            <div
+              class="map-layer-switcher"
+              role="radiogroup"
+              aria-label="Map layer"
+              data-i18n-aria="mapLayer"
+            >
+              <button
+                class="map-layer is-active"
+                type="button"
+                data-map-layer="satellite"
+                aria-checked="true"
+                role="radio"
+              >
+                <span aria-hidden="true">▱</span><span data-i18n="mapSatellite">Satellite</span>
+              </button>
+              <button
+                class="map-layer"
+                type="button"
+                data-map-layer="temperature"
+                aria-checked="false"
+                role="radio"
+              >
+                <span aria-hidden="true">♨</span><span data-i18n="temperature">Temperature</span>
+              </button>
+              <button
+                class="map-layer"
+                type="button"
+                data-map-layer="rain"
+                aria-checked="false"
+                role="radio"
+              >
+                <span aria-hidden="true">☂</span><span data-i18n="rain">Rain</span>
+              </button>
+              <button
+                class="map-layer"
+                type="button"
+                data-map-layer="wind"
+                aria-checked="false"
+                role="radio"
+              >
+                <span aria-hidden="true">≋</span><span data-i18n="wind">Wind</span>
+              </button>
+            </div>
             <div id="worldMap"></div>
+            <aside class="map-weather-panel" id="mapWeatherPanel" aria-live="polite"></aside>
+            <button class="map-show-panel" id="mapShowPanel" type="button" hidden>
+              <span aria-hidden="true">☁</span><span data-i18n="showMapDetails">Show details</span>
+            </button>
           </div>
-          <div class="map-info-grid">
-            <div class="card info-card" id="mapLocInfo"></div>
-            <div class="card info-card" id="mapConditions"></div>
-            <div class="card info-card" id="mapPopular"></div>
-          </div>
+          <section
+            class="card map-popular-card"
+            id="mapPopular"
+            aria-labelledby="mapPopularTitle"
+          ></section>
         </section>
 
         <!-- ── FORECAST VIEW ── -->

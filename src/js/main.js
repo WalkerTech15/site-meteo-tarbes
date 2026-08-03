@@ -20,7 +20,7 @@ import {
   closeThemeMenu,
 } from "./features/settings.js";
 import { locateMe, initGeo } from "./features/geolocation.js";
-import { jumpTo, resizeMaps } from "./features/map.js";
+import { resizeMaps, bindMapLayerControls, bindCountryFilters } from "./features/map.js";
 import { selectLocation } from "./features/location.js";
 import {
   switchView,
@@ -204,23 +204,8 @@ $("#hsNext").addEventListener("click", () =>
 );
 
 /* ── Map page: quick-jump chips (MapLibre uses [lng, lat]) ── */
-const JUMPS = {
-  world: [[10, 22], 1.6],
-  usa: [[-98.6, 39.8], 3.6],
-  canada: [[-96, 58.5], 2.8],
-  france: [[2.2137, 46.2276], 5],
-};
-$$(".map-actions .chip").forEach((chip) =>
-  chip.addEventListener("click", () => {
-    $$(".map-actions .chip").forEach((c) => {
-      const on = c === chip;
-      c.classList.toggle("is-active", on);
-      c.setAttribute("aria-pressed", String(on));
-    });
-    const [center, zoom] = JUMPS[chip.dataset.jump];
-    jumpTo(center, zoom);
-  }),
-);
+bindCountryFilters();
+bindMapLayerControls();
 
 /* ── Resize: realign toggle thumbs, resize maps, redraw charts ── */
 let resizeTimer = null;

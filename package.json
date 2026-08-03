@@ -23,7 +23,8 @@
     "optimize:flags": "svgo -rf public/assets/flags --multipass"
   },
   "dependencies": {
-    "maplibre-gl": "^4.7.1"
+    "@maptiler/sdk": "~3.5.0",
+    "@maptiler/weather": "^3.1.1"
   },
   "devDependencies": {
     "@eslint/js": "^9.18.0",

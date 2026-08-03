@@ -117,6 +117,69 @@ function maptilerGeocodePayload() {
   };
 }
 
+/* Dynamic geocoding fixtures for the map's geo-identity box — a US city with
+   an ISO short_code (real state flag), and a French city (region has no
+   supported flag, so the country flag + neutral-icon region text is what
+   should render). Neither Austin nor Tarbes is a curated data/locations.js
+   entry: this is what proves the identity box works for ANY searched place,
+   not only hard-coded cities. */
+export const AUSTIN_LABEL = "Austin";
+export const TARBES_LABEL = "Tarbes";
+export const LYON_LABEL = "Lyon";
+
+function austinFeature() {
+  return {
+    id: "place.e2e-austin",
+    text: AUSTIN_LABEL,
+    place_name: `${AUSTIN_LABEL}, Texas, United States`,
+    place_type: ["place"],
+    center: [-97.7431, 30.2672],
+    properties: { short_code: "US-TX" },
+    context: [
+      { id: "region.2", text: "Texas", short_code: "US-TX" },
+      { id: "country.2", text: "United States", country_code: "us" },
+    ],
+  };
+}
+
+function tarbesFeature() {
+  return {
+    id: "place.e2e-tarbes",
+    text: TARBES_LABEL,
+    place_name: `${TARBES_LABEL}, Occitanie, France`,
+    place_type: ["place"],
+    center: [0.0782, 43.2333],
+    properties: { country_code: "fr" },
+    context: [
+      { id: "region.3", text: "Occitanie" },
+      { id: "country.3", text: "France", country_code: "fr" },
+    ],
+  };
+}
+
+function lyonFeature() {
+  return {
+    id: "place.e2e-lyon",
+    text: LYON_LABEL,
+    place_name: `${LYON_LABEL}, Auvergne-Rhône-Alpes, France`,
+    place_type: ["place"],
+    center: [4.8357, 45.764],
+    properties: { country_code: "fr" },
+    context: [
+      { id: "region.4", text: "Auvergne-Rhône-Alpes" },
+      { id: "country.4", text: "France", country_code: "fr" },
+    ],
+  };
+}
+
+function maptilerGeocodePayloadFor(url) {
+  const decoded = decodeURIComponent(url);
+  if (decoded.includes(AUSTIN_LABEL)) return { features: [austinFeature()] };
+  if (decoded.includes(TARBES_LABEL)) return { features: [tarbesFeature()] };
+  if (decoded.includes(LYON_LABEL)) return { features: [lyonFeature()] };
+  return maptilerGeocodePayload();
+}
+
 export const PEXELS_PHOTOGRAPHER = "Ada Lovelace";
 export const PEXELS_LINK = "https://www.pexels.com/photo/test-12345/";
 export const PEXELS_ALT = "A city skyline at dusk";
@@ -195,8 +258,8 @@ export async function installMocks(page, overrides = {}) {
   await page.route("**://api.maptiler.com/maps/**", (route) =>
     route.fulfill(json(mapStylePayload())),
   );
-  await page.route("**://api.maptiler.com/geocoding/**", (route) =>
-    route.fulfill(json(maptilerGeocodePayload())),
+  await page.route("**://api.maptiler.com/geocoding/**", (route, request) =>
+    route.fulfill(json(maptilerGeocodePayloadFor(request.url()))),
   );
   await page.route("**://api.bigdatacloud.net/**", (route) => route.fulfill(json({})));
   /* the Inter webfont is a third-party request too — block it so runs are

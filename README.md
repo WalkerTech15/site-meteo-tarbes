@@ -9,9 +9,9 @@ vanilla JavaScript (ES modules) and Vite. No UI framework.
 - **Home** — current conditions ("Simple" or "Detailed" mode), a 5-day
   forecast strip, an hourly chart, weather insights, a mini world map, and an
   "explore the world" carousel of curated destinations.
-- **Map** — an interactive MapLibre GL map (MapTiler Hybrid style) with
-  quick-jump chips for France/USA/Canada, a location-info panel, and a
-  popular-cities list.
+- **Map** — an interactive MapTiler map with satellite, temperature, rain, and
+  wind layers; quick-jump filters; an integrated current-weather/hourly panel;
+  and a compact popular-cities list.
 - **Forecast** — a day carousel, hourly temperature/wind/precipitation
   charts, and a plain-language daily summary.
 - **Favorites** — save locations, see them all at a glance (grid or table),

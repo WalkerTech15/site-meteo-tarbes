@@ -64,6 +64,17 @@
   color: #fff;
   background: #e11d48;
 }
+.confirm-dialog-primary {
+  border-color: transparent;
+  color: #fff;
+  background: var(--primary);
+  box-shadow: 0 5px 16px rgba(37, 99, 235, 0.24);
+}
+.confirm-dialog-primary:hover,
+.confirm-dialog-primary:focus-visible {
+  color: #fff;
+  background: var(--primary-600);
+}
 @media (max-width: 480px) {
   .confirm-dialog-card {
     padding: 18px;

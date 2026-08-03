@@ -129,3 +129,10 @@ export const ADVISORY_ICONS = {
   heavyRain: METRIC_ICONS.rain,
   denseFog: `<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M6.5 11a4.5 4.5 0 0 1 .7-8.95A5.5 5.5 0 0 1 18 4.5 4 4 0 0 1 17.5 11"/><path d="M4 14.5h16M6 18h12M9 21.5h9"/></svg>`,
 };
+
+/* Neutral map-pin outline used by the geo-identity box (core/geo-identity.js)
+   whenever a subdivision has no confidently-resolved regional flag — a
+   generic "place" marker, never a guessed flag. */
+export const GEO_ICONS = {
+  neutral: `<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M12 21.5s7-6.4 7-12A7 7 0 1 0 5 9.5c0 5.6 7 12 7 12z"/><circle cx="12" cy="9.5" r="2.4"/></svg>`,
+};

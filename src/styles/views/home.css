@@ -3,16 +3,16 @@
 
 .home-grid {
   display: grid;
-  grid-template-columns: minmax(0, 1.15fr) minmax(340px, 1fr);
-  gap: var(--s-3);
-  align-items: center;
+  grid-template-columns: minmax(0, 1.25fr) minmax(360px, 0.95fr);
+  gap: 20px;
+  align-items: stretch;
 }
 
 .hero {
   position: relative;
   overflow: hidden;
   border-radius: var(--r-xl);
-  min-height: 460px;
+  min-height: 410px;
   display: flex;
   color: #fff;
   border: 0;
@@ -307,19 +307,42 @@
 .metrics {
   display: flex;
   flex-direction: column;
-  gap: var(--s-2);
+  gap: 14px;
   min-width: 0;
+  padding: 20px;
+  border: 1px solid var(--border);
+  border-radius: var(--r-lg);
+  background: var(--card);
+  box-shadow: var(--shadow-sm);
+}
+.metrics-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--s-2);
+}
+.metrics-heading h2 {
+  font-size: 18px;
+  font-weight: 700;
+  letter-spacing: -0.015em;
+}
+.metrics-heading span {
+  color: var(--emerald);
+  font-size: 11px;
+  font-weight: 650;
 }
 .metrics-grid {
   display: grid;
   grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
-  gap: var(--s-2);
+  grid-auto-rows: minmax(0, 1fr);
+  flex: 1;
+  gap: 12px;
 }
 
 .metric-card {
   position: relative;
-  padding: 16px;
-  border-radius: var(--r-md);
+  padding: 15px;
+  border-radius: var(--r-sm);
   background: var(--card);
   border: 1px solid var(--border);
   box-shadow: var(--shadow-sm);
@@ -327,6 +350,18 @@
     transform 0.3s var(--ease),
     box-shadow 0.3s var(--ease);
   animation: cardIn 0.5s var(--ease) backwards;
+}
+.metric-card[data-metric="feelsLike"] {
+  order: 1;
+}
+.metric-card[data-metric="humidity"] {
+  order: 2;
+}
+.metric-card[data-metric="windSpeed"] {
+  order: 3;
+}
+.metric-card[data-metric="rainNext12h"] {
+  order: 4;
 }
 .metric-card:hover {
   transform: translateY(-3px);
@@ -539,24 +574,42 @@ body[data-mode="detailed"] .home-grid {
    hidden ([hidden] wins globally) it contributes no spacing at all, leaving
    the tuned hero/metrics rhythm exactly as it was. */
 .advisory-region {
-  margin-top: var(--s-3);
+  margin-top: 18px;
+  padding: 14px 16px 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--r-lg);
+  background: var(--card);
+  box-shadow: var(--shadow-sm);
+}
+.advisory-region-title {
+  margin: 0 0 10px;
+  font-size: 17px;
+  font-weight: 700;
+  letter-spacing: -0.015em;
 }
 .advisory-list {
-  display: flex;
-  flex-direction: column;
-  gap: var(--s-1);
+  display: grid;
+  grid-template-columns: minmax(0, 1.4fr) minmax(0, 1fr) minmax(0, 1fr);
+  gap: 10px;
 }
 .advisory {
   display: flex;
-  gap: 12px;
-  padding: 14px var(--s-2);
-  background: var(--card);
+  gap: 10px;
+  min-width: 0;
+  padding: 12px 13px;
+  background: var(--bg);
   border: 1px solid var(--border);
   /* the severity is also carried by a coloured edge, a tinted icon, and the
      spelled-out level in the kicker — never by colour alone */
-  border-left: 4px solid var(--adv-accent);
+  border-left: 3px solid var(--adv-accent);
   border-radius: var(--r-sm);
   box-shadow: var(--shadow-sm);
+}
+.advisory.is-primary {
+  background: color-mix(in srgb, var(--adv-soft) 45%, var(--card));
+}
+.advisory.is-secondary {
+  align-items: center;
 }
 .adv--high {
   --adv-accent: var(--rose);
@@ -573,16 +626,16 @@ body[data-mode="detailed"] .home-grid {
 .adv-icon {
   display: grid;
   place-items: center;
-  width: 34px;
-  height: 34px;
+  width: 32px;
+  height: 32px;
   flex-shrink: 0;
   border-radius: 10px;
   color: var(--adv-accent);
   background: var(--adv-soft);
 }
 .adv-icon svg {
-  width: 19px;
-  height: 19px;
+  width: 18px;
+  height: 18px;
 }
 .adv-body {
   min-width: 0;
@@ -607,31 +660,62 @@ body[data-mode="detailed"] .home-grid {
 }
 .adv-title {
   margin: 4px 0 0;
-  font-size: 16px;
+  font-size: 14px;
   font-weight: 700;
   letter-spacing: -0.01em;
 }
+.adv-time {
+  color: var(--text-2);
+  font-size: 12px;
+  font-weight: 600;
+}
 .adv-desc {
   margin: 3px 0 0;
-  font-size: 13.5px;
+  font-size: 12px;
   color: var(--text);
 }
 .adv-meta {
   margin: 3px 0 0;
-  font-size: 12.5px;
+  font-size: 11.5px;
   color: var(--text-2);
 }
 .adv-meta b {
   font-weight: 600;
   color: var(--text);
 }
+.adv-when {
+  display: none;
+}
+.advisory.is-secondary .adv-kicker > span:first-child,
+.advisory.is-secondary .adv-meta {
+  display: none;
+}
+.advisory.is-secondary .adv-title {
+  margin-top: 1px;
+}
+.advisory.is-secondary .adv-desc {
+  overflow: hidden;
+  max-width: 100%;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
 .adv-disclaimer {
-  margin: 2px 0 0;
-  font-size: 11.5px;
+  grid-column: 1 / -1;
+  margin: 0;
+  font-size: 10.5px;
   color: var(--text-3);
 }
 
-@media (max-width: 560px) {
+@media (max-width: 1080px) {
+  .advisory-list {
+    grid-template-columns: minmax(0, 1.4fr) minmax(0, 1fr);
+  }
+}
+
+@media (max-width: 720px) {
+  .advisory-list {
+    grid-template-columns: minmax(0, 1fr);
+  }
   .advisory {
     padding: 12px 14px;
     gap: 10px;
@@ -639,6 +723,29 @@ body[data-mode="detailed"] .home-grid {
   .adv-kicker {
     font-size: 11px;
   }
+  .advisory.is-secondary .adv-desc {
+    white-space: normal;
+  }
+}
+
+.home-hourly-block {
+  margin-top: 18px;
+}
+.home-hourly-block .block-head {
+  margin-bottom: 10px;
+}
+.home-hourly-block .hourly-card {
+  margin-top: 0;
+  padding: 10px 12px;
+}
+.home-hourly-block .hourly-strip {
+  padding: 2px 0;
+}
+.home-hourly-block .hour-cell {
+  padding: 11px 6px;
+}
+.home-hourly-block .hour-cell .h-icon {
+  margin: 7px auto 5px;
 }
 
 /* ── Forecast strip (home only — see views/forecast.css for the carousel) ── */

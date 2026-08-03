@@ -238,6 +238,77 @@ export const RC_TO_KEY = {
   qc: "quebec",
 };
 
+/* Metropolitan France's OWN administrative regions (Occitanie, Bretagne, …) —
+   not to be confused with FR_REGION_ALIASES below, which maps French-language
+   NAMES of US states/CA provinces back to their key. Most of France's 2016
+   merger regions (Auvergne-Rhône-Alpes, Grand Est, Hauts-de-France…) have no
+   traditional or official flag in common civic use, so they intentionally
+   have NO entry here — geoIdentityHtml() falls back to the neutral location
+   icon rather than invent one. Only regions with a well-established,
+   unambiguous flag are listed: the Occitan cross (Occitanie, gold pommetty
+   cross on red — the region's own official emblem since 2017), Gwenn-ha-du
+   (Brittany, nine black/white stripes with an ermine canton) and the Moor's
+   head (Corsica, white field, black profile with a white headband). */
+const FR_REGION_FLAGS = {
+  occitanie: `<rect width="24" height="18" fill="#DA291C"/><rect x="9.6" y="1" width="4.8" height="16" fill="#FCD116"/><rect x="2" y="6.6" width="20" height="4.8" fill="#FCD116"/>${[
+    [10.2, 2],
+    [12, 1.2],
+    [13.8, 2],
+    [10.2, 16],
+    [12, 16.8],
+    [13.8, 16],
+    [3, 7.2],
+    [2.2, 9],
+    [3, 10.8],
+    [21, 7.2],
+    [21.8, 9],
+    [21, 10.8],
+  ]
+    .map(([x, y]) => `<circle cx="${x}" cy="${y}" r="1.05" fill="#FCD116"/>`)
+    .join("")}`,
+  bretagne: `<rect width="24" height="18" fill="#fff"/>${[0, 1, 2, 3, 4]
+    .map((i) => `<rect y="${i * 4}" width="24" height="2" fill="#000"/>`)
+    .join("")}<rect x="0" y="0" width="10" height="10" fill="#fff"/>${[
+    [2.4, 2],
+    [5.2, 2],
+    [8, 2],
+    [2.4, 5],
+    [5.2, 5],
+    [8, 5],
+    [2.4, 8],
+    [5.2, 8],
+    [8, 8],
+  ]
+    .map(
+      ([x, y]) =>
+        `<path d="M${x} ${y - 1.1} l.6 1.1 -.6 1.1 -.6 -1.1z M${x - 1} ${y} h2" stroke="#000" stroke-width=".5" fill="#000"/>`,
+    )
+    .join("")}`,
+  corse: `<rect width="24" height="18" fill="#fff"/><ellipse cx="12" cy="9.8" rx="4.6" ry="5.4" fill="#000"/><rect x="7.6" y="5.2" width="8.8" height="2.2" fill="#fff"/><circle cx="9.9" cy="9" r=".9" fill="#fff"/><circle cx="14.1" cy="9" r=".9" fill="#fff"/>`,
+};
+const FR_REGION_NAME_TO_KEY = {
+  occitanie: "occitanie",
+  bretagne: "bretagne",
+  brittany: "bretagne",
+  corse: "corse",
+  corsica: "corse",
+};
+/* Same normalized-name matching as regionKeyFromName below, scoped to
+   France's own regions and never applied outside cc === "FR" (see
+   core/geo-identity.js). */
+export function frRegionKeyFromName(name) {
+  if (!name) return null;
+  const k = normalize(name)
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "");
+  return FR_REGION_NAME_TO_KEY[k] || null;
+}
+export function frRegionFlagHtml(key, cls = "") {
+  const body = FR_REGION_FLAGS[key];
+  if (!body) return null;
+  return `<svg class="flag ${cls}" viewBox="0 0 24 18" aria-hidden="true">${body}<rect width="24" height="18" rx="2.5" fill="none" stroke="rgba(15,23,42,.14)" stroke-width="1"/></svg>`;
+}
+
 /* French region names → key (MapTiler returns localized names in FR mode; only
    the ones that differ from English need listing — Texas, Ohio, Ontario… match
    directly). Keys are in normalized-kebab form (accents stripped, lowercased). */

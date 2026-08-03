@@ -1,13 +1,13 @@
-/* Interactive map (MapLibre GL JS + MapTiler Hybrid v4 style).
+/* Interactive map (MapTiler SDK + Hybrid v4 style and optional weather layers).
    Borders, state/province lines, city/town/road labels all come from the
    vector style itself (countries at low zoom, regions/cities at medium,
    towns/roads at high) — no GeoJSON overlays needed.
    MapLibre is an npm dependency, dynamically imported the first time a map
    actually needs to render, so its ~200KB JS chunk never blocks the initial
    page load. */
-import "maplibre-gl/dist/maplibre-gl.css";
+import "@maptiler/sdk/dist/maptiler-sdk.css";
 import { state } from "../core/state.js";
-import { $ } from "../core/dom.js";
+import { $, $$ } from "../core/dom.js";
 import { esc } from "../core/dom.js";
 import { t } from "../core/i18n.js";
 import { MAPTILER_KEY, MAP_STYLE } from "../core/config.js";
@@ -15,12 +15,24 @@ import { weatherIcon } from "../data/icons.js";
 import { wmo, wxDesc } from "../data/weather-codes.js";
 import { fmtTemp, tempUnit } from "../core/units.js";
 import { flagsHtml, locRegion, locCountry, locName, kindLabel } from "../core/location.js";
+import { COUNTRY_JUMPS } from "../data/country-jumps.js";
 import { switchView } from "../ui/navigation.js";
+import { showToast } from "../ui/notifications.js";
 
 let maplibreglPromise = null;
 function loadMapLibre() {
-  if (!maplibreglPromise) maplibreglPromise = import("maplibre-gl").then((m) => m.default);
+  if (!maplibreglPromise)
+    maplibreglPromise = import("@maptiler/sdk").then((sdk) => {
+      sdk.config.apiKey = MAPTILER_KEY;
+      return sdk;
+    });
   return maplibreglPromise;
+}
+
+let weatherPromise = null;
+function loadWeatherLayers() {
+  if (!weatherPromise) weatherPromise = import("@maptiler/weather");
+  return weatherPromise;
 }
 
 /* zoom per location type; huge countries get a wider view */
@@ -98,7 +110,7 @@ function applyMapControlLabels(map) {
 }
 
 const MAP_CONFIG = {
-  worldMap: { view: "map", autoPopup: true },
+  worldMap: { view: "map", autoPopup: false },
   homeMap: { view: "home", autoPopup: false },
 };
 const MAPS = {}; // containerId → { map, marker, popup, lastKey }
@@ -172,6 +184,7 @@ async function updateMap(id) {
       zoom: zoomFor(loc) - 0.4,
       renderWorldCopies: false,
       minZoom: 1 /* mercator already clamps latitude at ±85° — no pole panning */,
+      navigationControl: false,
       attributionControl: { compact: true },
       locale: mapLocale(),
     });
@@ -212,7 +225,7 @@ async function updateMap(id) {
       .setLngLat([loc.lon, loc.lat])
       .setPopup(popup)
       .addTo(map);
-    MAPS[id] = { map, marker, popup, lastKey: null, userMarker: null };
+    MAPS[id] = { map, marker, popup, lastKey: null, userMarker: null, weatherLayer: null };
   }
   const inst = MAPS[id];
   inst.map.resize();
@@ -284,6 +297,74 @@ export function renderMap() {
   updateMap("homeMap");
 }
 
+/* ── MapTiler weather overlay switcher ────────────────────────────────────
+   Weather layers are loaded only after the user asks for one, keeping the
+   heavier weather module out of the initial homepage bundle. Satellite is the
+   Hybrid basemap itself, so returning to it simply removes the active overlay. */
+const WEATHER_LAYER_IDS = {
+  temperature: "weather-temperature",
+  rain: "weather-rain",
+  wind: "weather-wind",
+};
+
+function setLayerButtonState(active) {
+  $$(".map-layer").forEach((button) => {
+    const on = button.dataset.mapLayer === active;
+    button.classList.toggle("is-active", on);
+    button.classList.remove("is-loading");
+    button.setAttribute("aria-checked", String(on));
+  });
+}
+
+function removeWeatherLayer(inst) {
+  if (!inst?.weatherLayer) return;
+  try {
+    if (inst.map.getLayer(inst.weatherLayer.id)) inst.map.removeLayer(inst.weatherLayer.id);
+  } catch {
+    /* the style may have reloaded while the weather module was resolving */
+  }
+  inst.weatherLayer = null;
+}
+
+function makeWeatherLayer(module, type) {
+  const options = { id: WEATHER_LAYER_IDS[type], opacity: type === "wind" ? 0.8 : 0.68 };
+  if (type === "temperature") return new module.TemperatureLayer(options);
+  if (type === "rain") return new module.PrecipitationLayer(options);
+  return new module.WindLayer(options);
+}
+
+export async function setMapLayer(type) {
+  const requested = WEATHER_LAYER_IDS[type] ? type : "satellite";
+  const button = $(`.map-layer[data-map-layer="${requested}"]`);
+  button?.classList.add("is-loading");
+  try {
+    await updateMap("worldMap");
+    const inst = MAPS.worldMap;
+    if (!inst) throw new Error("Map unavailable");
+    if (!inst.map.isStyleLoaded()) {
+      await new Promise((resolve) => inst.map.once("load", resolve));
+    }
+    removeWeatherLayer(inst);
+    if (requested !== "satellite") {
+      const weather = await loadWeatherLayers();
+      const layer = makeWeatherLayer(weather, requested);
+      inst.map.addLayer(layer);
+      inst.weatherLayer = layer;
+    }
+    setLayerButtonState(requested);
+  } catch {
+    removeWeatherLayer(MAPS.worldMap);
+    setLayerButtonState("satellite");
+    showToast(t("mapLayerError"));
+  }
+}
+
+export function bindMapLayerControls() {
+  $$(".map-layer").forEach((button) =>
+    button.addEventListener("click", () => setMapLayer(button.dataset.mapLayer)),
+  );
+}
+
 /* ── "You are here" overlay (Google-Maps-style blue dot + accuracy circle) ──
    Rendered as its own layer set per map instance, independent of the search
    pin, so recentering never blinks the pin. userPos is the last known fix so a
@@ -351,6 +432,23 @@ export function showUserLocation(lat, lon, acc) {
 
 export function jumpTo(center, zoom) {
   if (MAPS.worldMap) MAPS.worldMap.map.flyTo({ center, zoom, duration: 1200 });
+}
+
+/* Country-jump chips above the map card ("Monde"/France/États-Unis/Canada).
+   Target data lives in data/country-jumps.js (see its own test) so a wrong
+   center/zoom pair is caught without needing to render an actual map. */
+export function bindCountryFilters() {
+  $$(".map-filters .chip").forEach((chip) =>
+    chip.addEventListener("click", () => {
+      $$(".map-filters .chip").forEach((c) => {
+        const on = c === chip;
+        c.classList.toggle("is-active", on);
+        c.setAttribute("aria-pressed", String(on));
+      });
+      const jump = COUNTRY_JUMPS[chip.dataset.jump];
+      if (jump) jumpTo(jump.center, jump.zoom);
+    }),
+  );
 }
 
 export function resizeMaps() {

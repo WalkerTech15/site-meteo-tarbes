@@ -5,7 +5,17 @@ import {
   GEOCODE_LABEL,
   PEXELS_PHOTOGRAPHER,
   PEXELS_ALT,
+  AUSTIN_LABEL,
+  TARBES_LABEL,
+  LYON_LABEL,
 } from "./mocks.js";
+
+async function searchAndSelect(app, query) {
+  await app.locator("#searchInput").fill(query);
+  const option = app.locator("#searchResults .search-item").first();
+  await expect(option).toBeVisible();
+  await option.click();
+}
 
 test.describe("home", () => {
   test("1. homepage loads with weather data and no console errors", async ({ app }) => {
@@ -14,7 +24,15 @@ test.describe("home", () => {
 
     await expect(app.locator("#heroCityName")).toBeVisible();
     await expect(app.locator(".hero-temp")).toContainText("°");
-    await expect(app.locator("#metricsGrid .metric-card").first()).toBeVisible();
+    await expect(app.locator("#metricsTitle")).toHaveText("Aujourd'hui en bref");
+    const visibleMetrics = app.locator("#metricsGrid .metric-card:visible");
+    await expect(visibleMetrics).toHaveCount(4);
+    await expect(app.locator('[data-metric="feelsLike"]')).toBeVisible();
+    await expect(app.locator('[data-metric="humidity"]')).toBeVisible();
+    await expect(app.locator('[data-metric="windSpeed"]')).toBeVisible();
+    await expect(app.locator('[data-metric="rainNext12h"]')).toBeVisible();
+    await expect(app.locator('[data-metric="temperature"]')).toBeHidden();
+    await expect(app.locator("#homeHourlyStrip .hour-cell")).toHaveCount(6);
     await expect(app.locator("#forecastRow .forecast-card")).toHaveCount(5);
     /* live badge, not the demo fallback — the mocked API answered 200 */
     await expect(app.locator(".hero-live")).not.toContainText(/démo|demo/i);
@@ -166,8 +184,9 @@ test.describe("bilingual accessible names", () => {
       "Afficher ou masquer les attributions",
     );
 
-    /* the popup's close button is rebuilt on every content refresh, from the
-       locale MapLibre captured when the map was created */
+    /* The integrated panel replaces the automatic popup, but the marker keeps
+       an optional accessible popup for users who explicitly select it. */
+    await app.locator("#worldMap .maplibregl-marker").click();
     const closeBtn = app.locator("#worldMap .maplibregl-popup-close-button");
     await expect(closeBtn).toHaveAttribute("aria-label", "Fermer la fenêtre");
 
@@ -183,6 +202,262 @@ test.describe("bilingual accessible names", () => {
       "aria-label",
       "Map marker",
     );
+  });
+});
+
+test.describe("map workspace", () => {
+  test("14. selected weather and popular places form one compact workspace", async ({ app }) => {
+    await app.locator('.side-item[data-view="map"]').click();
+
+    const panel = app.locator("#mapWeatherPanel");
+    await expect(panel).toBeVisible();
+    await expect(panel.locator(".map-panel-current strong")).toContainText("°C");
+    await expect(panel.locator(".map-panel-stats > div")).toHaveCount(4);
+    await expect(panel.locator(".map-hour")).toHaveCount(4);
+    await expect(app.locator("#mapPopular .map-popular-place")).toHaveCount(5);
+
+    await expect(app.locator('.map-layer[data-map-layer="satellite"]')).toHaveAttribute(
+      "aria-checked",
+      "true",
+    );
+    await expect(app.locator(".map-info-grid")).toHaveCount(0);
+  });
+
+  test("15. the panel actions remain functional", async ({ app }) => {
+    await app.locator('.side-item[data-view="map"]').click();
+
+    const favorite = app.locator("#mapFavoriteBtn");
+    const initial = await favorite.getAttribute("aria-pressed");
+    await favorite.click();
+    await expect(app.locator("#mapFavoriteBtn")).toHaveAttribute(
+      "aria-pressed",
+      initial === "true" ? "false" : "true",
+    );
+
+    await app.locator("#mapForecastBtn").click();
+    await expect(app.locator("#view-forecast")).toBeVisible();
+  });
+
+  test("16. closing the panel confirms, hides nothing permanently, and can be undone", async ({
+    app,
+  }) => {
+    await app.locator('.side-item[data-view="map"]').click();
+    const panel = app.locator("#mapWeatherPanel");
+    const close = app.locator("#mapPanelClose");
+    const show = app.locator("#mapShowPanel");
+
+    await close.click();
+    await expect(app.locator("#confirmDialog")).toBeVisible();
+    await expect(app.locator("#confirmDialogMessage")).toContainText(
+      "Aucun lieu ni aucune donnée météo ne sera supprimé",
+    );
+    await expect(app.locator("#confirmDialogConfirm")).toHaveClass(/confirm-dialog-danger/);
+    await app.locator("#confirmDialogCancel").click();
+    await expect(panel).toBeVisible();
+    await expect(close).toBeFocused();
+
+    await close.click();
+    await app.locator("#confirmDialogConfirm").click();
+    await expect(panel).toBeHidden();
+    await expect(show).toBeVisible();
+    await expect(show).toBeFocused();
+
+    await show.click();
+    await expect(panel).toBeVisible();
+    await expect(close).toBeFocused();
+  });
+});
+
+/* The geographic identity box (core/geo-identity.js) at the top of the map's
+   weather panel. Every location here is searched dynamically through the
+   mocked MapTiler geocoder — none of Austin, Tarbes or Lyon is a curated
+   data/locations.js entry — so these prove the box works for any resolved
+   place, not just hard-coded cities. */
+test.describe("geographic identity box", () => {
+  test("31. a US city shows its state flag and a Texas, États-Unis hierarchy", async ({ app }) => {
+    /* search always returns to Home (see test 2) — select first, then open
+       Map to see the panel it fed. */
+    await searchAndSelect(app, AUSTIN_LABEL);
+    await app.locator('.side-item[data-view="map"]').click();
+
+    const panel = app.locator("#mapWeatherPanel");
+    await expect(panel).toBeVisible();
+    await expect(panel.locator(".map-panel-location h2")).toHaveText(AUSTIN_LABEL);
+    await expect(panel.locator(".map-panel-location p")).toHaveText("Ville");
+
+    const identity = panel.locator(".geo-identity");
+    const chips = identity.locator(".geo-chip");
+    await expect(chips).toHaveCount(2);
+    await expect(chips.nth(0)).toContainText("États-Unis");
+    await expect(chips.nth(1)).toContainText("Texas");
+    /* both are real flags — neither falls back to the neutral icon */
+    await expect(identity.locator(".geo-chip-flag")).toHaveCount(2);
+    await expect(identity.locator(".geo-chip-icon")).toHaveCount(0);
+    await expect(identity.locator(".geo-hierarchy")).toHaveText("Texas, États-Unis");
+    await expect(identity).toHaveAttribute("aria-label", "Austin, Ville, États-Unis, Texas");
+  });
+
+  test("32. a French city shows France and its region without duplicating either", async ({
+    app,
+  }) => {
+    await searchAndSelect(app, TARBES_LABEL);
+    await app.locator('.side-item[data-view="map"]').click();
+
+    const identity = app.locator("#mapWeatherPanel .geo-identity");
+    await expect(identity).toBeVisible();
+    const chips = identity.locator(".geo-chip");
+    await expect(chips).toHaveCount(2);
+    await expect(chips.nth(0)).toContainText("France");
+    await expect(chips.nth(1)).toContainText("Occitanie");
+    /* Occitanie is one of the few French regions with a supported flag */
+    await expect(identity.locator(".geo-chip-flag")).toHaveCount(2);
+    await expect(identity.locator(".geo-hierarchy")).toHaveText("Occitanie, France");
+    /* never a bare "France, France" */
+    await expect(identity).not.toHaveAttribute("aria-label", /France, France/);
+  });
+
+  test("33. a region with no supported flag falls back to the neutral icon, never a guess", async ({
+    app,
+  }) => {
+    await searchAndSelect(app, LYON_LABEL);
+    await app.locator('.side-item[data-view="map"]').click();
+
+    const identity = app.locator("#mapWeatherPanel .geo-identity");
+    await expect(identity).toBeVisible();
+    const chips = identity.locator(".geo-chip");
+    await expect(chips).toHaveCount(2);
+    await expect(chips.nth(0)).toContainText("France"); /* the country flag IS supported */
+    await expect(chips.nth(1)).toContainText("Auvergne-Rhône-Alpes");
+    await expect(identity.locator(".geo-chip-flag")).toHaveCount(1); /* country only */
+    await expect(identity.locator(".geo-chip-icon")).toHaveCount(1); /* region: neutral pin */
+    await expect(identity.locator(".geo-hierarchy")).toHaveText("Auvergne-Rhône-Alpes, France");
+  });
+
+  test("34. it relabels itself when the interface language changes", async ({ app }) => {
+    await searchAndSelect(app, AUSTIN_LABEL);
+    await app.locator('.side-item[data-view="map"]').click();
+    const identity = app.locator("#mapWeatherPanel .geo-identity");
+    await expect(identity).toBeVisible();
+    await expect(identity.locator(".geo-hierarchy")).toHaveText("Texas, États-Unis");
+
+    await app.locator("#langBtn").click();
+    await app.locator('#langMenu button[data-lang="en"]').click();
+    await expect(identity.locator(".geo-hierarchy")).toHaveText("Texas, United States");
+    await expect(identity).toHaveAttribute("aria-label", "Austin, City, United States, Texas");
+    await expect(app.locator("#mapWeatherPanel .map-panel-location p")).toHaveText("City");
+  });
+
+  test("35. a country result shows no duplicate chip or hierarchy line", async ({ app }) => {
+    /* France itself — a curated kind:"country" entry, picked from the Explore
+       carousel — is the other end of the dedup rule proven in test 32. */
+    await app.locator('.explore-card[data-loc="france"] .explore-open').click();
+    await app.locator('.side-item[data-view="map"]').click();
+
+    const panel = app.locator("#mapWeatherPanel");
+    await expect(panel).toBeVisible();
+    await expect(panel.locator(".map-panel-location h2")).toHaveText("France");
+    const identity = panel.locator(".geo-identity");
+    await expect(identity).toHaveCount(0);
+  });
+});
+
+/* The Monde/France/États-Unis/Canada country-jump pills above the map card. */
+test.describe("country filter chips", () => {
+  const CHIP_IDS = ["world", "france", "usa", "canada"];
+  const chip = (app, id) => app.locator(`.chip[data-jump="${id}"]`);
+
+  test("36. every flag and the globe icon share one fixed box, never stretching the pill", async ({
+    app,
+  }) => {
+    await app.locator('.side-item[data-view="map"]').click();
+    await expect(app.locator(".map-filters .chip")).toHaveCount(4);
+
+    const pillHeights = await app
+      .locator(".map-filters .chip")
+      .evaluateAll((els) => els.map((el) => Math.round(el.getBoundingClientRect().height)));
+    expect(new Set(pillHeights).size).toBe(1); /* one consistent pill height for all four */
+
+    const iconBoxes = await app.locator(".map-filters .chip-icon").evaluateAll((els) =>
+      els.map((el) => {
+        const r = el.getBoundingClientRect();
+        return `${Math.round(r.width)}x${Math.round(r.height)}`;
+      }),
+    );
+    expect(iconBoxes).toHaveLength(4);
+    expect(new Set(iconBoxes).size).toBe(1); /* globe + FR + US + CA: identical box */
+
+    /* the flag images themselves are cropped to that box (object-fit: cover),
+       never stretched out of their native aspect ratio */
+    await expect(app.locator('.chip[data-jump="usa"] .chip-icon .flag')).toHaveCSS(
+      "object-fit",
+      "cover",
+    );
+  });
+
+  test("37. clicking each filter moves the active state and leaves the map error-free", async ({
+    app,
+  }) => {
+    await app.locator('.side-item[data-view="map"]').click();
+    const errors = [];
+    app.on("console", (m) => m.type() === "error" && errors.push(m.text()));
+
+    await expect(chip(app, "world")).toHaveAttribute("aria-pressed", "true");
+    await expect(chip(app, "world")).toHaveClass(/is-active/);
+
+    for (const id of ["france", "usa", "canada", "world"]) {
+      await chip(app, id).click();
+      await expect(chip(app, id)).toHaveAttribute("aria-pressed", "true");
+      await expect(chip(app, id)).toHaveClass(/is-active/);
+      for (const other of CHIP_IDS.filter((x) => x !== id)) {
+        await expect(chip(app, other)).toHaveAttribute("aria-pressed", "false");
+        await expect(chip(app, other)).not.toHaveClass(/is-active/);
+      }
+    }
+    await app.waitForTimeout(1300); /* let the last flyTo animation finish cleanly */
+    expect(errors.filter((e) => !/Failed to load resource/i.test(e))).toEqual([]);
+  });
+
+  test("38. keyboard activation works on every filter", async ({ app }) => {
+    await app.locator('.side-item[data-view="map"]').click();
+    await chip(app, "france").focus();
+    await expect(chip(app, "france")).toBeFocused();
+    await app.keyboard.press("Enter");
+    await expect(chip(app, "france")).toHaveAttribute("aria-pressed", "true");
+
+    await app.keyboard.press("Tab");
+    await expect(chip(app, "usa")).toBeFocused();
+    await app.keyboard.press(" ");
+    await expect(chip(app, "usa")).toHaveAttribute("aria-pressed", "true");
+    await expect(chip(app, "france")).toHaveAttribute("aria-pressed", "false");
+  });
+
+  test("39. labels follow the interface language", async ({ app }) => {
+    await app.locator('.side-item[data-view="map"]').click();
+    await expect(chip(app, "world")).toContainText("Monde");
+    await expect(chip(app, "usa")).toContainText("États-Unis");
+
+    await app.locator("#langBtn").click();
+    await app.locator('#langMenu button[data-lang="en"]').click();
+    await expect(chip(app, "world")).toContainText("World");
+    await expect(chip(app, "usa")).toContainText("United States");
+    /* the active selection survives the relabel */
+    await expect(chip(app, "world")).toHaveAttribute("aria-pressed", "true");
+  });
+
+  test("40. the pills stay readable in dark mode", async ({ app }) => {
+    await app.locator('.side-item[data-view="settings"]').click();
+    await app.locator('#themeTiles .set-tile[data-theme="dark"]').click();
+    await app.locator('.side-item[data-view="map"]').click();
+
+    const active = chip(app, "world");
+    const inactive = chip(app, "france");
+    await expect(active).toBeVisible();
+    const activeBg = await active.evaluate((el) => getComputedStyle(el).backgroundColor);
+    const inactiveBg = await inactive.evaluate((el) => getComputedStyle(el).backgroundColor);
+    /* the two states still read as visually distinct, not both defaulting to
+       the same flat surface */
+    expect(activeBg).not.toBe(inactiveBg);
+    expect(inactiveBg).not.toBe("rgb(255, 255, 255)");
   });
 });
 
@@ -228,6 +503,8 @@ test.describe("forecast advisory banner", () => {
     /* storm outranks the 88 km/h gusts that the same forecast also triggers */
     await expect(cards(page).first()).toContainText("Orages");
     await expect(cards(page).nth(1)).toContainText("Vent fort");
+    await expect(cards(page).first()).toHaveClass(/is-primary/);
+    await expect(cards(page).nth(1)).toHaveClass(/is-secondary/);
     await expect(cards(page)).toHaveCount(2);
     /* never more than three, however many hazards coincide */
     expect(await cards(page).count()).toBeLessThanOrEqual(3);
@@ -409,8 +686,11 @@ test.describe("explore carousel photos", () => {
 
     const credit = paris.locator("a.explore-credit");
     await expect(credit).toBeVisible();
-    await expect(credit).toContainText(PEXELS_PHOTOGRAPHER);
-    await expect(credit).toContainText("Pexels");
+    await expect(credit).toHaveText("Pexels ↗");
+    await expect(credit).toHaveAttribute(
+      "aria-label",
+      `Photo de ${PEXELS_PHOTOGRAPHER} sur Pexels`,
+    );
     await expect(credit).toHaveAttribute("target", "_blank");
     await expect(credit).toHaveAttribute("rel", "noopener noreferrer");
     await expect(credit).toHaveAttribute("href", /^https:\/\/www\.pexels\.com\//);
@@ -501,7 +781,11 @@ test.describe("favorites", () => {
     await expect(card.locator("img.loc-photo-img")).toHaveCount(1);
     await expect(card.locator("img.loc-photo-img")).toHaveAttribute("alt", "");
     await expect(card.locator("a.favx-credit")).toBeVisible();
-    await expect(card.locator("a.favx-credit")).toContainText(PEXELS_PHOTOGRAPHER);
+    await expect(card.locator("a.favx-credit")).toHaveText("Pexels ↗");
+    await expect(card.locator("a.favx-credit")).toHaveAttribute(
+      "aria-label",
+      `Photo de ${PEXELS_PHOTOGRAPHER} sur Pexels`,
+    );
 
     /* the card is a plain <article>: the open control and the remove control
        are siblings, neither nested inside the other */
@@ -578,11 +862,14 @@ test.describe("favorites", () => {
 });
 
 test.describe("photo attribution", () => {
-  test("9a. a Pexels photo renders a visible, linked credit", async ({ app }) => {
+  test("9a. a Pexels photo renders a compact, linked source", async ({ app }) => {
     const credit = app.locator("#heroInner .loc-credit");
     await expect(credit).toBeVisible();
-    await expect(credit).toContainText(PEXELS_PHOTOGRAPHER);
-    await expect(credit).toContainText("Pexels");
+    await expect(credit).toHaveText("Pexels ↗");
+    await expect(credit).toHaveAttribute(
+      "aria-label",
+      `Photo de ${PEXELS_PHOTOGRAPHER} sur Pexels`,
+    );
     await expect(credit).toHaveAttribute("target", "_blank");
     await expect(credit).toHaveAttribute("rel", "noopener noreferrer");
     await expect(credit).toHaveAttribute("href", /^https:\/\/www\.pexels\.com\//);
@@ -590,14 +877,17 @@ test.describe("photo attribution", () => {
     await expect(app.locator("#heroLandmark img.loc-photo-img")).toHaveAttribute("alt", PEXELS_ALT);
   });
 
-  test("9b. the credit is in French, and switches with the interface language", async ({ app }) => {
-    await expect(app.locator("#heroInner .loc-credit")).toContainText(
+  test("9b. the full accessible credit switches with the interface language", async ({ app }) => {
+    await expect(app.locator("#heroInner .loc-credit")).toHaveAttribute(
+      "aria-label",
       `Photo de ${PEXELS_PHOTOGRAPHER} sur Pexels`,
     );
 
     await app.locator("#langBtn").click();
     await app.locator('#langMenu button[data-lang="en"]').click();
-    await expect(app.locator("#heroInner .loc-credit")).toContainText(
+    await expect(app.locator("#heroInner .loc-credit")).toHaveText("Pexels ↗");
+    await expect(app.locator("#heroInner .loc-credit")).toHaveAttribute(
+      "aria-label",
       `Photo by ${PEXELS_PHOTOGRAPHER} on Pexels`,
     );
   });

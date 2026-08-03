@@ -7,18 +7,25 @@
   gap: 8px;
   flex-wrap: wrap;
 }
+/* The country-jump row above the map card. A slightly larger gap than the
+   generic .map-actions default keeps four pills from crowding each other —
+   scoped to this row only, .map-actions elsewhere (layer switcher, info
+   cards) keeps its own tighter spacing. */
+.map-filters {
+  gap: 12px;
+}
 .chip {
   display: inline-flex;
   align-items: center;
-  gap: 8px;
-  height: 38px;
-  padding: 0 16px;
+  gap: 9px;
+  height: 44px;
+  padding: 0 18px;
   border-radius: 999px;
   border-width: 1px;
   border-style: solid;
   background: var(--card);
   border-color: var(--border);
-  font-size: 13.5px;
+  font-size: 14px;
   font-weight: 600;
   color: var(--text-2);
   box-shadow: var(--shadow-sm);
@@ -26,12 +33,17 @@
     color 0.2s,
     border-color 0.2s,
     background 0.2s,
+    box-shadow 0.2s,
     transform 0.2s var(--ease);
 }
 .chip:not(.is-active):hover {
   color: var(--text);
   transform: translateY(-1px);
   border-color: var(--border);
+}
+.chip:not(.is-active):active {
+  transform: translateY(0);
+  box-shadow: var(--shadow-sm);
 }
 /* Active: solid tinted background + accent border + light text together —
    never color-only, so the state still reads in a color-blind or grayscale
@@ -41,16 +53,23 @@
   background: var(--primary);
   border-color: var(--primary-600);
 }
-/* One fixed 4:3 icon box for every chip, matching the French flag. This
-   deliberately normalizes the wider US and Canadian flag assets so all three
-   country shortcuts have the same visible dimensions. */
+.chip.is-active:active {
+  background: var(--primary-600);
+}
+/* One fixed icon box for every chip, matching the French flag's own 4:3
+   ratio. This deliberately normalizes the wider US and Canadian flag assets
+   so all three country shortcuts — and the Monde globe — read as the same
+   visible size, vertically centred with the label next to them. object-fit:
+   cover crops any flag to this box without stretching or distorting it. */
 .chip-icon {
   display: flex;
+  flex-shrink: 0;
   align-items: center;
   justify-content: center;
-  width: 20px;
-  height: 15px;
-  flex-shrink: 0;
+  width: 22px;
+  height: 16.5px;
+  overflow: hidden;
+  border-radius: 3px;
 }
 .chip-icon svg {
   width: 16px;
@@ -58,10 +77,41 @@
 }
 .chip-icon img,
 .chip-icon .flag {
+  display: block;
   width: 100%;
   height: 100%;
-  object-fit: fill;
-  display: block;
+  object-fit: cover;
+}
+
+/* Country shortcuts use the compact rounded-rectangle treatment from the
+   approved map mockup. Keep these overrides scoped to the filter row so the
+   generic chip component remains unchanged everywhere else. */
+.map-filters .chip {
+  height: 42px;
+  padding: 0 16px;
+  border-color: rgba(148, 163, 184, 0.28);
+  border-radius: 9px;
+  background: var(--card);
+  box-shadow: 0 4px 12px rgba(15, 23, 42, 0.07);
+}
+.map-filters .chip:not(.is-active):hover {
+  border-color: var(--primary-300);
+  box-shadow: 0 6px 16px rgba(15, 23, 42, 0.1);
+}
+.map-filters .chip.is-active {
+  border-color: var(--primary);
+  background: var(--primary);
+  box-shadow: 0 7px 16px rgba(37, 99, 235, 0.25);
+}
+body[data-theme="dark"] .map-filters .chip {
+  border-color: var(--border);
+  background: var(--card);
+  box-shadow: var(--shadow-sm);
+}
+body[data-theme="dark"] .map-filters .chip.is-active {
+  border-color: var(--primary);
+  background: var(--primary);
+  color: #fff;
 }
 .map-actions .icon-btn {
   background: var(--card);
@@ -71,6 +121,8 @@
 
 .map-card {
   position: relative;
+  isolation: isolate;
+  overflow: hidden;
   margin-top: var(--s-3);
   padding: var(--s-3);
   border-radius: var(--r-xl);
@@ -271,7 +323,7 @@
    Breakpoints ordered narrowest-last so each overrides the wider ones above
    it at the same width. */
 #worldMap {
-  height: 620px; /* >=1440px */
+  height: 680px; /* >=1440px */
   border-radius: var(--r-md);
   overflow: hidden;
   background: #e8eef5;
@@ -280,12 +332,12 @@
 }
 @media (max-width: 1439px) {
   #worldMap {
-    height: 560px;
+    height: 600px;
   }
 } /* 1024–1439px */
 @media (max-width: 1023px) {
   #worldMap {
-    height: 480px;
+    height: 500px;
   }
 } /* 768–1023px */
 @media (max-width: 767px) {
@@ -365,6 +417,31 @@ body[data-theme="dark"] .maplibregl-popup-anchor-right .maplibregl-popup-tip {
 body[data-theme="dark"] .maplibregl-ctrl-group,
 body[data-theme="dark"] .maplibregl-ctrl-group button {
   background: var(--card);
+}
+
+/* Provider attribution is licence-required, but it does not need to compete
+   with the map. Keep it compact and quiet until someone points at it. */
+#worldMap .maplibregl-ctrl-attrib,
+#homeMap .maplibregl-ctrl-attrib,
+#worldMap .maplibregl-ctrl-logo,
+#homeMap .maplibregl-ctrl-logo {
+  opacity: 0.52;
+  transition: opacity 0.2s;
+}
+#worldMap .maplibregl-ctrl-logo,
+#homeMap .maplibregl-ctrl-logo {
+  scale: 0.82;
+  transform-origin: bottom left;
+}
+#worldMap .maplibregl-ctrl-attrib:hover,
+#homeMap .maplibregl-ctrl-attrib:hover,
+#worldMap .maplibregl-ctrl-attrib:focus-within,
+#homeMap .maplibregl-ctrl-attrib:focus-within,
+#worldMap .maplibregl-ctrl-logo:hover,
+#homeMap .maplibregl-ctrl-logo:hover,
+#worldMap .maplibregl-ctrl-logo:focus-visible,
+#homeMap .maplibregl-ctrl-logo:focus-visible {
+  opacity: 1;
 }
 body[data-theme="dark"] .maplibregl-ctrl button .maplibregl-ctrl-icon {
   filter: invert(1) hue-rotate(180deg);
@@ -500,4 +577,558 @@ body[data-theme="dark"] .maplibregl-ctrl button .maplibregl-ctrl-icon {
   text-align: center;
   color: var(--text-2);
   font-size: 14px;
+}
+
+/* ── Integrated map workspace ───────────────────────────────────────────── */
+.map-layer-switcher {
+  position: absolute;
+  z-index: 4;
+  top: 28px;
+  left: 28px;
+  display: flex;
+  align-items: center;
+  padding: 5px;
+  border: 1px solid rgba(255, 255, 255, 0.72);
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.94);
+  box-shadow: 0 8px 24px rgba(15, 23, 42, 0.18);
+  backdrop-filter: blur(12px);
+}
+.map-layer {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  min-height: 38px;
+  padding: 0 13px;
+  border-radius: 10px;
+  color: #53627a;
+  font-size: 12.5px;
+  font-weight: 650;
+  white-space: nowrap;
+  transition:
+    color 0.18s,
+    background 0.18s,
+    opacity 0.18s;
+}
+.map-layer:hover {
+  color: #14213d;
+  background: #f1f5f9;
+}
+.map-layer.is-active {
+  color: #fff;
+  background: var(--primary);
+  box-shadow: 0 5px 12px rgba(37, 99, 235, 0.26);
+}
+.map-layer.is-loading {
+  cursor: progress;
+  opacity: 0.62;
+}
+.map-card .maplibregl-ctrl-top-left {
+  top: 72px;
+  left: 12px;
+}
+
+.map-weather-panel {
+  position: absolute;
+  z-index: 3;
+  top: 28px;
+  right: 28px;
+  width: min(350px, calc(100% - 56px));
+  padding: 22px;
+  border: 1px solid rgba(255, 255, 255, 0.76);
+  border-radius: 20px;
+  background: rgba(255, 255, 255, 0.96);
+  box-shadow: 0 18px 48px rgba(15, 23, 42, 0.24);
+  color: #111827;
+  backdrop-filter: blur(16px);
+  /* geo-identity chip colours — subtle on both the frosted glass panel
+     (desktop) and the flat themed card it becomes at the 820px breakpoint */
+  --geo-chip-bg: rgba(15, 23, 42, 0.05);
+  --geo-chip-border: rgba(15, 23, 42, 0.12);
+  --geo-chip-text: #334155;
+}
+.map-panel-head,
+.map-panel-location,
+.map-panel-current {
+  display: flex;
+  align-items: center;
+}
+.map-panel-head {
+  justify-content: space-between;
+  gap: 12px;
+}
+.map-panel-location {
+  min-width: 0;
+  gap: 11px;
+}
+.map-panel-pin {
+  display: grid;
+  width: 32px;
+  height: 32px;
+  flex: 0 0 auto;
+  place-items: center;
+  border-radius: 50% 50% 50% 10px;
+  background: var(--primary);
+  color: #fff;
+  font-size: 10px;
+  rotate: -45deg;
+}
+.map-panel-pin::first-letter {
+  rotate: 45deg;
+}
+.map-panel-location h2 {
+  overflow: hidden;
+  margin: 0;
+  font-size: 19px;
+  line-height: 1.2;
+  letter-spacing: -0.02em;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.map-panel-location p {
+  margin: 4px 0 0;
+  color: #718096;
+  font-size: 12.5px;
+}
+.map-panel-actions {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 5px;
+}
+
+/* ── Geographic identity box ──────────────────────────────────────────────
+   Compact country/region chips + a short hierarchy line, sitting directly
+   under the name/kind head. Colours are the scoped custom properties set on
+   .map-weather-panel above, so the subtle pill reads correctly on both the
+   frosted glass panel (desktop) and the flat themed card it becomes at the
+   820px breakpoint below. */
+body[data-theme="dark"] .map-weather-panel {
+  --geo-chip-bg: rgba(148, 163, 184, 0.14);
+  --geo-chip-border: rgba(148, 163, 184, 0.24);
+  --geo-chip-text: var(--text-2);
+}
+.geo-identity {
+  margin-top: 12px;
+}
+.geo-identity-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 7px;
+}
+.geo-chip {
+  display: inline-flex;
+  min-width: 0;
+  max-width: 100%;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 10px;
+  border: 1px solid var(--geo-chip-border);
+  border-radius: 999px;
+  background: var(--geo-chip-bg);
+  color: var(--geo-chip-text);
+  font-size: 12px;
+  font-weight: 650;
+}
+.geo-chip span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.geo-chip-flag {
+  height: 14px;
+  width: auto;
+  max-width: none;
+  flex-shrink: 0;
+  border-radius: 2px;
+  object-fit: contain;
+}
+.geo-chip-icon {
+  display: inline-flex;
+  flex-shrink: 0;
+  color: var(--geo-chip-text);
+  opacity: 0.75;
+}
+.geo-chip-icon svg {
+  width: 14px;
+  height: 14px;
+}
+.geo-hierarchy {
+  margin: 7px 0 0;
+  overflow-wrap: anywhere;
+  color: #718096;
+  font-size: 12px;
+}
+body[data-theme="dark"] .geo-hierarchy {
+  color: var(--text-2);
+}
+.map-panel-favorite {
+  display: grid;
+  width: 38px;
+  height: 38px;
+  flex: 0 0 auto;
+  place-items: center;
+  border-radius: 11px;
+  color: #64748b;
+  transition:
+    color 0.18s,
+    background 0.18s;
+}
+.map-panel-favorite:hover {
+  color: #d97706;
+  background: #fff7ed;
+}
+.map-panel-favorite svg {
+  width: 23px;
+  fill: none;
+  stroke: currentcolor;
+  stroke-linejoin: round;
+  stroke-width: 1.8;
+}
+.map-panel-favorite.is-active {
+  color: #d97706;
+  background: #fff7ed;
+}
+.map-panel-favorite.is-active svg {
+  fill: currentcolor;
+}
+.map-panel-close {
+  display: grid;
+  width: 34px;
+  height: 34px;
+  place-items: center;
+  border: 1px solid #e11d48;
+  border-radius: 10px;
+  background: #e11d48;
+  box-shadow: 0 5px 14px rgba(225, 29, 72, 0.25);
+  color: #fff;
+  font-size: 23px;
+  line-height: 1;
+  transition:
+    color 0.18s,
+    border-color 0.18s,
+    background 0.18s,
+    transform 0.18s;
+}
+.map-panel-close:hover,
+.map-panel-close:focus-visible {
+  border-color: #be123c;
+  background: #be123c;
+  color: #fff;
+  box-shadow: 0 7px 18px rgba(225, 29, 72, 0.34);
+  transform: scale(1.04);
+}
+.map-show-panel {
+  position: absolute;
+  z-index: 4;
+  right: 28px;
+  bottom: 28px;
+  display: inline-flex;
+  min-height: 42px;
+  align-items: center;
+  gap: 8px;
+  padding: 0 15px;
+  border: 1px solid rgba(255, 255, 255, 0.72);
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.95);
+  box-shadow: 0 8px 24px rgba(15, 23, 42, 0.2);
+  color: #172033;
+  font-size: 12.5px;
+  font-weight: 700;
+  backdrop-filter: blur(12px);
+}
+.map-show-panel:hover {
+  color: var(--primary-600);
+  transform: translateY(-1px);
+}
+.map-panel-current {
+  gap: 16px;
+  margin-top: 22px;
+  padding-bottom: 20px;
+  border-bottom: 1px solid #e5eaf1;
+}
+.map-panel-icon {
+  width: 78px;
+  height: 78px;
+  flex: 0 0 auto;
+}
+.map-panel-current strong {
+  display: block;
+  font-size: 43px;
+  line-height: 1;
+  letter-spacing: -0.045em;
+}
+.map-panel-current span {
+  display: block;
+  margin-top: 7px;
+  color: #64748b;
+  font-size: 13px;
+}
+.map-panel-stats {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 8px;
+  margin: 18px 0;
+}
+.map-panel-stats div {
+  min-width: 0;
+}
+.map-panel-stats dt {
+  overflow: hidden;
+  color: #8a99ae;
+  font-size: 10.5px;
+  font-weight: 600;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.map-panel-stats dd {
+  margin: 5px 0 0;
+  color: #172033;
+  font-size: 12.5px;
+  font-weight: 750;
+  white-space: nowrap;
+}
+.map-forecast-button {
+  display: flex;
+  width: 100%;
+  min-height: 44px;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 17px;
+  border-radius: 12px;
+  background: var(--primary);
+  color: #fff;
+  font-size: 13.5px;
+  font-weight: 700;
+  box-shadow: 0 8px 18px rgba(37, 99, 235, 0.23);
+  transition:
+    background 0.18s,
+    transform 0.18s;
+}
+.map-forecast-button:hover {
+  background: var(--primary-600);
+  transform: translateY(-1px);
+}
+.map-hourly {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  margin-top: 18px;
+  padding-top: 16px;
+  border-top: 1px solid #e5eaf1;
+}
+.map-hour {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  flex-direction: column;
+  gap: 5px;
+  text-align: center;
+}
+.map-hour + .map-hour {
+  border-left: 1px solid #eef2f7;
+}
+.map-hour > span {
+  color: #8090a7;
+  font-size: 10.5px;
+  white-space: nowrap;
+}
+.map-hour .wi {
+  width: 34px;
+  height: 34px;
+}
+.map-hour b {
+  font-size: 12px;
+}
+
+.map-popular-card {
+  margin-top: 14px;
+  padding: 16px 18px 18px;
+  border-radius: var(--r-xl);
+}
+.map-popular-card .info-title {
+  margin: 0 0 11px;
+}
+.map-popular-list {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 10px;
+}
+.map-popular-place {
+  display: grid;
+  min-width: 0;
+  min-height: 48px;
+  grid-template-columns: auto minmax(0, 1fr) auto auto;
+  gap: 8px;
+  align-items: center;
+  padding: 8px 11px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  color: var(--text);
+  text-align: left;
+  transition:
+    border-color 0.18s,
+    background 0.18s,
+    transform 0.18s;
+}
+.map-popular-place:hover {
+  border-color: var(--primary-300);
+  background: var(--primary-soft);
+  transform: translateY(-1px);
+}
+.map-popular-place .flag {
+  width: 20px;
+  height: 15px;
+  object-fit: fill;
+}
+.map-popular-place b {
+  overflow: hidden;
+  font-size: 12.5px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.map-popular-place > span {
+  font-size: 12px;
+  font-weight: 700;
+  white-space: nowrap;
+}
+.map-popular-place .wi {
+  width: 25px;
+  height: 25px;
+}
+
+body[data-theme="dark"] .map-layer-switcher,
+body[data-theme="dark"] .map-weather-panel,
+body[data-theme="dark"] .map-show-panel {
+  border-color: rgba(148, 163, 184, 0.22);
+  background: rgba(17, 24, 39, 0.95);
+  color: var(--text);
+}
+body[data-theme="dark"] .map-layer {
+  color: var(--text-2);
+}
+body[data-theme="dark"] .map-layer:hover {
+  color: var(--text);
+  background: rgba(148, 163, 184, 0.12);
+}
+body[data-theme="dark"] .map-panel-current,
+body[data-theme="dark"] .map-hourly {
+  border-color: var(--border);
+}
+body[data-theme="dark"] .map-panel-current strong,
+body[data-theme="dark"] .map-panel-stats dd {
+  color: var(--text);
+}
+body[data-theme="dark"] .map-hour + .map-hour {
+  border-color: var(--border);
+}
+
+@media (max-width: 1180px) {
+  .map-weather-panel {
+    width: 318px;
+    padding: 18px;
+  }
+  .map-layer {
+    padding-inline: 10px;
+  }
+  .map-popular-list {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+  .map-show-panel {
+    right: 18px;
+    bottom: 18px;
+  }
+}
+
+@media (max-width: 820px) {
+  .map-layer-switcher {
+    right: 22px;
+    left: 22px;
+    overflow-x: auto;
+  }
+  .map-layer {
+    flex: 1 0 auto;
+  }
+  .map-weather-panel {
+    position: relative;
+    top: auto;
+    right: auto;
+    width: auto;
+    margin-top: 12px;
+    border-color: var(--border);
+    background: var(--card);
+    box-shadow: var(--shadow-sm);
+    color: var(--text);
+    backdrop-filter: none;
+  }
+  .map-panel-current strong,
+  .map-panel-stats dd {
+    color: var(--text);
+  }
+  .map-panel-current,
+  .map-hourly {
+    border-color: var(--border);
+  }
+  .map-popular-list {
+    display: flex;
+    overflow-x: auto;
+    padding-bottom: 3px;
+    scroll-snap-type: x proximity;
+  }
+  .map-popular-place {
+    min-width: 210px;
+    scroll-snap-align: start;
+  }
+}
+
+@media (max-width: 520px) {
+  .map-filters {
+    gap: 8px;
+  }
+  .map-filters .chip {
+    height: 40px;
+    padding: 0 14px;
+    font-size: 13.5px;
+  }
+  .map-card {
+    padding: 8px;
+  }
+  .map-layer-switcher {
+    top: 18px;
+    right: 18px;
+    left: 18px;
+  }
+  .map-card .maplibregl-ctrl-top-left {
+    top: 68px;
+    left: 6px;
+  }
+  #worldMap {
+    height: 390px;
+  }
+  .map-weather-panel {
+    padding: 17px;
+    border-radius: 16px;
+  }
+  .map-panel-current {
+    margin-top: 16px;
+  }
+  .map-panel-current strong {
+    font-size: 38px;
+  }
+  .map-panel-icon {
+    width: 66px;
+    height: 66px;
+  }
+  .map-panel-stats {
+    grid-template-columns: repeat(2, 1fr);
+    gap: 13px 10px;
+  }
+  .map-panel-stats dt,
+  .map-panel-stats dd {
+    overflow: visible;
+    text-overflow: clip;
+  }
+  .map-popular-card {
+    padding-inline: 14px;
+  }
 }

@@ -47,23 +47,23 @@ const SEVERITY_LABEL = {
    advThunderstormTitle / …Desc / …Tip. */
 const cap = (s) => s.charAt(0).toUpperCase() + s.slice(1);
 
-function advisoryHtml(adv) {
+function advisoryHtml(adv, index) {
   const key = cap(adv.type);
   const desc = t(`adv${key}Desc`).replace("{value}", formatValue(adv));
   /* The severity is spelled out, not just coloured, and the icon is decorative:
      the banner reads correctly in monochrome and to a screen reader. */
   return `
-    <article class="advisory adv--${esc(adv.severity)}">
+    <article class="advisory ${index === 0 ? "is-primary" : "is-secondary"} adv--${esc(adv.severity)}">
       <span class="adv-icon" aria-hidden="true">${ADVISORY_ICONS[adv.type] || ""}</span>
       <div class="adv-body">
         <p class="adv-kicker">
           <span>${t("advKicker")}</span>
           <span class="adv-sev">${t(SEVERITY_LABEL[adv.severity] || "advSevLow")}</span>
         </p>
-        <h3 class="adv-title">${t(`adv${key}Title`)}</h3>
+        <h3 class="adv-title">${t(`adv${key}Title`)} <span class="adv-time">· ${esc(formatWindow(adv))}</span></h3>
         <p class="adv-desc">${esc(desc)}</p>
-        <p class="adv-meta"><b>${t("advWhen")}</b> ${esc(formatWindow(adv))}</p>
-        <p class="adv-meta"><b>${t("advAdvice")}</b> ${t(`adv${key}Tip`)}</p>
+        <p class="adv-meta adv-when"><b>${t("advWhen")}</b> ${esc(formatWindow(adv))}</p>
+        <p class="adv-meta adv-advice"><b>${t("advAdvice")}</b> ${t(`adv${key}Tip`)}</p>
       </div>
     </article>`;
 }

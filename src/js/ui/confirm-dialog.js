@@ -1,7 +1,14 @@
 /* Reusable accessible confirmation dialog for destructive UI actions. */
 import { $ } from "../core/dom.js";
 
-export function confirmAction({ title, message, confirmLabel, cancelLabel, trigger }) {
+export function confirmAction({
+  title,
+  message,
+  confirmLabel,
+  cancelLabel,
+  trigger,
+  danger = true,
+}) {
   const dialog = $("#confirmDialog");
   const confirmBtn = $("#confirmDialogConfirm");
   const cancelBtn = $("#confirmDialogCancel");
@@ -10,6 +17,8 @@ export function confirmAction({ title, message, confirmLabel, cancelLabel, trigg
   $("#confirmDialogMessage").textContent = message;
   confirmBtn.textContent = confirmLabel;
   cancelBtn.textContent = cancelLabel;
+  confirmBtn.classList.toggle("confirm-dialog-danger", danger);
+  confirmBtn.classList.toggle("confirm-dialog-primary", !danger);
 
   return new Promise((resolve) => {
     let settled = false;

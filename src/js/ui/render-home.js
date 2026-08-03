@@ -112,7 +112,6 @@ const METRICS = [
     key: "temperature",
     icon: "temperature",
     tint: "tint-amber",
-    simple: true,
     val: (c) => `${fmtTemp(c.temp)}<span class="unit">${tempUnit()}</span>`,
     foot: (c) => wxDesc(c.code, state.lang),
   },
@@ -142,6 +141,15 @@ const METRICS = [
        when Open-Meteo omits it) — the most reliable value already on hand. */
     val: (c) => `${fmtTemp(c.feels)}<span class="unit">${tempUnit()}</span>`,
     foot: () => "",
+  },
+  {
+    key: "rainNext12h",
+    icon: "rain",
+    tint: "tint-sky",
+    simple: true,
+    val: (c, wx) =>
+      `${Math.round(Math.max(...wx.hourly.slice(0, 12).map((hour) => hour.rainProb)))}<span class="unit">%</span>`,
+    foot: () => t("rainChance"),
   },
   {
     key: "windDirection",
@@ -217,7 +225,7 @@ export function renderMetrics() {
   const c = state.wx.current;
   $("#metricsGrid").innerHTML = METRICS.map(
     (m, i) => `
-    <div class="metric-card ${m.simple ? "" : "detailed-only"}" style="animation-delay:${i * 45}ms">
+    <div class="metric-card ${m.simple ? "" : "detailed-only"}" data-metric="${m.key}" style="animation-delay:${i * 45}ms">
       <div class="metric-head">
         <span class="metric-ico ${m.tint}" aria-hidden="true">${METRIC_ICONS[m.icon]}</span>
         <span class="metric-label">${t(m.key)}</span>

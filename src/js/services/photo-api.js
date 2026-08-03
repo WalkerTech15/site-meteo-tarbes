@@ -154,8 +154,10 @@ function pexelsSrcset(sizes = {}) {
 }
 const PEXELS_SIZES_ATTR = "(max-width: 640px) 100vw, (max-width: 1080px) 65vw, 720px";
 
-/* Pexels' licence asks for a visible, linked credit. Only ever called for a real
-   Pexels result — curated local images, flags and emoji fallbacks get none.
+/* Keep a compact, visible Pexels source link without covering the photograph
+   with a long sentence. The full photographer credit remains available as the
+   accessible name and native tooltip. Only called for a real Pexels result —
+   curated local images, flags and emoji fallbacks get none.
    `host` is separate from the photo element because two of the three photo
    containers can't hold readable text: the hero's landmark layer is
    pointer-events:none behind the hero copy, and the map info thumbnail is
@@ -170,7 +172,9 @@ function renderPhotoCredit(host, photo, extraClass = "") {
   a.href = photo.link;
   a.target = "_blank";
   a.rel = "noopener noreferrer";
-  a.textContent = label; // textContent, so a hostile photographer name can't inject markup
+  a.textContent = "Pexels ↗";
+  a.setAttribute("aria-label", label);
+  a.title = label;
   host.dataset.credit = label;
   host.appendChild(a);
 }

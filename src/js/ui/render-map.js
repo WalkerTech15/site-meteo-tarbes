@@ -1,20 +1,24 @@
-/* Map view info panels: selected-location card, current conditions, and
-   the popular-cities list. */
+/* Map view: one integrated selected-location panel plus a compact popular-cities row. */
 import { state } from "../core/state.js";
 import { $, $$, esc } from "../core/dom.js";
 import { t } from "../core/i18n.js";
+import { fmtHour } from "../core/datetime.js";
 import { FETCH_TIMEOUT_MS } from "../core/config.js";
-import { LOCATIONS, COUNTRY_FACTS } from "../data/locations.js";
+import { LOCATIONS } from "../data/locations.js";
 import { weatherIcon } from "../data/icons.js";
 import { wmo, wxDesc } from "../data/weather-codes.js";
 import { fmtTemp, tempUnit, fmtWind, windUnit } from "../core/units.js";
-import { locName, locRegion, locCountry, kindLabel, flagsHtml } from "../core/location.js";
-import { locPhotoHtml, hydrateLocPhoto } from "../services/photo-api.js";
+import { locName, kindLabel, flagsHtml } from "../core/location.js";
+import { geoIdentityHtml } from "../core/geo-identity.js";
 import { demoWeather } from "../services/weather-api.js";
 import { selectLocation } from "../features/location.js";
+import { isFav, toggleFavorite } from "../features/favorites.js";
+import { switchView } from "./navigation.js";
+import { confirmAction } from "./confirm-dialog.js";
 
 const POPULAR_IDS = ["paris", "newyork", "tokyo", "sydney", "london"];
 let popularCache = null;
+let panelHidden = false;
 
 export async function loadPopular() {
   const locs = POPULAR_IDS.map((id) => LOCATIONS.find((l) => l.id === id));
@@ -43,80 +47,115 @@ export async function loadPopular() {
   renderMapInfo();
 }
 
-function factRows(loc) {
-  const facts = loc.kind === "country" && COUNTRY_FACTS[loc.id];
-  if (facts) {
-    return [
-      [t("factType"), kindLabel(loc.kind)],
-      [t("factCapital"), facts.capital[state.lang]],
-      [t("factLang"), facts.lang[state.lang]],
-      [t("factPop"), facts.pop[state.lang]],
-      [t("factCurrency"), facts.currency[state.lang]],
-      [t("factTz"), facts.tz],
-    ];
-  }
-  const rows = [
-    [t("factType"), kindLabel(loc.kind)],
-    [t("factRegion"), locRegion(loc) || "—"],
-    [t("factCountry"), locCountry(loc)],
-  ];
-  if (loc.landmark) rows.push([t("factLandmark"), loc.landmark[state.lang] || loc.landmark.en]);
-  rows.push([t("factCoords"), `${loc.lat.toFixed(2)}°, ${loc.lon.toFixed(2)}°`]);
-  return rows;
+function hourlyHtml(wx) {
+  return wx.hourly
+    .slice(0, 4)
+    .map((hour, index) => {
+      const time = index === 0 ? t("mapNow") : fmtHour(hour.time);
+      const description = wxDesc(hour.code, state.lang);
+      return `<div class="map-hour" aria-label="${esc(
+        `${time}, ${description}, ${fmtTemp(hour.temp)}${tempUnit()}`,
+      )}">
+        <span>${esc(time)}</span>
+        ${weatherIcon(wmo(hour.code).icon, hour.isDay)}
+        <b>${fmtTemp(hour.temp)}${tempUnit()}</b>
+      </div>`;
+    })
+    .join("");
 }
 
-export function renderMapInfo() {
-  const loc = state.loc,
-    wx = state.wx;
-  if (!loc || !wx || !$("#mapLocInfo")) return;
+function weatherPanelHtml(loc, wx) {
   const c = wx.current;
-
-  $("#mapLocInfo").innerHTML = `
-    <h3 class="info-title">${t("locInfo")}</h3>
-    <div class="info-head">
-      <div class="info-visual">${locPhotoHtml(loc)}</div>
-      <div>
-        <div class="info-name">${flagsHtml(loc, "small")} <b>${esc(locName(loc))}</b></div>
-        <div class="info-sub">${esc(locRegion(loc))}</div>
+  const favorite = isFav(loc);
+  return `
+    <div class="map-panel-head">
+      <div class="map-panel-location">
+        <span class="map-panel-pin" aria-hidden="true">●</span>
+        <div><h2>${esc(locName(loc))}</h2><p>${esc(kindLabel(loc.kind))}</p></div>
+      </div>
+      <div class="map-panel-actions">
+        <button class="map-panel-favorite ${favorite ? "is-active" : ""}" id="mapFavoriteBtn"
+          type="button" aria-label="${favorite ? t("removeFavorite") : t("addFavorite")}" aria-pressed="${favorite}">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m12 3 2.7 5.5 6.1.9-4.4 4.3 1 6.1-5.4-2.9-5.4 2.9 1-6.1-4.4-4.3 6.1-.9L12 3Z"/></svg>
+        </button>
+        <button class="map-panel-close" id="mapPanelClose" type="button" aria-label="${t("hideMapDetails")}">
+          <span aria-hidden="true">×</span>
+        </button>
       </div>
     </div>
-    <dl class="facts">${factRows(loc)
-      .map(([k, v]) => `<div><dt>${esc(k)}</dt><dd>${esc(v)}</dd></div>`)
-      .join("")}</dl>`;
-  /* the info thumbnail is only 96×66px — credit the card body instead */
-  hydrateLocPhoto($("#mapLocInfo .info-visual .loc-photo"), loc, {
-    creditHost: $("#mapLocInfo"),
-    creditClass: "loc-credit--inline",
-  });
-
-  $("#mapConditions").innerHTML = `
-    <h3 class="info-title">${t("conditions")}</h3>
-    <div class="cond-main">
-      <div class="cond-icon">${weatherIcon(wmo(c.code).icon, c.isDay)}</div>
-      <div><b>${fmtTemp(c.temp)}${tempUnit()}</b><span>${wxDesc(c.code, state.lang)}</span></div>
+    ${geoIdentityHtml(loc)}
+    <div class="map-panel-current">
+      <div class="map-panel-icon">${weatherIcon(wmo(c.code).icon, c.isDay)}</div>
+      <div><strong>${fmtTemp(c.temp)}${tempUnit()}</strong><span>${wxDesc(c.code, state.lang)}</span></div>
     </div>
-    <div class="cond-stats">
-      <div><dt>${t("feelsLike")}</dt><dd>${fmtTemp(c.feels)}°</dd></div>
+    <dl class="map-panel-stats">
+      <div><dt>${t("feelsLike")}</dt><dd>${fmtTemp(c.feels)}${tempUnit()}</dd></div>
       <div><dt>${t("humidity")}</dt><dd>${Math.round(c.humidity)}%</dd></div>
       <div><dt>${t("wind")}</dt><dd>${fmtWind(c.windSpeed)} ${windUnit()}</dd></div>
       <div><dt>${t("pressure")}</dt><dd>${Math.round(c.pressure)} hPa</dd></div>
-    </div>`;
+    </dl>
+    <button class="map-forecast-button" id="mapForecastBtn" type="button">
+      <span>${t("viewForecast")}</span><span aria-hidden="true">→</span>
+    </button>
+    <div class="map-hourly" aria-label="${t("hourlyForecast")}">${hourlyHtml(wx)}</div>`;
+}
 
-  $("#mapPopular").innerHTML = `
-    <h3 class="info-title">${t("popularTitle")}</h3>
-    <div class="pop-list">${(popularCache || [])
+function popularHtml() {
+  return `
+    <h2 class="info-title" id="mapPopularTitle">${t("popularTitle")}</h2>
+    <div class="map-popular-list">${(popularCache || [])
       .map(
-        (p) => `
-      <button class="pop-row" data-loc="${esc(p.loc.id)}">
-        ${flagsHtml(p.loc, "small")}
-        <span class="pop-names"><b>${esc(locName(p.loc))}</b><span>${esc(locCountry(p.loc))}</span></span>
-        <span class="pop-wx"><b>${fmtTemp(p.temp)}°C</b>${weatherIcon(wmo(p.code).icon, p.isDay)}</span>
-      </button>`,
+        (item) => `<button class="map-popular-place" data-loc="${esc(item.loc.id)}" type="button"
+          aria-label="${esc(`${locName(item.loc)}, ${fmtTemp(item.temp)}${tempUnit()}`)}">
+          ${flagsHtml(item.loc, "small")}
+          <b>${esc(locName(item.loc))}</b>
+          <span>${fmtTemp(item.temp)}${tempUnit()}</span>
+          ${weatherIcon(wmo(item.code).icon, item.isDay)}
+        </button>`,
       )
       .join("")}</div>`;
-  $$("#mapPopular .pop-row").forEach((btn) =>
-    btn.addEventListener("click", () => {
-      selectLocation(LOCATIONS.find((l) => l.id === btn.dataset.loc));
+}
+
+export function renderMapInfo() {
+  const panel = $("#mapWeatherPanel");
+  const popular = $("#mapPopular");
+  const showButton = $("#mapShowPanel");
+  if (!state.loc || !state.wx || !panel || !popular || !showButton) return;
+
+  panel.innerHTML = weatherPanelHtml(state.loc, state.wx);
+  popular.innerHTML = popularHtml();
+  panel.hidden = panelHidden;
+  showButton.hidden = !panelHidden;
+
+  $("#mapFavoriteBtn").addEventListener("click", () => {
+    toggleFavorite();
+    renderMapInfo();
+  });
+  $("#mapPanelClose").addEventListener("click", async (event) => {
+    const accepted = await confirmAction({
+      title: t("hideMapDetailsTitle"),
+      message: t("hideMapDetailsMessage"),
+      confirmLabel: t("hideAction"),
+      cancelLabel: t("cancelAction"),
+      trigger: event.currentTarget,
+      danger: true,
+    });
+    if (!accepted) return;
+    panelHidden = true;
+    panel.hidden = true;
+    showButton.hidden = false;
+    showButton.focus();
+  });
+  showButton.onclick = () => {
+    panelHidden = false;
+    panel.hidden = false;
+    showButton.hidden = true;
+    $("#mapPanelClose")?.focus();
+  };
+  $("#mapForecastBtn").addEventListener("click", () => switchView("forecast"));
+  $$("#mapPopular .map-popular-place").forEach((button) =>
+    button.addEventListener("click", () => {
+      selectLocation(LOCATIONS.find((loc) => loc.id === button.dataset.loc));
     }),
   );
 }
