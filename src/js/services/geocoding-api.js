@@ -86,6 +86,11 @@ function featureToLoc(f) {
   const regionCtx = ctx.find((x) => String(x.id || "").startsWith("region"));
   const regionCode =
     (regionCtx && regionCtx.short_code) || (f.properties && f.properties.short_code) || "";
+  /* Most MapTiler geocoder results are points, but keep a genuine area
+     geometry when a provider supplies one. The map can then outline the real
+     administrative shape instead of pretending the result's bbox is a
+     boundary. */
+  const geometry = ["Polygon", "MultiPolygon"].includes(f.geometry?.type) ? f.geometry : null;
   return {
     id: "mt-" + (f.id || `${f.center[0]},${f.center[1]}`),
     kind: map.kind,
@@ -101,6 +106,7 @@ function featureToLoc(f) {
     grad: ["#3B82F6", "#1E40AF"],
     dynamic: true,
     bbox: Array.isArray(f.bbox) && f.bbox.length === 4 ? f.bbox : null,
+    geometry,
     fullName: f.place_name || name,
     placeType: primary,
     _zoom: map.zoom,

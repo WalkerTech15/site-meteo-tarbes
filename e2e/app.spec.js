@@ -461,6 +461,120 @@ test.describe("country filter chips", () => {
   });
 });
 
+test.describe("map visual polish", () => {
+  test('41. "New York" and every other popular-location name display in full, with no page overflow', async ({
+    app,
+  }) => {
+    await app.locator('.side-item[data-view="map"]').click();
+    const cards = app.locator(".map-popular-place");
+    await expect(cards).toHaveCount(5);
+
+    const truncated = await cards.evaluateAll((els) =>
+      els
+        .map((el) => el.querySelector("b"))
+        .filter((b) => b.scrollWidth > b.clientWidth + 1)
+        .map((b) => b.textContent),
+    );
+    expect(truncated).toEqual([]);
+
+    /* the fix must not cost New York its country + state flag pair */
+    const newYork = app.locator('.map-popular-place[data-loc="newyork"]');
+    await expect(newYork).toContainText("New York");
+    await expect(newYork.locator(".location-flag-wrap")).toHaveCount(2);
+
+    const overflow = await app.evaluate(
+      () => document.documentElement.scrollWidth - document.documentElement.clientWidth,
+    );
+    expect(overflow).toBeLessThanOrEqual(0);
+  });
+
+  test("42. every map-layer button uses an SVG icon, not the old text glyph", async ({ app }) => {
+    await app.locator('.side-item[data-view="map"]').click();
+    const buttons = app.locator(".map-layer");
+    await expect(buttons).toHaveCount(4);
+
+    const icons = await buttons.evaluateAll((els) =>
+      els.map((el) => ({
+        hasSvg: !!el.querySelector(".map-layer-icon svg"),
+        text: el.textContent,
+      })),
+    );
+    for (const { hasSvg, text } of icons) {
+      expect(hasSvg).toBe(true);
+      expect(text).not.toMatch(/[▱♨☂≋]/); /* the retired text symbols */
+    }
+    /* decorative — the visible, translated label already names the control */
+    await expect(
+      app.locator('.map-layer[data-map-layer="satellite"] .map-layer-icon'),
+    ).toHaveAttribute("aria-hidden", "true");
+  });
+
+  test("43. the layer controls keep their radiogroup contract and bilingual labels", async ({
+    app,
+  }) => {
+    await app.locator('.side-item[data-view="map"]').click();
+    await expect(app.locator(".map-layer-switcher")).toHaveAttribute("role", "radiogroup");
+    const satellite = app.locator('.map-layer[data-map-layer="satellite"]');
+    await expect(satellite).toHaveAttribute("role", "radio");
+    await expect(satellite).toHaveAttribute("aria-checked", "true");
+    await expect(app.locator('.map-layer[data-map-layer="temperature"]')).toHaveAttribute(
+      "aria-checked",
+      "false",
+    );
+    await expect(app.locator('.map-layer[data-map-layer="temperature"]')).toContainText(
+      "Température",
+    );
+
+    await app.locator("#langBtn").click();
+    await app.locator('#langMenu button[data-lang="en"]').click();
+    await expect(app.locator('.map-layer[data-map-layer="temperature"]')).toContainText(
+      "Temperature",
+    );
+    await expect(satellite).toHaveAttribute("aria-checked", "true"); /* survives the relabel */
+  });
+
+  test("44. the selected marker carries a persistent, clearly visible focus ring", async ({
+    app,
+  }) => {
+    await app.locator('.side-item[data-view="map"]').click();
+    const ring = app.locator("#worldMap .maplibregl-marker .map-focus-ring");
+    await expect(ring).toHaveCount(1);
+    await expect(ring).toBeVisible();
+    const box = await ring.boundingBox();
+    expect(box.width).toBeGreaterThanOrEqual(44);
+    expect(box.width).toBeLessThanOrEqual(56);
+    /* the central marker dot stays present and on top of the ring */
+    await expect(app.locator("#worldMap .maplibregl-marker .map-dot")).toBeVisible();
+  });
+
+  test("45. reduced motion keeps the arrival pulse finite, never a continuous animation", async ({
+    page,
+  }) => {
+    await page.emulateMedia({ reducedMotion: "reduce" });
+    await installMocks(page);
+    await page.goto("/");
+    await expect(page.locator("#heroCityName")).not.toBeEmpty();
+    await page.locator('.side-item[data-view="map"]').click();
+
+    const ping = page.locator("#worldMap .maplibregl-marker .map-ping");
+    await expect(ping).toHaveCount(1);
+    const iterationCount = await ping.evaluate(
+      (el) => getComputedStyle(el).animationIterationCount,
+    );
+    expect(iterationCount).not.toBe("infinite");
+
+    await page.waitForTimeout(500);
+    const opacityAfter = await ping.evaluate((el) => parseFloat(getComputedStyle(el).opacity));
+    expect(opacityAfter).toBe(0); /* settled at its finished state, not still cycling */
+
+    /* the static focus ring itself carries no animation to begin with */
+    const ringAnimation = await page
+      .locator("#worldMap .maplibregl-marker .map-focus-ring")
+      .evaluate((el) => getComputedStyle(el).animationName);
+    expect(ringAnimation).toBe("none");
+  });
+});
+
 /* In-page forecast advisories. Nothing here may ask for a notification
    permission or register a service worker — the banner is on-page only. */
 test.describe("forecast advisory banner", () => {

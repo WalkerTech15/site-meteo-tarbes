@@ -142,6 +142,94 @@ function applyMapLanguage(map) {
   }
 }
 
+/* Satellite labels need administrative borders, but Hybrid v4's doubled
+   white/dark strokes can compete with the selected place. Quiet only the
+   known boundary source layers; roads and all other line work stay intact. */
+function softenBaseBoundaries(map) {
+  if (!map?.isStyleLoaded()) return;
+  for (const layer of map.getStyle().layers || []) {
+    const sourceLayer = layer["source-layer"];
+    if (layer.type !== "line" || !["country_border", "sub_border"].includes(sourceLayer)) continue;
+    const dark = /dark/i.test(layer.id);
+    const opacity = dark ? 0.14 : sourceLayer === "country_border" ? 0.42 : 0.28;
+    try {
+      map.setPaintProperty(layer.id, "line-opacity", opacity);
+    } catch {
+      /* A future provider style may lock or remove this paint property. */
+    }
+  }
+}
+
+const SELECTION_SOURCE = "weather-selection-area";
+const SELECTION_FILL = "weather-selection-fill";
+const SELECTION_LINE = "weather-selection-line";
+
+function selectionFeature(loc) {
+  if (!["Polygon", "MultiPolygon"].includes(loc?.geometry?.type)) {
+    return { type: "FeatureCollection", features: [] };
+  }
+  return {
+    type: "Feature",
+    properties: { kind: loc.kind || "place" },
+    geometry: loc.geometry,
+  };
+}
+
+/* Add a Google-Maps-style blue tint/outline only for real polygon geometry.
+   Point-only geocoder results use the persistent marker focus ring instead;
+   their rectangular bbox is deliberately never drawn as a fake boundary. */
+function applySelectionArea(inst) {
+  const map = inst.map;
+  if (!map.isStyleLoaded()) return;
+  const data = selectionFeature(inst.selectionLoc);
+  const source = map.getSource(SELECTION_SOURCE);
+  if (source) {
+    source.setData(data);
+    return;
+  }
+  map.addSource(SELECTION_SOURCE, { type: "geojson", data });
+  const firstLabel = (map.getStyle().layers || []).find((layer) => layer.type === "symbol")?.id;
+  map.addLayer(
+    {
+      id: SELECTION_FILL,
+      type: "fill",
+      source: SELECTION_SOURCE,
+      paint: { "fill-color": "#2563eb", "fill-opacity": 0.1 },
+    },
+    firstLabel,
+  );
+  map.addLayer(
+    {
+      id: SELECTION_LINE,
+      type: "line",
+      source: SELECTION_SOURCE,
+      paint: {
+        "line-color": "#2563eb",
+        "line-opacity": 0.95,
+        "line-width": ["interpolate", ["linear"], ["zoom"], 2, 2, 10, 3],
+      },
+    },
+    firstLabel,
+  );
+}
+
+function updateSelectionArea(inst, loc) {
+  inst.selectionLoc = loc;
+  if (inst.map.isStyleLoaded()) applySelectionArea(inst);
+  else inst.map.once("idle", () => applySelectionArea(inst));
+}
+
+function raiseSelectionArea(inst) {
+  const map = inst?.map;
+  if (!map?.getLayer(SELECTION_FILL)) return;
+  try {
+    map.moveLayer(SELECTION_FILL);
+    map.moveLayer(SELECTION_LINE);
+  } catch {
+    /* style/layer changed while an optional weather layer was loading */
+  }
+}
+
 export function refreshMapLanguage() {
   Object.values(MAPS).forEach((inst) => {
     if (inst.map.isStyleLoaded()) applyMapLanguage(inst.map);
@@ -193,6 +281,7 @@ async function updateMap(id) {
       el.classList.remove("is-loading");
       applyMapLanguage(map);
       applyMapControlLabels(map);
+      softenBaseBoundaries(map);
     });
     map.once("error", () => {
       if (!map.isStyleLoaded()) {
@@ -208,7 +297,8 @@ async function updateMap(id) {
 
     const pin = document.createElement("div");
     pin.className = "map-pin-icon";
-    pin.innerHTML = '<span class="map-ping"></span><span class="map-dot"></span>';
+    pin.innerHTML =
+      '<span class="map-focus-ring"></span><span class="map-ping"></span><span class="map-dot"></span>';
     /* anchor "bottom" = popup always above the marker; the flyTo offset below
        shifts the marker under the center so the popup always fits the map */
     const popup = new maplibregl.Popup({ offset: 16, maxWidth: "260px", anchor: "bottom" });
@@ -236,6 +326,7 @@ async function updateMap(id) {
   inst.popup.setHTML(popupHtml(loc));
   applyMapControlLabels(inst.map);
   inst.marker.setLngLat([loc.lon, loc.lat]);
+  updateSelectionArea(inst, loc);
   const key = `${loc.lat},${loc.lon}`;
   if (inst.lastKey !== key) {
     /* new location: replay the finite ping once, fly there, open the popup */
@@ -350,6 +441,7 @@ export async function setMapLayer(type) {
       const layer = makeWeatherLayer(weather, requested);
       inst.map.addLayer(layer);
       inst.weatherLayer = layer;
+      raiseSelectionArea(inst);
     }
     setLayerButtonState(requested);
   } catch {

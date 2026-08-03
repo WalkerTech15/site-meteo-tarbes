@@ -357,11 +357,35 @@ body[data-theme="dark"] .map-filters .chip.is-active {
   cursor: pointer;
 }
 .map-pin-icon .map-dot,
-.map-pin-icon .map-ping {
+.map-pin-icon .map-ping,
+.map-pin-icon .map-focus-ring {
   position: absolute;
   left: 50%;
   top: 50%;
   translate: -50% -50%;
+}
+/* Persistent selection ring, sized and contrasted to still read clearly over
+   dense satellite imagery: a crisp blue border, a thin white halo just
+   outside it (reads on both light terrain and dark water/forest), a soft
+   blue glow beyond that, and a drop shadow for depth. Static — no animation
+   here, so it never competes with the finite arrival pulse (.map-ping). */
+.map-focus-ring {
+  z-index: 0;
+  width: 48px;
+  height: 48px;
+  border: 2.5px solid rgba(37, 99, 235, 0.92);
+  border-radius: 50%;
+  background: radial-gradient(
+    circle,
+    rgba(37, 99, 235, 0.24) 0%,
+    rgba(37, 99, 235, 0.1) 70%,
+    transparent 100%
+  );
+  box-shadow:
+    0 0 0 3px rgba(255, 255, 255, 0.88),
+    0 0 0 9px rgba(37, 99, 235, 0.18),
+    0 2px 10px rgba(15, 23, 42, 0.3);
+  pointer-events: none;
 }
 /* MapLibre UI matched to the design system */
 .maplibregl-map {
@@ -477,6 +501,7 @@ body[data-theme="dark"] .maplibregl-ctrl button .maplibregl-ctrl-icon {
   animation: geoSpin 1s linear infinite; /* keyframe defined once in layout/sidebar.css */
 }
 .map-dot {
+  z-index: 2;
   width: 14px;
   height: 14px;
   border-radius: 50%;
@@ -500,6 +525,7 @@ body[data-theme="dark"] .maplibregl-ctrl button .maplibregl-ctrl-icon {
 }
 .map-ping {
   position: absolute;
+  z-index: 1;
   width: 14px;
   height: 14px;
   border-radius: 50%;
@@ -623,6 +649,20 @@ body[data-theme="dark"] .maplibregl-ctrl button .maplibregl-ctrl-icon {
 .map-layer.is-loading {
   cursor: progress;
   opacity: 0.62;
+}
+/* Outline SVG icons (data/icons.js MAP_LAYER_ICONS), matching the sizing and
+   stroke weight used everywhere else in the app. currentColor means the icon
+   automatically follows .map-layer's own text color — no separate contrast
+   rule needed for the active (white-on-blue) state. */
+.map-layer-icon {
+  display: inline-flex;
+  flex-shrink: 0;
+  width: 16px;
+  height: 16px;
+}
+.map-layer-icon svg {
+  width: 100%;
+  height: 100%;
 }
 .map-card .maplibregl-ctrl-top-left {
   top: 72px;
@@ -951,17 +991,20 @@ body[data-theme="dark"] .geo-hierarchy {
 }
 .map-popular-list {
   display: grid;
-  grid-template-columns: repeat(5, minmax(0, 1fr));
-  gap: 10px;
+  /* auto-fit with a genuine per-card minimum: five cards share the row when
+     it's wide enough (typical desktop), but the row drops to fewer columns
+     rather than crushing names at narrower "desktop" widths (1180-1300px). */
+  grid-template-columns: repeat(auto-fit, minmax(188px, 1fr));
+  gap: 8px;
 }
 .map-popular-place {
   display: grid;
   min-width: 0;
   min-height: 48px;
   grid-template-columns: auto minmax(0, 1fr) auto auto;
-  gap: 8px;
+  gap: 6px;
   align-items: center;
-  padding: 8px 11px;
+  padding: 8px 9px;
   border: 1px solid var(--border);
   border-radius: 12px;
   color: var(--text);
@@ -975,6 +1018,17 @@ body[data-theme="dark"] .geo-hierarchy {
   border-color: var(--primary-300);
   background: var(--primary-soft);
   transform: translateY(-1px);
+}
+/* A city with both a country flag and a state/province flag (e.g. "New
+   York") must not let that flag PAIR balloon its auto grid column and
+   starve the name next to it — .location-flags--small already shrinks a
+   single flag; this card needs it a step smaller still so two flags stay
+   compact side by side, freeing the name column for real city names. */
+.map-popular-place .location-flags {
+  gap: 4px;
+}
+.map-popular-place .location-flag-wrap {
+  height: 15px;
 }
 .map-popular-place .flag {
   width: 20px;
@@ -993,8 +1047,8 @@ body[data-theme="dark"] .geo-hierarchy {
   white-space: nowrap;
 }
 .map-popular-place .wi {
-  width: 25px;
-  height: 25px;
+  width: 23px;
+  height: 23px;
 }
 
 body[data-theme="dark"] .map-layer-switcher,

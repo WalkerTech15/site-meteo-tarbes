@@ -4,7 +4,7 @@ import { state } from "./core/state.js";
 import { $, $$ } from "./core/dom.js";
 import { t, applyStaticI18n } from "./core/i18n.js";
 import { getJSON, setJSON, clearAll, KEYS } from "./core/storage.js";
-import { injectIconDefs, weatherIcon } from "./data/icons.js";
+import { injectIconDefs, weatherIcon, MAP_LAYER_ICONS } from "./data/icons.js";
 import { flagHtml } from "./data/flags.js";
 import { LOCATIONS, DEFAULT_LOCATION_ID } from "./data/locations.js";
 import { bindSearchEvents, closeSearchPanel } from "./features/search.js";
@@ -232,6 +232,9 @@ $$("[data-flag]").forEach((el) => {
 });
 $$("[data-wicon]").forEach((el) => {
   el.innerHTML = weatherIcon(el.dataset.wicon, 1);
+});
+$$("[data-layer-icon]").forEach((el) => {
+  el.innerHTML = MAP_LAYER_ICONS[el.dataset.layerIcon] || "";
 });
 applyTheme();
 syncThemeNav();

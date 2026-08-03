@@ -74,4 +74,30 @@ test.describe("map workspace on a phone", () => {
     );
     expect(overflow).toBeLessThanOrEqual(0);
   });
+
+  test("the popular-locations row scrolls horizontally, with readable, untruncated names", async ({
+    app,
+  }) => {
+    await app.locator("#burgerBtn").click();
+    await app.locator('.side-item[data-view="map"]').click();
+
+    const list = app.locator(".map-popular-list");
+    await expect(list).toHaveCSS("overflow-x", "auto");
+    const cards = app.locator(".map-popular-place");
+    await expect(cards).toHaveCount(5);
+
+    const overflow = await app.evaluate(() => ({
+      doc: document.documentElement.scrollWidth - document.documentElement.clientWidth,
+      row: document.querySelector(".map-popular-list").scrollWidth,
+    }));
+    expect(overflow.doc).toBeLessThanOrEqual(0); /* the row scrolls; the page never does */
+    const listBox = await list.boundingBox();
+    expect(overflow.row).toBeGreaterThan(listBox.width); /* content genuinely exceeds the frame */
+
+    const newYork = app.locator('.map-popular-place[data-loc="newyork"] b');
+    await newYork.scrollIntoViewIfNeeded();
+    await expect(newYork).toBeVisible();
+    const truncated = await newYork.evaluate((el) => el.scrollWidth > el.clientWidth + 1);
+    expect(truncated).toBe(false);
+  });
 });

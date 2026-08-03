@@ -136,3 +136,16 @@ export const ADVISORY_ICONS = {
 export const GEO_ICONS = {
   neutral: `<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M12 21.5s7-6.4 7-12A7 7 0 1 0 5 9.5c0 5.6 7 12 7 12z"/><circle cx="12" cy="9.5" r="2.4"/></svg>`,
 };
+
+/* Map view-layer switcher (Satellite/Temperature/Rain/Wind). Same stroke
+   style as METRIC_ICONS — reused directly for temperature/rain/wind, since a
+   thermometer/droplets/wind icon already exists there. "layers" (stacked
+   planes) is the only genuinely new glyph, standing in for the satellite
+   basemap the way a layers icon conventionally does in map UIs. Decorative:
+   the buttons already carry a visible translated label next to the icon. */
+export const MAP_LAYER_ICONS = {
+  satellite: `<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="m12 2.5 9.5 5-9.5 5-9.5-5z"/><path d="m2.5 12 9.5 5 9.5-5"/><path d="m2.5 16.5 9.5 5 9.5-5"/></svg>`,
+  temperature: METRIC_ICONS.temperature,
+  rain: METRIC_ICONS.rain,
+  wind: METRIC_ICONS.wind,
+};
