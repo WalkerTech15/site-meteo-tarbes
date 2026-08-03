@@ -90,6 +90,7 @@ export const I18N = {
     removeFavConfirm: "Are you sure you want to remove {name} from your favorites?",
     removeAction: "Remove",
     cancelAction: "Cancel",
+    resetAction: "Reset",
     undoAction: "Undo",
 
     uvLow: "Low",
@@ -163,6 +164,8 @@ export const I18N = {
     hourlyForecast: "Hourly forecast",
     precipitation: "Precipitation",
     rainPct: "% rain",
+    precipMaxTpl: "Maximum chance: {pct}% around {time}",
+    precipNoData: "No precipitation data available",
     dayDetails: "Today's details",
     summaryTitle: "Summary",
     summaryTpl:
@@ -247,17 +250,39 @@ export const I18N = {
     aboutTitle2: "About WeatherSphere",
     aboutMission:
       "WeatherSphere was created to offer a modern, reliable weather experience for everyone. Our mission is simple: give you accurate, clear and elegant weather information to help you plan your day, wherever you are.",
+    aboutPrivacyNote:
+      "Your location is used only after you grant permission, to show local weather. Necessary coordinates may be sent to the weather or geocoding services used by the application. WeatherSphere does not operate a user-account database.",
+    aboutEduNote:
+      "WeatherSphere is an educational school project and does not replace official meteorological services.",
     feat1T: "Accurate data",
     feat1X: "We use reliable data sources and advanced weather models to guarantee accuracy.",
-    feat2T: "Real-time updates",
-    feat2X: "Weather conditions are updated continuously to give you the latest information.",
+    feat2T: "Regular updates",
+    feat2X: "Weather conditions are refreshed regularly to provide recent information.",
     feat3T: "Elegant interface",
     feat3X: "A modern, clean and intuitive design for a pleasant everyday experience.",
     feat4T: "Privacy",
-    feat4X: "We respect your privacy. No personal data is collected without your consent.",
+    feat4X:
+      "Your location is used only after you grant permission. Favorites and preferences stay stored locally in your browser.",
     techTitle: "Technologies used",
     techSub:
       "WeatherSphere is built with modern technologies for performance, reliability and scalability.",
+    techGroupCore: "Core",
+    techGroupApp: "Mapping & application",
+    techGroupQuality: "Code quality",
+    techHtml5: "Semantic structure of the interface.",
+    techCss3: "Responsive layout and theming.",
+    techJs: "Logic, state, APIs and interactions.",
+    techPhp: "Used on the server to protect the Pexels key and proxy photo requests.",
+    techSvg: "Vector icons and flags.",
+    techVite: "Development server and optimized production builds.",
+    techMaplibre: "Interactive map rendering.",
+    techMaptilerSdk: "Styles, tiles and geocoding.",
+    techMaptilerWeather: "Weather layers on the map.",
+    techVitest: "Unit tests.",
+    techPlaywright: "Browser-based end-to-end tests.",
+    techEslint: "Static analysis for JavaScript code.",
+    techStylelint: "Static analysis for CSS code.",
+    techPrettier: "Consistent code formatting.",
     srcTitle: "Data sources",
     srcSub: "We rely on recognised weather services to give you reliable data.",
     srcOm: "Fast, reliable open-source weather API.",
@@ -265,6 +290,7 @@ export const I18N = {
     srcEsri: "High-resolution satellite imagery.",
     srcMaptiler: "Vector map tiles & geocoding (satellite hybrid style).",
     srcPexels: "Free location & landmark photography.",
+    srcBigdatacloud: "Fallback reverse geocoding used to identify a location.",
     srcNote: "Data may be subject to slight variations.",
     contactNote: "WeatherSphere is a student project built for school. It has no support address.",
 
@@ -425,6 +451,7 @@ export const I18N = {
     removeFavConfirm: "Voulez-vous vraiment retirer {name} de vos favoris ?",
     removeAction: "Retirer",
     cancelAction: "Annuler",
+    resetAction: "Réinitialiser",
     undoAction: "Annuler la suppression",
 
     uvLow: "Faible",
@@ -497,6 +524,8 @@ export const I18N = {
     hourlyForecast: "Prévisions horaires",
     precipitation: "Précipitations",
     rainPct: "% de pluie",
+    precipMaxTpl: "Risque maximal : {pct} % vers {time}",
+    precipNoData: "Aucune donnée de précipitations disponible",
     dayDetails: "Détails du jour",
     summaryTitle: "Résumé",
     summaryTpl:
@@ -581,20 +610,41 @@ export const I18N = {
     aboutTitle2: "À propos de WeatherSphere",
     aboutMission:
       "WeatherSphere a été créé pour offrir une expérience météo moderne, fiable et accessible à tous. Notre mission est simple : vous fournir des informations météorologiques précises, claires et élégantes pour vous aider à planifier votre journée, où que vous soyez.",
+    aboutPrivacyNote:
+      "Votre position n'est utilisée qu'après votre autorisation, afin d'afficher la météo locale. Les coordonnées nécessaires peuvent être transmises aux services météo ou de géocodage utilisés par l'application. WeatherSphere ne gère pas de base de données de comptes utilisateurs.",
+    aboutEduNote:
+      "WeatherSphere est un projet scolaire à vocation pédagogique et ne remplace pas les services météorologiques officiels.",
     feat1T: "Données précises",
     feat1X:
       "Nous utilisons des sources de données fiables et des modèles météorologiques avancés pour garantir l'exactitude.",
-    feat2T: "Mises à jour en temps réel",
+    feat2T: "Mises à jour régulières",
     feat2X:
-      "Les conditions météo sont mises à jour en continu pour vous offrir les informations les plus récentes.",
+      "Les conditions météo sont actualisées régulièrement afin de vous fournir des informations récentes.",
     feat3T: "Interface élégante",
     feat3X: "Un design moderne, épuré et intuitif pour une expérience agréable au quotidien.",
     feat4T: "Confidentialité",
     feat4X:
-      "Nous respectons votre vie privée. Aucune donnée personnelle n'est collectée sans votre consentement.",
+      "Votre position n'est utilisée qu'après votre autorisation. Vos favoris et préférences restent stockés localement dans votre navigateur.",
     techTitle: "Technologies utilisées",
     techSub:
       "WeatherSphere est construit avec des technologies modernes pour assurer performance, fiabilité et évolutivité.",
+    techGroupCore: "Fondamentaux",
+    techGroupApp: "Cartographie et application",
+    techGroupQuality: "Qualité du code",
+    techHtml5: "Structure sémantique de l'interface.",
+    techCss3: "Mise en page responsive et thèmes.",
+    techJs: "Logique, état, API et interactions.",
+    techPhp: "Utilisé côté serveur pour protéger la clé Pexels et transmettre les requêtes photo.",
+    techSvg: "Icônes et drapeaux vectoriels.",
+    techVite: "Serveur de développement et production optimisée.",
+    techMaplibre: "Rendu interactif de la carte.",
+    techMaptilerSdk: "Styles, tuiles et géocodage.",
+    techMaptilerWeather: "Couches météo sur la carte.",
+    techVitest: "Tests unitaires.",
+    techPlaywright: "Tests du site dans le navigateur.",
+    techEslint: "Analyse statique du code JavaScript.",
+    techStylelint: "Analyse statique du code CSS.",
+    techPrettier: "Formatage cohérent du code.",
     srcTitle: "Sources de données",
     srcSub:
       "Nous nous appuyons sur des services météorologiques reconnus pour vous fournir des données fiables.",
@@ -603,6 +653,7 @@ export const I18N = {
     srcEsri: "Imagerie satellite haute résolution.",
     srcMaptiler: "Tuiles vectorielles et géocodage (style satellite hybride).",
     srcPexels: "Photos gratuites de lieux et monuments.",
+    srcBigdatacloud: "Géocodage inverse de secours pour identifier une position.",
     srcNote: "Les données peuvent être sujettes à de légers écarts.",
     contactNote:
       "WeatherSphere est un projet scolaire réalisé par un élève. Il n'a pas d'adresse de contact.",

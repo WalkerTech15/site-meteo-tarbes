@@ -21,7 +21,7 @@ describe("translation dictionary", () => {
     expect(en.filter((k) => !I18N.fr[k])).toEqual([]);
   });
 
-  for (const attr of ["data-i18n", "data-i18n-ph", "data-i18n-aria"]) {
+  for (const attr of ["data-i18n", "data-i18n-ph", "data-i18n-aria", "data-i18n-title"]) {
     it(`resolves every ${attr} key in both languages`, () => {
       const used = keysUsedInMarkup(attr);
       expect(used.length).toBeGreaterThan(0);

@@ -17,8 +17,29 @@ import { fmtHour, fmtClock } from "../core/datetime.js";
 import { weatherIcon, METRIC_ICONS } from "../data/icons.js";
 import { wmo, wxDesc } from "../data/weather-codes.js";
 import { locName } from "../core/location.js";
+import { precipSummaryText } from "../core/precip-summary.js";
+import { computeFadeVisibility } from "../core/carousel-fade.js";
 import { renderLineChart, renderBarChart } from "./charts.js";
 import { forecastCardHtml } from "./render-home.js";
+
+function updateCarouselFades() {
+  const el = $("#forecastRow2");
+  if (!el) return;
+  const { left, right } = computeFadeVisibility({
+    scrollLeft: el.scrollLeft,
+    scrollWidth: el.scrollWidth,
+    clientWidth: el.clientWidth,
+  });
+  $("#fcFadeLeft")?.classList.toggle("is-visible", left);
+  $("#fcFadeRight")?.classList.toggle("is-visible", right);
+}
+
+/* Bound once at startup — re-renders reset scrollLeft to 0 and already call
+   updateCarouselFades() themselves, so only the scroll gesture itself needs a
+   listener here. */
+export function bindForecastCarousel() {
+  $("#forecastRow2")?.addEventListener("scroll", updateCarouselFades, { passive: true });
+}
 
 /* Forecast-page hourly strip — samples every 3rd hour over a wider span
    (unlike the home view's renderHomeHourly, which shows 6 consecutive hours). */
@@ -83,6 +104,7 @@ export function renderForecastPage() {
     loc = state.loc;
   $("#forecastViewSub").textContent = `${t("fcDetailedFor")} ${locName(loc)}`;
   $("#forecastRow2").innerHTML = wx.daily.map(forecastCardHtml).join("");
+  updateCarouselFades();
 
   /* hourly chart with tabs */
   $("#fcTabs").innerHTML = FC_TABS.map(
@@ -104,14 +126,15 @@ export function renderForecastPage() {
     ariaLabel: `${t(tab.labelKey)} — ${t("hourlyForecast")}`,
   });
 
-  /* precipitation bars, every 3 hours */
+  /* precipitation bars, every 3 hours — the summary line above the chart
+     is derived from this exact same set of points, so it always matches
+     what the bars show. */
+  const precipPoints = wx.hourly.filter((_, i) => i % 3 === 0).slice(0, 8);
   renderBarChart($("#precipHost"), {
-    points: wx.hourly
-      .filter((_, i) => i % 3 === 0)
-      .slice(0, 8)
-      .map((h) => ({ t: fmtHour(h.time), v: h.rainProb })),
+    points: precipPoints.map((h) => ({ t: fmtHour(h.time), v: h.rainProb })),
     ariaLabel: t("precipitation"),
   });
+  $("#precipSummary").textContent = precipSummaryText(precipPoints);
 
   /* today's details */
   const d0 = wx.daily[0];

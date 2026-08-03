@@ -11,9 +11,6 @@ export function renderLineChart(host, opts) {
   /* draw at the host's real size so nothing is stretched or squished */
   const W = Math.max(260, host.clientWidth || 900);
   const H = host.clientHeight || 300;
-  const PAD = { top: 24, right: 20, bottom: 34, left: 48 };
-  const iw = W - PAD.left - PAD.right;
-  const ih = H - PAD.top - PAD.bottom;
 
   const vals = points.map((p) => p.v);
   let vMin = Math.min(...vals),
@@ -25,6 +22,28 @@ export function renderLineChart(host, opts) {
   const span = vMax - vMin;
   vMin -= span * 0.12;
   vMax += span * 0.12;
+
+  /* Clean y ticks, computed before the x/y mappers below so the unit-suffixed
+     label width (e.g. "68°F" vs "20") can decide how wide the left gutter
+     needs to be — a fixed gutter clipped longer labels once units were added. */
+  const tickCount = 4;
+  const rawStep = (vMax - vMin) / tickCount;
+  const mag = Math.pow(10, Math.floor(Math.log10(rawStep)));
+  const step = [1, 2, 2.5, 5, 10].map((m) => m * mag).find((s) => s >= rawStep) || rawStep;
+  const tickStart = Math.ceil(vMin / step) * step;
+  const ticks = [];
+  for (let v = tickStart; v <= vMax + 1e-9; v += step) ticks.push(v);
+  const tickLabels = ticks.map((tv) => formatTick(tv, unit));
+  const maxLabelLen = tickLabels.reduce((m, s) => Math.max(m, s.length), 1);
+
+  const PAD = {
+    top: 24,
+    right: 20,
+    bottom: 34,
+    left: Math.min(80, Math.max(48, 18 + maxLabelLen * 7)),
+  };
+  const iw = W - PAD.left - PAD.right;
+  const ih = H - PAD.top - PAD.bottom;
 
   const x = (i) => PAD.left + (i / (points.length - 1)) * iw;
   const y = (v) => PAD.top + (1 - (v - vMin) / (vMax - vMin)) * ih;
@@ -48,23 +67,14 @@ export function renderLineChart(host, opts) {
   }
   const areaD = `${d} L ${x(points.length - 1)} ${PAD.top + ih} L ${x(0)} ${PAD.top + ih} Z`;
 
-  /* Clean y ticks */
-  const tickCount = 4;
-  const rawStep = (vMax - vMin) / tickCount;
-  const mag = Math.pow(10, Math.floor(Math.log10(rawStep)));
-  const step = [1, 2, 2.5, 5, 10].map((m) => m * mag).find((s) => s >= rawStep) || rawStep;
-  const tickStart = Math.ceil(vMin / step) * step;
-  const ticks = [];
-  for (let v = tickStart; v <= vMax + 1e-9; v += step) ticks.push(v);
-
   const gid = "cg" + Math.random().toString(36).slice(2, 8);
   let gridSvg = "",
     labelSvg = "";
-  for (const tv of ticks) {
+  ticks.forEach((tv, i) => {
     const ty = y(tv);
     gridSvg += `<line x1="${PAD.left}" y1="${ty}" x2="${W - PAD.right}" y2="${ty}" stroke="var(--grid-line)" stroke-width="1"/>`;
-    labelSvg += `<text x="${PAD.left - 10}" y="${ty + 4}" text-anchor="end" font-size="12" fill="var(--axis-ink)">${formatTick(tv)}</text>`;
-  }
+    labelSvg += `<text x="${PAD.left - 10}" y="${ty + 4}" text-anchor="end" font-size="12" fill="var(--axis-ink)">${tickLabels[i]}</text>`;
+  });
   /* x labels: adapt density to available width */
   const labelStep = W < 480 ? 8 : W < 760 ? 6 : 4;
   for (let i = 0; i < points.length; i += labelStep) {
@@ -137,11 +147,17 @@ export function renderLineChart(host, opts) {
   host.ontouchend = onLeave;
 }
 
-function formatTick(v) {
+/* Y-axis tick label, with the active unit appended — "20°C"/"68°F" for
+   temperature, "23%" for precipitation, "12 km/h" for wind (the tooltip
+   already prints its own unit, so this only affects the axis). */
+export function formatTick(v, unit) {
   const abs = Math.abs(v);
-  if (abs >= 1000) return Math.round(v).toLocaleString();
-  if (abs >= 100) return Math.round(v).toString();
-  return (Math.round(v * 10) / 10).toString();
+  let s;
+  if (abs >= 1000) s = Math.round(v).toLocaleString();
+  else if (abs >= 100) s = Math.round(v).toString();
+  else s = (Math.round(v * 10) / 10).toString();
+  if (!unit) return s;
+  return unit.startsWith("°") || unit === "%" ? `${s}${unit}` : `${s} ${unit}`;
 }
 
 /* Simple percentage bar chart (precipitation) — value labels on top */

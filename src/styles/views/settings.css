@@ -154,11 +154,38 @@
 .tprev-dark i {
   background: #475569;
 }
+/* Clean vertical light/dark split — two solid halves, not a diagonal
+   gradient. A shallow-angle gradient behind the emoji used to render as
+   overlapping dark slivers at the seam; flat halves have no seam artefact
+   at any zoom level. */
 .tprev-sys {
-  background: linear-gradient(100deg, #f3f7fc 50%, #1e293b 50%);
+  display: flex;
+  padding: 0;
+  overflow: hidden;
 }
-.tprev-sys i {
-  background: linear-gradient(100deg, #cbd8e8 55%, #475569 55%);
+.tprev-sys-half {
+  flex: 1 0 50%;
+  display: flex;
+  align-items: flex-end;
+  padding: 8px;
+}
+.tprev-sys-light {
+  background: #f3f7fc;
+}
+.tprev-sys-dark {
+  background: #1e293b;
+}
+.tprev-sys .tprev-sys-half i {
+  width: 100%;
+  height: 5px;
+  margin: 0;
+  border-radius: 3px;
+}
+.tprev-sys-light i {
+  background: #cbd8e8;
+}
+.tprev-sys-dark i {
+  background: #475569;
 }
 
 .notif-grid {

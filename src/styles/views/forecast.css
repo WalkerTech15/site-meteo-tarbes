@@ -1,6 +1,9 @@
 /* Forecast view: day carousel, hourly/precip charts, day details & summary
    cards, and the hourly-details strip. */
 
+.forecast-carousel-wrap {
+  position: relative;
+}
 .forecast-carousel {
   display: flex;
   gap: var(--s-2);
@@ -12,6 +15,32 @@
 .forecast-carousel .forecast-card {
   flex: 0 0 172px;
   scroll-snap-align: start;
+}
+
+/* Edge fades hint that the carousel scrolls further — visibility is toggled
+   in JS from actual scroll geometry (see render-forecast.js), not guessed
+   from viewport width, so they track real overflow. `pointer-events: none`
+   keeps them purely decorative: clicks, drags and touch scrolling pass
+   straight through to the carousel underneath. */
+.carousel-fade {
+  position: absolute;
+  top: 0;
+  bottom: 16px; /* stop above the carousel's own bottom padding */
+  width: 36px;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 0.2s ease;
+}
+.carousel-fade.is-visible {
+  opacity: 1;
+}
+.carousel-fade-left {
+  left: 0;
+  background: linear-gradient(to right, var(--bg), transparent);
+}
+.carousel-fade-right {
+  right: 0;
+  background: linear-gradient(to left, var(--bg), transparent);
 }
 
 .fc-duo {
@@ -40,6 +69,12 @@
 }
 .chart-host.sm {
   height: 250px;
+}
+.precip-summary {
+  margin: -4px 0 var(--s-2);
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-2);
 }
 
 .dd-grid {

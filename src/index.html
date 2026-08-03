@@ -724,7 +724,15 @@
             </div>
           </div>
 
-          <div class="forecast-carousel" id="forecastRow2" tabindex="0"></div>
+          <div class="forecast-carousel-wrap">
+            <div class="forecast-carousel" id="forecastRow2" tabindex="0"></div>
+            <div class="carousel-fade carousel-fade-left" id="fcFadeLeft" aria-hidden="true"></div>
+            <div
+              class="carousel-fade carousel-fade-right"
+              id="fcFadeRight"
+              aria-hidden="true"
+            ></div>
+          </div>
 
           <div class="fc-duo">
             <div class="card fc-chart-card">
@@ -745,6 +753,7 @@
                 <h2 data-i18n="precipitation">Precipitation</h2>
                 <span class="pill" data-i18n="rainPct">% rain</span>
               </div>
+              <p class="precip-summary" id="precipSummary" aria-live="polite"></p>
               <div class="chart-host sm" id="precipHost" role="img"></div>
             </div>
           </div>
@@ -905,6 +914,8 @@
                 Real-time weather, everywhere in the world.
               </p>
               <p class="about-mission" data-i18n="aboutMission"></p>
+              <p class="src-note" data-i18n="aboutPrivacyNote"></p>
+              <p class="src-note" data-i18n="aboutEduNote"></p>
               <div class="about-meta">
                 <span class="pill">v1.0</span>
                 <span class="pill pill-heart"
@@ -1001,36 +1012,182 @@
             <div class="card info-card">
               <h2 class="info-title lg" data-i18n="techTitle">Technologies used</h2>
               <p class="src-sub" data-i18n="techSub"></p>
-              <div class="tech-grid">
-                <div class="tech-item">
-                  <span class="tech-logo" style="background: #fdece4; color: #e34f26">&lt;&gt;</span
-                  >HTML5
+
+              <div class="tech-group">
+                <h3 class="tech-group-title" data-i18n="techGroupCore">Core</h3>
+                <div class="tech-grid">
+                  <div
+                    class="tech-item"
+                    data-i18n-title="techHtml5"
+                    title="Semantic structure of the interface."
+                  >
+                    <span
+                      class="tech-logo"
+                      aria-hidden="true"
+                      style="background: #fdece4; color: #e34f26"
+                      >&lt;&gt;</span
+                    >HTML5
+                  </div>
+                  <div
+                    class="tech-item"
+                    data-i18n-title="techCss3"
+                    title="Responsive layout and theming."
+                  >
+                    <span
+                      class="tech-logo"
+                      aria-hidden="true"
+                      style="background: #e4f0fa; color: #1572b6"
+                      >#</span
+                    >CSS3
+                  </div>
+                  <div
+                    class="tech-item"
+                    data-i18n-title="techJs"
+                    title="Logic, state, APIs and interactions."
+                  >
+                    <span
+                      class="tech-logo"
+                      aria-hidden="true"
+                      style="background: #fdf7dc; color: #8a7500"
+                      >JS</span
+                    >JavaScript
+                  </div>
+                  <div
+                    class="tech-item"
+                    data-i18n-title="techPhp"
+                    title="Used on the server to protect the Pexels key and proxy photo requests."
+                  >
+                    <span
+                      class="tech-logo"
+                      aria-hidden="true"
+                      style="background: #efeafd; color: #6b46c1"
+                      >PHP</span
+                    >PHP
+                  </div>
+                  <div class="tech-item" data-i18n-title="techSvg" title="Vector icons and flags.">
+                    <span
+                      class="tech-logo"
+                      aria-hidden="true"
+                      style="background: #f3eefd; color: #7c3aed"
+                      >SVG</span
+                    >SVG
+                  </div>
                 </div>
-                <div class="tech-item">
-                  <span class="tech-logo" style="background: #e4f0fa; color: #1572b6">#</span>CSS3
+              </div>
+
+              <div class="tech-group">
+                <h3 class="tech-group-title" data-i18n="techGroupApp">Mapping &amp; application</h3>
+                <div class="tech-grid">
+                  <div
+                    class="tech-item"
+                    data-i18n-title="techVite"
+                    title="Development server and optimized production builds."
+                  >
+                    <span
+                      class="tech-logo"
+                      aria-hidden="true"
+                      style="background: #fef3c7; color: #b45309"
+                      >Vi</span
+                    >Vite
+                  </div>
+                  <div
+                    class="tech-item"
+                    data-i18n-title="techMaplibre"
+                    title="Interactive map rendering."
+                  >
+                    <span
+                      class="tech-logo"
+                      aria-hidden="true"
+                      style="background: #e8f0fe; color: #295fcc"
+                      >ML</span
+                    >MapLibre GL JS
+                  </div>
+                  <div
+                    class="tech-item"
+                    data-i18n-title="techMaptilerSdk"
+                    title="Styles, tiles and geocoding."
+                  >
+                    <span
+                      class="tech-logo"
+                      aria-hidden="true"
+                      style="background: #e7f5f1; color: #0e9f6e"
+                      >MT</span
+                    >MapTiler SDK
+                  </div>
+                  <div
+                    class="tech-item"
+                    data-i18n-title="techMaptilerWeather"
+                    title="Weather layers on the map."
+                  >
+                    <span
+                      class="tech-logo"
+                      aria-hidden="true"
+                      style="background: #e6f7fb; color: #0891b2"
+                      >MW</span
+                    >MapTiler Weather
+                  </div>
                 </div>
-                <div class="tech-item">
-                  <span class="tech-logo" style="background: #fdf7dc; color: #8a7500">JS</span
-                  >JavaScript
-                </div>
-                <div class="tech-item">
-                  <span class="tech-logo" style="background: #f3eefd; color: #7c3aed">SVG</span>SVG
-                </div>
-                <div class="tech-item">
-                  <span class="tech-logo" style="background: #e8f0fe; color: #295fcc">ML</span
-                  >MapLibre GL JS
-                </div>
-                <div class="tech-item">
-                  <span class="tech-logo" style="background: #e7f5f1; color: #0e9f6e">MT</span
-                  >MapTiler
-                </div>
-                <div class="tech-item">
-                  <span class="tech-logo" style="background: #e9f2fb; color: #2563eb">OM</span
-                  >Open-Meteo
-                </div>
-                <div class="tech-item">
-                  <span class="tech-logo" style="background: #e7f7f1; color: #05a081">Px</span
-                  >Pexels
+              </div>
+
+              <div class="tech-group">
+                <h3 class="tech-group-title" data-i18n="techGroupQuality">Code quality</h3>
+                <div class="tech-grid">
+                  <div class="tech-item" data-i18n-title="techVitest" title="Unit tests.">
+                    <span
+                      class="tech-logo"
+                      aria-hidden="true"
+                      style="background: #f2f8e1; color: #65a30d"
+                      >Vt</span
+                    >Vitest
+                  </div>
+                  <div
+                    class="tech-item"
+                    data-i18n-title="techPlaywright"
+                    title="Browser-based end-to-end tests."
+                  >
+                    <span
+                      class="tech-logo"
+                      aria-hidden="true"
+                      style="background: #fdeef2; color: #d6336c"
+                      >Pw</span
+                    >Playwright
+                  </div>
+                  <div
+                    class="tech-item"
+                    data-i18n-title="techEslint"
+                    title="Static analysis for JavaScript code."
+                  >
+                    <span
+                      class="tech-logo"
+                      aria-hidden="true"
+                      style="background: #eee9fb; color: #4b32c3"
+                      >ES</span
+                    >ESLint
+                  </div>
+                  <div
+                    class="tech-item"
+                    data-i18n-title="techStylelint"
+                    title="Static analysis for CSS code."
+                  >
+                    <span
+                      class="tech-logo"
+                      aria-hidden="true"
+                      style="background: #fff7e0; color: #a16207"
+                      >St</span
+                    >Stylelint
+                  </div>
+                  <div
+                    class="tech-item"
+                    data-i18n-title="techPrettier"
+                    title="Consistent code formatting."
+                  >
+                    <span
+                      class="tech-logo"
+                      aria-hidden="true"
+                      style="background: #fdeff7; color: #c2409c"
+                      >Pr</span
+                    >Prettier
+                  </div>
                 </div>
               </div>
             </div>
@@ -1138,6 +1295,35 @@
                       <path d="M7 17 17 7M9 7h8v8" /></svg
                   ></a>
                 </div>
+                <div class="src-row">
+                  <span
+                    class="src-logo"
+                    style="background: linear-gradient(135deg, #f97316, #b45309)"
+                    >BDC</span
+                  >
+                  <span class="src-body"
+                    ><b>BigDataCloud</b><span data-i18n="srcBigdatacloud"></span
+                  ></span>
+                  <a
+                    class="link-chip"
+                    href="https://www.bigdatacloud.com"
+                    target="_blank"
+                    rel="noopener"
+                    >bigdatacloud.com
+                    <svg
+                      viewBox="0 0 24 24"
+                      width="12"
+                      height="12"
+                      fill="none"
+                      stroke="currentColor"
+                      stroke-width="2.2"
+                      stroke-linecap="round"
+                      stroke-linejoin="round"
+                      aria-hidden="true"
+                    >
+                      <path d="M7 17 17 7M9 7h8v8" /></svg
+                  ></a>
+                </div>
               </div>
               <p class="src-note" data-i18n="srcNote"></p>
             </div>
@@ -1219,8 +1405,8 @@
                   <p data-i18n="setLangSub"></p>
                 </div>
               </div>
-              <div class="set-tiles" id="langTiles">
-                <button class="set-tile" data-lang="fr">
+              <div class="set-tiles" id="langTiles" role="radiogroup">
+                <button class="set-tile" role="radio" data-lang="fr">
                   <span data-flag="FR" aria-hidden="true"></span> <b>Français</b>
                   <span class="tile-check" aria-hidden="true"
                     ><svg
@@ -1236,7 +1422,7 @@
                       <path d="m5 12 5 5 9-10" /></svg
                   ></span>
                 </button>
-                <button class="set-tile" data-lang="en">
+                <button class="set-tile" role="radio" data-lang="en">
                   <span data-flag="GB" aria-hidden="true"></span> <b>English</b>
                   <span class="tile-check" aria-hidden="true"
                     ><svg
@@ -1278,39 +1464,8 @@
                   <p data-i18n="setModeSub"></p>
                 </div>
               </div>
-              <div class="set-tiles" id="modeTiles">
-                <button class="set-tile tall" data-mode="detailed">
-                  <span class="tile-ico tint-blue" aria-hidden="true"
-                    ><svg
-                      viewBox="0 0 24 24"
-                      width="18"
-                      height="18"
-                      fill="none"
-                      stroke="currentColor"
-                      stroke-width="1.9"
-                      stroke-linecap="round"
-                    >
-                      <path d="M4 20V10M10 20V4M16 20v-7M21 20H3" /></svg
-                  ></span>
-                  <span class="tile-txt"
-                    ><b data-i18n="modeDetailed">Detailed</b
-                    ><span data-i18n="modeDetailedDesc"></span
-                  ></span>
-                  <span class="tile-check" aria-hidden="true"
-                    ><svg
-                      viewBox="0 0 24 24"
-                      width="12"
-                      height="12"
-                      fill="none"
-                      stroke="#fff"
-                      stroke-width="3"
-                      stroke-linecap="round"
-                      stroke-linejoin="round"
-                    >
-                      <path d="m5 12 5 5 9-10" /></svg
-                  ></span>
-                </button>
-                <button class="set-tile tall" data-mode="simple">
+              <div class="set-tiles" id="modeTiles" role="radiogroup">
+                <button class="set-tile tall" role="radio" data-mode="simple">
                   <span class="tile-ico tint-emerald" aria-hidden="true"
                     ><svg
                       viewBox="0 0 24 24"
@@ -1326,6 +1481,37 @@
                   ></span>
                   <span class="tile-txt"
                     ><b data-i18n="modeSimple">Simple</b><span data-i18n="modeSimpleDesc"></span
+                  ></span>
+                  <span class="tile-check" aria-hidden="true"
+                    ><svg
+                      viewBox="0 0 24 24"
+                      width="12"
+                      height="12"
+                      fill="none"
+                      stroke="#fff"
+                      stroke-width="3"
+                      stroke-linecap="round"
+                      stroke-linejoin="round"
+                    >
+                      <path d="m5 12 5 5 9-10" /></svg
+                  ></span>
+                </button>
+                <button class="set-tile tall" role="radio" data-mode="detailed">
+                  <span class="tile-ico tint-blue" aria-hidden="true"
+                    ><svg
+                      viewBox="0 0 24 24"
+                      width="18"
+                      height="18"
+                      fill="none"
+                      stroke="currentColor"
+                      stroke-width="1.9"
+                      stroke-linecap="round"
+                    >
+                      <path d="M4 20V10M10 20V4M16 20v-7M21 20H3" /></svg
+                  ></span>
+                  <span class="tile-txt"
+                    ><b data-i18n="modeDetailed">Detailed</b
+                    ><span data-i18n="modeDetailedDesc"></span
                   ></span>
                   <span class="tile-check" aria-hidden="true"
                     ><svg
@@ -1368,8 +1554,8 @@
                   <p data-i18n="themeSub"></p>
                 </div>
               </div>
-              <div class="set-tiles theme-tiles" id="themeTiles">
-                <button class="set-tile theme" data-theme="light">
+              <div class="set-tiles theme-tiles" id="themeTiles" role="radiogroup">
+                <button class="set-tile theme" role="radio" data-theme="light">
                   <span class="tprev tprev-light" aria-hidden="true">☀️<i></i><i></i></span>
                   <b data-i18n="themeLight">Light</b>
                   <span class="tile-check" aria-hidden="true"
@@ -1386,7 +1572,7 @@
                       <path d="m5 12 5 5 9-10" /></svg
                   ></span>
                 </button>
-                <button class="set-tile theme" data-theme="dark">
+                <button class="set-tile theme" role="radio" data-theme="dark">
                   <span class="tprev tprev-dark" aria-hidden="true">🌙<i></i><i></i></span>
                   <b data-i18n="themeDark">Dark</b>
                   <span class="tile-check" aria-hidden="true"
@@ -1403,8 +1589,11 @@
                       <path d="m5 12 5 5 9-10" /></svg
                   ></span>
                 </button>
-                <button class="set-tile theme" data-theme="system">
-                  <span class="tprev tprev-sys" aria-hidden="true">🖥️<i></i><i></i></span>
+                <button class="set-tile theme" role="radio" data-theme="system">
+                  <span class="tprev tprev-sys" aria-hidden="true">
+                    <span class="tprev-sys-half tprev-sys-light"><i></i></span>
+                    <span class="tprev-sys-half tprev-sys-dark"><i></i></span>
+                  </span>
                   <b data-i18n="themeSystem">System</b>
                   <span class="tile-check" aria-hidden="true"
                     ><svg

@@ -112,6 +112,251 @@ test.describe("preferences", () => {
   });
 });
 
+test.describe("settings page", () => {
+  const goToSettings = (app) => app.locator('.side-item[data-view="settings"]').click();
+
+  test("62. every display-mode control uses the same Simple-then-Détaillé order", async ({
+    app,
+  }) => {
+    const headerOrder = await app
+      .locator("#modeToggle button")
+      .evaluateAll((els) => els.map((el) => el.dataset.mode));
+    const sideOrder = await app
+      .locator("#modeToggleSide button")
+      .evaluateAll((els) => els.map((el) => el.dataset.mode));
+    await goToSettings(app);
+    const settingsOrder = await app
+      .locator("#modeTiles .set-tile")
+      .evaluateAll((els) => els.map((el) => el.dataset.mode));
+
+    expect(headerOrder).toEqual(["simple", "detailed"]);
+    expect(sideOrder).toEqual(["simple", "detailed"]);
+    expect(settingsOrder).toEqual(["simple", "detailed"]);
+  });
+
+  test("63. changing mode from the settings tiles updates every other control immediately", async ({
+    app,
+  }) => {
+    await goToSettings(app);
+    await app.locator('#modeTiles .set-tile[data-mode="detailed"]').click();
+
+    await expect(app.locator("body")).toHaveAttribute("data-mode", "detailed");
+    await expect(app.locator('#modeToggle button[data-mode="detailed"]')).toHaveAttribute(
+      "aria-checked",
+      "true",
+    );
+    await expect(app.locator('#modeToggleSide button[data-mode="detailed"]')).toHaveAttribute(
+      "aria-checked",
+      "true",
+    );
+    await expect(app.locator('#modeTiles .set-tile[data-mode="detailed"]')).toHaveAttribute(
+      "aria-checked",
+      "true",
+    );
+    await expect(app.locator('#modeTiles .set-tile[data-mode="simple"]')).toHaveAttribute(
+      "aria-checked",
+      "false",
+    );
+
+    /* the reverse direction: header controls the settings tiles too */
+    await app.locator('#modeToggle button[data-mode="simple"]').click();
+    await expect(app.locator('#modeTiles .set-tile[data-mode="simple"]')).toHaveAttribute(
+      "aria-checked",
+      "true",
+    );
+  });
+
+  test("64. mode persists after a reload", async ({ app }) => {
+    await goToSettings(app);
+    await app.locator('#modeTiles .set-tile[data-mode="detailed"]').click();
+    await app.reload();
+    await expect(app.locator("#heroCityName")).not.toBeEmpty();
+    await expect(app.locator("body")).toHaveAttribute("data-mode", "detailed");
+    await expect(app.locator('#modeToggle button[data-mode="detailed"]')).toHaveAttribute(
+      "aria-checked",
+      "true",
+    );
+  });
+
+  test("65. the mode tiles keep correct French and English labels in order", async ({ app }) => {
+    await goToSettings(app);
+    const texts = () =>
+      app.locator("#modeTiles .set-tile b").evaluateAll((els) => els.map((el) => el.textContent));
+    expect(await texts()).toEqual(["Simple", "Détaillé"]);
+
+    await app.locator("#langBtn").click();
+    await app.locator('#langMenu button[data-lang="en"]').click();
+    expect(await texts()).toEqual(["Simple", "Detailed"]);
+  });
+
+  test("66. the System theme preview is a clean two-half swatch, not a gradient", async ({
+    app,
+  }) => {
+    await goToSettings(app);
+    const halves = app.locator(".tprev-sys .tprev-sys-half");
+    await expect(halves).toHaveCount(2);
+    const backgrounds = await halves.evaluateAll((els) =>
+      els.map((el) => getComputedStyle(el).backgroundImage),
+    );
+    /* solid colours only — no gradient anywhere in the swatch */
+    expect(backgrounds.every((b) => b === "none")).toBe(true);
+    /* decorative preview, hidden as a whole; the visible label does the naming */
+    await expect(app.locator('.set-tile[data-theme="system"] .tprev')).toHaveAttribute(
+      "aria-hidden",
+      "true",
+    );
+    await expect(app.locator('.set-tile[data-theme="system"] b')).toHaveText("Système");
+  });
+
+  test("67. the System theme follows the operating system colour scheme", async ({ app }) => {
+    await goToSettings(app);
+    await app.locator('#themeTiles .set-tile[data-theme="system"]').click();
+    await expect(app.locator('#themeTiles .set-tile[data-theme="system"]')).toHaveAttribute(
+      "aria-checked",
+      "true",
+    );
+
+    await app.emulateMedia({ colorScheme: "dark" });
+    await expect(app.locator("body")).toHaveAttribute("data-theme", "dark");
+
+    await app.emulateMedia({ colorScheme: "light" });
+    await expect(app.locator("body")).toHaveAttribute("data-theme", "light");
+  });
+
+  test("68. theme selection persists after a reload", async ({ app }) => {
+    await goToSettings(app);
+    await app.locator('#themeTiles .set-tile[data-theme="dark"]').click();
+    await app.reload();
+    await expect(app.locator("#heroCityName")).not.toBeEmpty();
+    await expect(app.locator("body")).toHaveAttribute("data-theme", "dark");
+    await expect(app.locator('#themeTiles .set-tile[data-theme="dark"]')).toHaveAttribute(
+      "aria-checked",
+      "true",
+    );
+  });
+
+  test("69. mode, language and theme tiles expose radiogroup/radio semantics", async ({ app }) => {
+    await goToSettings(app);
+    for (const id of ["langTiles", "modeTiles", "themeTiles"]) {
+      await expect(app.locator(`#${id}`)).toHaveAttribute("role", "radiogroup");
+      const radios = app.locator(`#${id} .set-tile`);
+      const count = await radios.count();
+      expect(count).toBeGreaterThan(0);
+      for (const role of await radios.evaluateAll((els) =>
+        els.map((el) => el.getAttribute("role")),
+      )) {
+        expect(role).toBe("radio");
+      }
+    }
+  });
+
+  test("70. settings radio tiles can be activated from the keyboard", async ({ app }) => {
+    await goToSettings(app);
+    const detailed = app.locator('#modeTiles .set-tile[data-mode="detailed"]');
+    await detailed.focus();
+    await expect(detailed).toBeFocused();
+    await app.keyboard.press("Enter");
+    await expect(detailed).toHaveAttribute("aria-checked", "true");
+    await expect(app.locator("body")).toHaveAttribute("data-mode", "detailed");
+  });
+
+  test("71. resetting the app asks for confirmation through the shared dialog, not a native popup", async ({
+    app,
+  }) => {
+    await app.locator("#heroFavBtn").click(); /* something for reset to actually erase */
+    await expect(app.locator("#heroFavBtn")).toHaveAttribute("aria-pressed", "true");
+    await goToSettings(app);
+
+    const reset = app.locator('.priv-tile[data-priv="cache"]');
+    await reset.click();
+    await expect(app.locator("#confirmDialog")).toBeVisible();
+    await expect(app.locator("#confirmDialogConfirm")).toHaveClass(/confirm-dialog-danger/);
+
+    /* cancelling changes nothing */
+    await app.locator("#confirmDialogCancel").click();
+    await expect(app.locator("#confirmDialog")).toBeHidden();
+    await expect(reset).toBeFocused();
+    await expect(app.locator("#heroFavBtn")).toHaveAttribute("aria-pressed", "true");
+
+    /* confirming clears storage and reloads */
+    await reset.click();
+    await Promise.all([
+      app.waitForEvent("load", { timeout: 5000 }),
+      app.locator("#confirmDialogConfirm").click(),
+    ]);
+    await expect(app.locator("#heroCityName")).not.toBeEmpty();
+    await expect(app.locator("#heroFavBtn")).toHaveAttribute("aria-pressed", "false");
+    await expect(app.locator("body")).toHaveAttribute("data-mode", "simple");
+  });
+
+  test("72. location and privacy tiles perform their stated action", async ({ app }) => {
+    await goToSettings(app);
+    await app.locator('.priv-tile[data-priv="location"]').click();
+    await expect(app.locator("#toast")).toBeVisible();
+
+    await app.locator('.priv-tile[data-priv="privacy"]').click();
+    await expect(app.locator("#view-about")).toBeVisible();
+  });
+
+  test("73. exporting data includes preferences but never a key or credential", async ({ app }) => {
+    await goToSettings(app);
+    const [download] = await Promise.all([
+      app.waitForEvent("download"),
+      app.locator('.priv-tile[data-priv="export"]').click(),
+    ]);
+    expect(download.suggestedFilename()).toBe("weathersphere-data.json");
+
+    const stream = await download.createReadStream();
+    const chunks = [];
+    for await (const chunk of stream) chunks.push(chunk);
+    const text = Buffer.concat(chunks).toString("utf8");
+    const data = JSON.parse(text);
+
+    expect(data.settings).toMatchObject({ lang: "fr", mode: "simple" });
+    expect(data).toHaveProperty("favorites");
+    expect(text).not.toMatch(/pexels_api_key|maptiler_key|VITE_[A-Z_]*KEY/i);
+  });
+
+  test("74. the prototype notification switches persist locally", async ({ app }) => {
+    await goToSettings(app);
+    const alerts = app.locator('.switch[data-notif="alerts"]');
+    await expect(alerts).toHaveAttribute("aria-checked", "true");
+    await alerts.click();
+    await expect(alerts).toHaveAttribute("aria-checked", "false");
+
+    await app.reload();
+    await goToSettings(app);
+    await expect(app.locator('.switch[data-notif="alerts"]')).toHaveAttribute(
+      "aria-checked",
+      "false",
+    );
+  });
+
+  test("75. the settings page has no horizontal overflow at phone width", async ({ app }) => {
+    await app.setViewportSize({ width: 390, height: 844 });
+    await app.locator("#burgerBtn").click();
+    await goToSettings(app);
+    const overflow = await app.evaluate(
+      () => document.documentElement.scrollWidth - document.documentElement.clientWidth,
+    );
+    expect(overflow).toBeLessThanOrEqual(0);
+    await expect(app.locator("#modeTiles")).toBeVisible();
+  });
+
+  test("76. no application console errors while exercising the settings controls", async ({
+    app,
+  }) => {
+    const errors = [];
+    app.on("console", (m) => m.type() === "error" && errors.push(m.text()));
+    await goToSettings(app);
+    await app.locator('#modeTiles .set-tile[data-mode="detailed"]').click();
+    await app.locator('#themeTiles .set-tile[data-theme="system"]').click();
+    await app.locator('#langTiles .set-tile[data-lang="en"]').click();
+    await app.locator('.switch[data-notif="daily"]').click();
+    expect(errors).toEqual([]);
+  });
+});
+
 /* Accessible names are UI text too: a screen-reader user who picked French must
    not hear "Main navigation". These labels carry no visible text, so nothing
    else in the suite would notice them staying English. */
@@ -572,6 +817,294 @@ test.describe("map visual polish", () => {
       .locator("#worldMap .maplibregl-marker .map-focus-ring")
       .evaluate((el) => getComputedStyle(el).animationName);
     expect(ringAnimation).toBe("none");
+  });
+});
+
+test.describe("forecast page polish", () => {
+  /* Fixture hourly precipitation_probability is `(i % 10) * 5`; the forecast
+     page samples every 3rd hour and keeps the first 8 (indices 0,3,...,21),
+     so the peak is index 9 → 45% at 09:00. */
+  const goToForecast = (app) => app.locator('.side-item[data-view="forecast"]').click();
+
+  test("46. the precipitation card reports the true peak and its time, in French", async ({
+    app,
+  }) => {
+    await goToForecast(app);
+    await expect(app.locator("#precipSummary")).toHaveText("Risque maximal : 45 % vers 9 h");
+  });
+
+  test("47. the precipitation summary re-renders in English and stays correct after a new search", async ({
+    app,
+  }) => {
+    await goToForecast(app);
+    await app.locator("#langBtn").click();
+    await app.locator('#langMenu button[data-lang="en"]').click();
+    await expect(app.locator("#precipSummary")).toHaveText("Maximum chance: 45% around 9 AM");
+
+    /* searching always lands back on Home; the forecast page for the newly
+       selected place must still show a correct, non-stale summary. */
+    await app.locator("#searchInput").fill(GEOCODE_LABEL);
+    await app.locator("#searchResults .search-item").first().click();
+    await goToForecast(app);
+    await expect(app.locator("#forecastViewSub")).toContainText(GEOCODE_LABEL);
+    await expect(app.locator("#precipSummary")).toHaveText("Maximum chance: 45% around 9 AM");
+  });
+
+  test("48. the temperature chart axis carries the active unit and updates when it changes", async ({
+    app,
+  }) => {
+    await goToForecast(app);
+    const axisText = () => app.locator("#fcChartHost svg text").allTextContents();
+    await expect.poll(async () => (await axisText()).some((s) => /°C/.test(s))).toBe(true);
+
+    await app.locator('.side-item[data-view="settings"]').click();
+    await app.locator('#chipTemp button[data-ut="f"]').click();
+    await goToForecast(app);
+    await expect.poll(async () => (await axisText()).some((s) => /°F/.test(s))).toBe(true);
+    await expect.poll(async () => (await axisText()).some((s) => /°C/.test(s))).toBe(false);
+  });
+
+  test("49. the wind and precipitation chart tabs use their own units on the axis", async ({
+    app,
+  }) => {
+    await goToForecast(app);
+    const axisText = () => app.locator("#fcChartHost svg text").allTextContents();
+
+    await app.locator('#fcTabs button[data-tab="wind"]').click();
+    await expect.poll(async () => (await axisText()).some((s) => /km\/h/.test(s))).toBe(true);
+
+    await app.locator('#fcTabs button[data-tab="precip"]').click();
+    await expect.poll(async () => (await axisText()).some((s) => /%/.test(s))).toBe(true);
+  });
+
+  test("50. the day carousel shows a right fade that yields to a left fade while scrolling", async ({
+    app,
+  }) => {
+    await goToForecast(app);
+    const left = app.locator("#fcFadeLeft");
+    const right = app.locator("#fcFadeRight");
+    const row = app.locator("#forecastRow2");
+
+    /* 7 daily cards overflow the row at desktop width, so it starts pinned
+       to the left: only the right fade hints at more content. */
+    await expect(right).toHaveClass(/is-visible/);
+    await expect(left).not.toHaveClass(/is-visible/);
+    expect(await left.evaluate((el) => getComputedStyle(el).pointerEvents)).toBe("none");
+    expect(await right.evaluate((el) => getComputedStyle(el).pointerEvents)).toBe("none");
+
+    await row.evaluate((el) => {
+      el.scrollLeft = el.scrollWidth;
+      el.dispatchEvent(new Event("scroll"));
+    });
+    await expect(left).toHaveClass(/is-visible/);
+    await expect(right).not.toHaveClass(/is-visible/);
+
+    /* dragging/clicking through the carousel must still work — the fades sit
+       over it with pointer-events: none, not as a blocking overlay. */
+    await app.locator("#fcPrev").click();
+    await expect
+      .poll(async () => row.evaluate((el) => el.scrollLeft))
+      .toBeLessThan(await row.evaluate((el) => el.scrollWidth));
+  });
+
+  test("51. the forecast page has no page-level horizontal overflow", async ({ app }) => {
+    await goToForecast(app);
+    const overflow = await app.evaluate(
+      () => document.documentElement.scrollWidth - document.documentElement.clientWidth,
+    );
+    expect(overflow).toBeLessThanOrEqual(0);
+  });
+});
+
+test.describe("about page", () => {
+  const goToAbout = (app) => app.locator('.side-item[data-view="about"]').click();
+
+  test("52. the wording accurately describes periodic, not real-time, updates", async ({ app }) => {
+    await goToAbout(app);
+    await expect(app.locator('[data-i18n="feat2T"]')).toHaveText("Mises à jour régulières");
+    await expect(app.locator('[data-i18n="feat2X"]')).toHaveText(
+      "Les conditions météo sont actualisées régulièrement afin de vous fournir des informations récentes.",
+    );
+
+    await app.locator("#langBtn").click();
+    await app.locator('#langMenu button[data-lang="en"]').click();
+    await expect(app.locator('[data-i18n="feat2T"]')).toHaveText("Regular updates");
+    await expect(app.locator('[data-i18n="feat2X"]')).toHaveText(
+      "Weather conditions are refreshed regularly to provide recent information.",
+    );
+  });
+
+  test("53. the privacy explanation covers permission, local storage and no user accounts", async ({
+    app,
+  }) => {
+    await goToAbout(app);
+    const privacyCard = app.locator('[data-i18n="feat4X"]');
+    await expect(privacyCard).toContainText("autorisation");
+    await expect(privacyCard).toContainText(/localement/);
+
+    const privacyNote = app.locator('[data-i18n="aboutPrivacyNote"]');
+    await expect(privacyNote).toContainText("services météo ou de géocodage");
+    await expect(privacyNote).toContainText("compte");
+
+    await app.locator("#langBtn").click();
+    await app.locator('#langMenu button[data-lang="en"]').click();
+    await expect(privacyCard).toContainText("permission");
+    await expect(privacyCard).toContainText(/locally/);
+    await expect(privacyNote).toContainText("weather or geocoding services");
+    await expect(privacyNote).toContainText("user-account database");
+  });
+
+  test("54. the educational-project disclaimer appears in both languages", async ({ app }) => {
+    await goToAbout(app);
+    const note = app.locator('[data-i18n="aboutEduNote"]');
+    await expect(note).toHaveText(
+      "WeatherSphere est un projet scolaire à vocation pédagogique et ne remplace pas les services météorologiques officiels.",
+    );
+
+    await app.locator("#langBtn").click();
+    await app.locator('#langMenu button[data-lang="en"]').click();
+    await expect(note).toHaveText(
+      "WeatherSphere is an educational school project and does not replace official meteorological services.",
+    );
+  });
+
+  test("55. BigDataCloud is listed as the reverse-geocoding fallback, alongside the other providers", async ({
+    app,
+  }) => {
+    await goToAbout(app);
+    const rows = app.locator(".src-row");
+    await expect(rows).toHaveCount(5);
+    const bdc = rows.filter({ hasText: "BigDataCloud" });
+    await expect(bdc).toHaveCount(1);
+    await expect(bdc).toContainText("Géocodage inverse de secours");
+
+    const link = bdc.locator(".link-chip");
+    await expect(link).toHaveAttribute("href", "https://www.bigdatacloud.com");
+    await expect(link).toHaveAttribute("target", "_blank");
+    await expect(link).toHaveAttribute("rel", "noopener");
+    await expect(link).toHaveAccessibleName(/bigdatacloud\.com/);
+  });
+
+  test("56. every data-source link has a working destination and accessible name", async ({
+    app,
+  }) => {
+    await goToAbout(app);
+    const links = app.locator(".src-list .link-chip");
+    await expect(links).toHaveCount(5);
+    const info = await links.evaluateAll((els) =>
+      els.map((el) => ({
+        href: el.getAttribute("href"),
+        target: el.getAttribute("target"),
+        rel: el.getAttribute("rel"),
+        name: el.textContent.trim(),
+      })),
+    );
+    for (const { href, target, rel, name } of info) {
+      expect(href).toMatch(/^https:\/\//);
+      expect(target).toBe("_blank");
+      expect(rel).toContain("noopener");
+      expect(name.length).toBeGreaterThan(0);
+    }
+    /* the decorative "external link" arrow never speaks for itself */
+    const arrowCount = await app.locator(".src-list .link-chip svg[aria-hidden='true']").count();
+    expect(arrowCount).toBe(5);
+  });
+
+  test("57. the heading hierarchy and provider/technology cards survive the changes", async ({
+    app,
+  }) => {
+    await goToAbout(app);
+    await expect(app.locator("#aboutTitle")).toHaveAttribute("id", "aboutTitle");
+    await expect(app.locator("h1#aboutTitle")).toBeVisible();
+    await expect(app.locator(".feature-card")).toHaveCount(4);
+    await expect(app.locator(".tech-item")).toHaveCount(14);
+    await expect(app.locator(".tech-group")).toHaveCount(3);
+    await expect(app.locator("h3.tech-group-title")).toHaveCount(3);
+    await expect(app.locator('h2[data-i18n="srcTitle"]')).toBeVisible();
+    await expect(app.locator('h2[data-i18n="techTitle"]')).toBeVisible();
+  });
+
+  test("58. the about page has no horizontal overflow on a phone-width viewport", async ({
+    app,
+  }) => {
+    await app.setViewportSize({ width: 390, height: 844 });
+    await app.locator("#burgerBtn").click();
+    await goToAbout(app);
+    const overflow = await app.evaluate(
+      () => document.documentElement.scrollWidth - document.documentElement.clientWidth,
+    );
+    expect(overflow).toBeLessThanOrEqual(0);
+    await expect(app.locator(".src-row").last()).toBeVisible();
+  });
+
+  test("59. PHP is listed as a core technology and described as the server-side Pexels proxy", async ({
+    app,
+  }) => {
+    await goToAbout(app);
+    const php = app.locator(".tech-item", { hasText: "PHP" });
+    await expect(php).toHaveCount(1);
+    await expect(php).toHaveAttribute(
+      "title",
+      "Utilisé côté serveur pour protéger la clé Pexels et transmettre les requêtes photo.",
+    );
+    /* server-side, not a frontend badge — no secret value anywhere near it */
+    const html = await php.innerHTML();
+    expect(html).not.toMatch(/[A-Za-z0-9_-]{20,}/); /* no API-key-shaped string */
+
+    await app.locator("#langBtn").click();
+    await app.locator('#langMenu button[data-lang="en"]').click();
+    await expect(php).toHaveAttribute(
+      "title",
+      "Used on the server to protect the Pexels key and proxy photo requests.",
+    );
+  });
+
+  test("60. technologies and data sources stay separated, without unnecessary duplication", async ({
+    app,
+  }) => {
+    await goToAbout(app);
+    const techNames = await app
+      .locator(".tech-item")
+      .evaluateAll((els) => els.map((el) => el.textContent.replace(/\s+/g, " ").trim()));
+    /* pure data providers live only in the data-source card */
+    expect(techNames.some((n) => n.includes("Open-Meteo"))).toBe(false);
+    expect(techNames.some((n) => n === "Pexels")).toBe(false);
+    expect(techNames.some((n) => n.includes("BigDataCloud"))).toBe(false);
+    /* MapTiler appears here too, but as the SDK/library, not the tile/geocoding provider */
+    expect(techNames.some((n) => n.includes("MapTiler SDK"))).toBe(true);
+    expect(techNames.some((n) => n.includes("MapTiler Weather"))).toBe(true);
+
+    /* the data-source card still lists all five real providers */
+    const srcNames = await app
+      .locator(".src-row b")
+      .evaluateAll((els) => els.map((el) => el.textContent.trim()));
+    expect(srcNames).toEqual(["Open-Meteo", "OpenStreetMap", "MapTiler", "Pexels", "BigDataCloud"]);
+  });
+
+  test("61. every technology badge is the same size and hidden from assistive tech", async ({
+    app,
+  }) => {
+    await goToAbout(app);
+    const logos = app.locator(".tech-logo");
+    await expect(logos).toHaveCount(14);
+    for (const attr of await logos.evaluateAll((els) =>
+      els.map((el) => el.getAttribute("aria-hidden")),
+    )) {
+      expect(attr).toBe("true");
+    }
+    const sizes = await logos.evaluateAll((els) =>
+      els.map((el) => {
+        const r = el.getBoundingClientRect();
+        return `${Math.round(r.width)}x${Math.round(r.height)}`;
+      }),
+    );
+    expect(new Set(sizes).size).toBe(1); /* one consistent badge size throughout */
+
+    /* the name itself, not the tooltip, is what makes each item identifiable */
+    const names = await app
+      .locator(".tech-item")
+      .evaluateAll((els) => els.map((el) => el.textContent.trim()));
+    expect(names.every((n) => n.length > 0)).toBe(true);
   });
 });
 

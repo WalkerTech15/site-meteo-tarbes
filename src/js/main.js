@@ -35,7 +35,9 @@ import { renderExplore, renderChart, renderHero } from "./ui/render-home.js";
 import { renderFavorites } from "./ui/render-favorites.js";
 import { renderForecastPage } from "./ui/render-forecast.js";
 import { loadPopular } from "./ui/render-map.js";
+import { bindForecastCarousel } from "./ui/render-forecast.js";
 import { showToast } from "./ui/notifications.js";
+import { confirmAction } from "./ui/confirm-dialog.js";
 
 /* weather icon gradients live in one hidden <svg> injected once, so every
    icon instance can reference them by id instead of duplicating <defs> */
@@ -154,7 +156,7 @@ $$(".switch[data-notif]").forEach((b) =>
   }),
 );
 $$(".priv-tile").forEach((b) =>
-  b.addEventListener("click", () => handlePrivacyAction(b.dataset.priv)),
+  b.addEventListener("click", () => handlePrivacyAction(b.dataset.priv, b)),
 );
 
 /* ── Sidebar + views ── */
@@ -202,6 +204,7 @@ $("#hsPrev").addEventListener("click", () =>
 $("#hsNext").addEventListener("click", () =>
   $("#hourlyStrip").scrollBy({ left: 320, behavior: "smooth" }),
 );
+bindForecastCarousel();
 
 /* ── Map page: quick-jump chips (MapLibre uses [lng, lat]) ── */
 bindCountryFilters();
@@ -263,11 +266,19 @@ setInterval(() => {
   if (state.wx && state.view === "home") renderHero();
 }, 60000);
 
-function handlePrivacyAction(action) {
+async function handlePrivacyAction(action, trigger) {
   if (action === "location") showToast(t("locMsg"));
   else if (action === "privacy") switchView("about");
   else if (action === "cache") {
-    if (!confirm(t("resetConfirm"))) return;
+    const accepted = await confirmAction({
+      title: t("priv3T"),
+      message: t("resetConfirm"),
+      confirmLabel: t("resetAction"),
+      cancelLabel: t("cancelAction"),
+      trigger,
+      danger: true,
+    });
+    if (!accepted) return;
     clearAll();
     showToast(t("cacheCleared"));
     setTimeout(() => location.reload(), 900);
