@@ -108,6 +108,7 @@ export function setLang(lang) {
   applyStaticI18n();
   /* toggle labels change width with the language — realign the thumb */
   syncSegToggle($("#modeToggle"), "mode", state.mode);
+  syncSegToggle($("#modeToggleSide"), "mode", state.mode);
   renderExplore();
   renderFavorites();
   renderAllWeather();

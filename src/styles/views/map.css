@@ -41,17 +41,15 @@
   background: var(--primary);
   border-color: var(--primary-600);
 }
-/* One fixed icon box for every chip. Flags previously sized by height only
-   (width:auto) — but US (~1.9:1) and CA (2:1) are visibly wider than FR
-   (3:2) at the same height, so they rendered at different widths and looked
-   inconsistent next to it. Forcing width/height:100% + object-fit:contain
-   makes every flag (and the world SVG) fill the identical box instead. */
+/* One fixed 4:3 icon box for every chip, matching the French flag. This
+   deliberately normalizes the wider US and Canadian flag assets so all three
+   country shortcuts have the same visible dimensions. */
 .chip-icon {
   display: flex;
   align-items: center;
   justify-content: center;
   width: 20px;
-  height: 16px;
+  height: 15px;
   flex-shrink: 0;
 }
 .chip-icon svg {
@@ -62,7 +60,7 @@
 .chip-icon .flag {
   width: 100%;
   height: 100%;
-  object-fit: contain;
+  object-fit: fill;
   display: block;
 }
 .map-actions .icon-btn {

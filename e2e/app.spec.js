@@ -66,9 +66,17 @@ test.describe("preferences", () => {
     await app.locator('#modeToggle button[data-mode="detailed"]').click();
     await expect(app.locator("body")).toHaveAttribute("data-mode", "detailed");
     await expect(app.locator("#metricsGridDetailed")).toBeVisible();
+    await expect(app.locator('#modeToggleSide button[data-mode="detailed"]')).toHaveAttribute(
+      "aria-checked",
+      "true",
+    );
 
     await app.locator('#modeToggle button[data-mode="simple"]').click();
     await expect(app.locator("body")).toHaveAttribute("data-mode", "simple");
+    await expect(app.locator('#modeToggleSide button[data-mode="simple"]')).toHaveAttribute(
+      "aria-checked",
+      "true",
+    );
   });
 
   test("10. settings persist across a reload", async ({ app }) => {

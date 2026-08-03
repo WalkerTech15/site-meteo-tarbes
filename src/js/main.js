@@ -252,6 +252,7 @@ applyTheme();
 syncThemeNav();
 applyStaticI18n();
 syncSegToggle($("#modeToggle"), "mode", state.mode);
+syncSegToggle($("#modeToggleSide"), "mode", state.mode);
 updateSettingsUI();
 $("#langCode").textContent = state.lang.toUpperCase();
 $$("#langMenu button").forEach((b) =>
