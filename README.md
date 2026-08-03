@@ -18,8 +18,15 @@ vanilla JavaScript (ES modules) and Vite. No UI framework.
   with live weather refreshed in one batched request.
 - **Settings** — temperature/wind units, language, display mode, theme
   (light/dark/system), and a data export/reset.
-- Works fully offline/without API keys via a deterministic **demo weather**
-  fallback, so the app is always explorable.
+- Degrades gracefully: if a weather request fails (network error, timeout, API
+  outage) **after the app has loaded**, a deterministic **demo weather** dataset
+  takes over and the UI stays explorable. The map and photo features simply fall
+  back to their placeholders when their API keys are absent.
+
+> **This is not an offline app.** There is no service worker and nothing is
+> precached, so loading the site from scratch still requires a network
+> connection. The demo dataset is an in-session fallback for failed API calls,
+> not offline support.
 
 ## Architecture
 
@@ -102,6 +109,7 @@ npm run dev                        # start the dev server
 | `npm run preview`        | Serve the `dist/` build locally, to sanity-check the production output              |
 | `npm run test`           | Run the unit tests once (Vitest)                                                    |
 | `npm run test:watch`     | Run the unit tests in watch mode                                                    |
+| `npm run test:e2e`       | Run the Playwright browser tests (starts its own dev server; APIs are mocked)       |
 | `npm run lint`           | ESLint (JS) + Stylelint (CSS)                                                       |
 | `npm run lint:fix`       | Same, auto-fixing what it safely can                                                |
 | `npm run format`         | Format everything with Prettier                                                     |
@@ -167,17 +175,47 @@ long-lived caching for hashed assets; delete it if you don't need it.
 
 ## Testing
 
+Two layers, deliberately separate.
+
+### Unit tests — pure logic
+
 ```bash
 npm run test
 ```
 
-Covers pure logic: unit conversion and compass directions
-(`core/units.test.js`), the TTL/dedup cache helper
-(`services/cache.test.js`), safe localStorage parsing
-(`core/storage.test.js`), location search scoring
-(`data/locations.test.js`), and WMO weather-code lookups
-(`data/weather-codes.test.js`). UI rendering and network calls are not unit
-tested — verify those manually with `npm run dev`/`npm run preview`.
+Vitest, colocated `*.test.js` files next to the code they cover: unit
+conversion and compass directions (`core/units.test.js`), the TTL/dedup cache
+helper (`services/cache.test.js`), safe localStorage parsing
+(`core/storage.test.js`), location search scoring (`data/locations.test.js`),
+and WMO weather-code lookups (`data/weather-codes.test.js`).
+
+### End-to-end tests — real browser
+
+```bash
+npm run test:e2e            # all projects
+npx playwright test --ui    # interactive debugging
+```
+
+Playwright drives Chromium through the actual UI on a desktop viewport and an
+emulated Pixel 5 (`e2e/mobile-*.spec.js` runs only on the phone profile, since
+it covers behaviour that exists solely below the 900px drawer breakpoint).
+It covers: initial load, search-and-select, the demo-data fallback on API
+failure, FR/EN switching, Simple/Detailed switching, the favourite lifecycle,
+grid/list exclusivity, the mobile drawer's ARIA + keyboard behaviour, Pexels
+attribution, and settings persistence across reload.
+
+Two rules keep the suite deterministic, both enforced in `e2e/mocks.js` and
+`playwright.config.js`:
+
+- **No test ever reaches a live API.** Every external origin is intercepted and
+  served a fixture, and a catch-all route _aborts_ anything unmocked — so a
+  newly-added live call fails the suite loudly instead of making it flaky.
+- **Real keys never reach the test browser.** Playwright starts its own dev
+  server on port 5174 with placeholder `VITE_*` keys, which take precedence
+  over `.env.local`.
+
+Playwright needs its browser binary once per machine:
+`npx playwright install chromium`.
 
 ## Browser support
 

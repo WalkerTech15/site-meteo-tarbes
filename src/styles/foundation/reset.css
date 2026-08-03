@@ -3,6 +3,14 @@
 * {
   box-sizing: border-box;
 }
+/* The UA's `[hidden] { display: none }` has the lowest possible specificity, so
+   any component that sets its own `display` (grid/flex containers such as
+   .fav-grid) silently ignores the hidden attribute and stays on screen.
+   Everything in this app is shown/hidden through that attribute, so it has to
+   win outright. */
+[hidden] {
+  display: none !important;
+}
 html {
   scroll-behavior: smooth;
 }

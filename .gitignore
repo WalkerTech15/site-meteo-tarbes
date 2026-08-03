@@ -7,6 +7,12 @@
 node_modules/
 dist/
 
+# Playwright artefacts
+test-results/
+playwright-report/
+blob-report/
+.playwright/
+
 # Editor / OS noise
 .vscode/
 .idea/

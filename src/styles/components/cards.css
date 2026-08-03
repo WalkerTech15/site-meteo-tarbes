@@ -273,6 +273,51 @@ body[data-theme="dark"] .forecast-card.is-today {
 .loc-photo.has-photo .loc-photo-fallback {
   opacity: 0;
 }
+/* Pexels attribution — required by their licence. Sits in the bottom-right of
+   the photo, legible over any image thanks to the scrim, but visually quiet. */
+.loc-credit {
+  position: absolute;
+  right: 0;
+  bottom: 0;
+  z-index: 2;
+  max-width: 100%;
+  padding: 4px 9px;
+  font-size: 10.5px;
+  line-height: 1.3;
+  color: rgba(255, 255, 255, 0.82);
+  text-decoration: none;
+  background: rgba(2, 6, 23, 0.45);
+  -webkit-backdrop-filter: blur(4px);
+  backdrop-filter: blur(4px);
+  border-top-left-radius: 8px;
+  transition:
+    color 0.2s,
+    background 0.2s;
+}
+.loc-credit:hover,
+.loc-credit:focus-visible {
+  color: #fff;
+  background: rgba(2, 6, 23, 0.7);
+  text-decoration: underline;
+}
+/* Variant for light card bodies, where the credit is a normal line of muted
+   text rather than an overlay on the photograph. */
+.loc-credit--inline {
+  position: static;
+  display: block;
+  margin-top: 10px;
+  padding: 0;
+  color: var(--text-3);
+  background: none;
+  -webkit-backdrop-filter: none;
+  backdrop-filter: none;
+  border-radius: 0;
+}
+.loc-credit--inline:hover,
+.loc-credit--inline:focus-visible {
+  color: var(--text-2);
+  background: none;
+}
 .loc-photo.loading::after {
   content: "";
   position: absolute;

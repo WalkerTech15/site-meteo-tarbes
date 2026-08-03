@@ -62,8 +62,14 @@
   }
 }
 
-/* comfortable touch targets on touchscreens */
-@media (pointer: coarse) {
+/* Comfortable touch targets on touchscreens (~44×44 CSS px).
+   Controls that are deliberately drawn smaller than that keep their visual size
+   and get a transparent ::before hit area instead, so nothing looks oversized.
+   `max-width: 900px` rides along with `pointer: coarse` because that is the
+   breakpoint where the layout switches to its phone/tablet form — and because
+   a coarse pointer alone isn't reported by every device or test runner. */
+@media (pointer: coarse), (max-width: 900px) {
+  /* burger, theme, language, and every carousel arrow are all .icon-btn */
   .icon-btn {
     min-width: 44px;
     min-height: 44px;
@@ -78,15 +84,45 @@
   }
   .switch,
   .favx-star,
-  .fav-remove-s {
+  .fav-remove-s,
+  .hero-fav-btn,
+  .side-pos-refresh {
     position: relative;
   }
   .switch::before,
   .favx-star::before,
-  .fav-remove-s::before {
+  .fav-remove-s::before,
+  .hero-fav-btn::before,
+  .side-pos-refresh::before {
     content: "";
     position: absolute;
-    inset: -10px;
+    top: 50%;
+    left: 50%;
+    width: max(100%, 44px);
+    height: max(100%, 44px);
+    transform: translate(-50%, -50%);
+  }
+  /* Segmented controls (Simple/Detailed, unit chips, grid/list): the segments
+     are horizontal neighbours, so the hit area may only grow vertically —
+     widening it would overlap the adjacent segment. */
+  .seg-toggle button,
+  .seg-icons button {
+    position: relative;
+  }
+  .seg-toggle button::before,
+  .seg-icons button::before {
+    content: "";
+    position: absolute;
+    top: 50%;
+    left: 0;
+    right: 0;
+    height: 44px;
+    transform: translateY(-50%);
+  }
+  /* MapLibre ships 29px zoom/compass buttons */
+  .maplibregl-ctrl-group button {
+    width: 44px;
+    height: 44px;
   }
 }
 

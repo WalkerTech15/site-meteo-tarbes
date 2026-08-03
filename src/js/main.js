@@ -26,6 +26,7 @@ import {
   switchView,
   openSidebar,
   closeSidebar,
+  bindSidebarA11y,
   positionThumb,
   bindSegToggle,
   syncSegToggle,
@@ -166,7 +167,8 @@ $("#logoLink").addEventListener("click", (e) => {
   switchView("home");
 });
 $("#burgerBtn").addEventListener("click", openSidebar);
-$("#sidebarScrim").addEventListener("click", closeSidebar);
+$("#sidebarScrim").addEventListener("click", () => closeSidebar());
+bindSidebarA11y();
 
 /* ── Explore nav ── */
 $("#exploreLeft").addEventListener("click", () =>

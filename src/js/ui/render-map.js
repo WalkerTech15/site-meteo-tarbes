@@ -83,7 +83,11 @@ export function renderMapInfo() {
     <dl class="facts">${factRows(loc)
       .map(([k, v]) => `<div><dt>${esc(k)}</dt><dd>${esc(v)}</dd></div>`)
       .join("")}</dl>`;
-  hydrateLocPhoto($("#mapLocInfo .info-visual .loc-photo"), loc);
+  /* the info thumbnail is only 96×66px — credit the card body instead */
+  hydrateLocPhoto($("#mapLocInfo .info-visual .loc-photo"), loc, {
+    creditHost: $("#mapLocInfo"),
+    creditClass: "loc-credit--inline",
+  });
 
   $("#mapConditions").innerHTML = `
     <h3 class="info-title">${t("conditions")}</h3>

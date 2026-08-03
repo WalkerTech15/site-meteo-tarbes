@@ -37,15 +37,89 @@ export function switchView(view) {
   window.scrollTo({ top: 0, behavior: "smooth" });
 }
 
+/* Below this width the sidebar becomes an off-canvas drawer (kept in sync with
+   the `max-width: 900px` block in styles/utilities/responsive.css). Above it the
+   sidebar is a permanently visible landmark and must never be inert/aria-hidden. */
+const DRAWER_MQ = window.matchMedia("(max-width: 900px)");
+const isDrawerMode = () => DRAWER_MQ.matches;
+
+const FOCUSABLE =
+  "a[href], button:not([disabled]), input:not([disabled]), select:not([disabled])," +
+  ' textarea:not([disabled]), [tabindex]:not([tabindex="-1"])';
+
+/* Rendered focusables only — getClientRects() (rather than offsetParent) because
+   the open drawer is position:fixed, where offsetParent is unreliable. */
+function drawerFocusables() {
+  return $$(FOCUSABLE, $("#sidebar")).filter((el) => el.getClientRects().length > 0);
+}
+
+/* A translated-offscreen drawer is still in the tab order and the a11y tree, so
+   closed === inert + aria-hidden. Called after every open/close and on every
+   breakpoint change, so the two modes can never disagree. */
+export function syncSidebarA11y() {
+  const sidebar = $("#sidebar");
+  const open = sidebar.classList.contains("is-open");
+  if (isDrawerMode()) {
+    sidebar.inert = !open;
+    sidebar.setAttribute("aria-hidden", String(!open));
+    $("#burgerBtn").setAttribute("aria-expanded", String(open));
+  } else {
+    sidebar.inert = false;
+    sidebar.removeAttribute("aria-hidden");
+    $("#burgerBtn").setAttribute("aria-expanded", "false");
+  }
+}
+
 export function openSidebar() {
-  $("#sidebar").classList.add("is-open");
+  const sidebar = $("#sidebar");
+  sidebar.classList.add("is-open");
   $("#sidebarScrim").hidden = false;
   /* the drawer toggle was display:none until now — align its thumb */
   positionThumb($("#modeToggleSide"));
+  syncSidebarA11y(); /* must lift inert before anything inside can take focus */
+  const first = drawerFocusables()[0];
+  ($(".side-item.is-active", sidebar) || first)?.focus();
 }
+
 export function closeSidebar() {
-  $("#sidebar").classList.remove("is-open");
+  const sidebar = $("#sidebar");
+  const wasOpen = sidebar.classList.contains("is-open");
+  sidebar.classList.remove("is-open");
   $("#sidebarScrim").hidden = true;
+  /* focus has to leave before inert lands, otherwise the browser drops it to
+     <body> and the user loses their place. Drawer mode only — on desktop the
+     burger is display:none and the sidebar keeps focus legitimately. */
+  if (wasOpen && isDrawerMode() && sidebar.contains(document.activeElement)) {
+    $("#burgerBtn").focus();
+  }
+  syncSidebarA11y();
+}
+
+export function bindSidebarA11y() {
+  const sidebar = $("#sidebar");
+  /* Focus trap: Tab cycles within the open drawer instead of escaping to the
+     page behind the scrim. */
+  sidebar.addEventListener("keydown", (e) => {
+    if (e.key !== "Tab" || !isDrawerMode() || !sidebar.classList.contains("is-open")) return;
+    const items = drawerFocusables();
+    if (!items.length) return;
+    const first = items[0];
+    const last = items[items.length - 1];
+    if (e.shiftKey && document.activeElement === first) {
+      e.preventDefault();
+      last.focus();
+    } else if (!e.shiftKey && document.activeElement === last) {
+      e.preventDefault();
+      first.focus();
+    }
+  });
+  /* Resizing past the breakpoint with the drawer open would otherwise leave the
+     now-visible desktop sidebar inert. */
+  DRAWER_MQ.addEventListener("change", () => {
+    if (!isDrawerMode()) closeSidebar();
+    syncSidebarA11y();
+  });
+  syncSidebarA11y();
 }
 
 export function positionThumb(group) {

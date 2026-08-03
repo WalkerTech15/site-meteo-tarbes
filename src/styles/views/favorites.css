@@ -17,7 +17,6 @@
   border-radius: var(--r-md);
   color: #fff;
   box-shadow: var(--shadow-sm);
-  cursor: pointer; /* it's a div with role=button (avoids nested interactive controls) */
   transition:
     transform 0.3s var(--ease),
     box-shadow 0.3s var(--ease);
@@ -26,6 +25,19 @@
 .favx-card:hover {
   transform: translateY(-5px);
   box-shadow: var(--shadow-lg);
+}
+/* Full-bleed "open this location" button. Visually empty (its accessible name
+   is the aria-label) and layered under the remove button, so the two controls
+   are siblings rather than nested. */
+.favx-open {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  border-radius: inherit;
+}
+.favx-open:focus-visible {
+  outline: 3px solid #fff;
+  outline-offset: -4px;
 }
 .favx-bg {
   position: absolute;
@@ -85,6 +97,8 @@
   opacity: 0.9;
 }
 .favx-star {
+  position: relative;
+  z-index: 2; /* above .favx-open, so removing never opens the location */
   margin-left: auto;
   flex-shrink: 0;
   display: grid;
@@ -211,6 +225,18 @@
   display: flex;
   align-items: center;
   gap: 12px;
+}
+/* The row's location cell is a real button (rows themselves are no longer
+   focusable), styled to look exactly like the plain cell content it replaced. */
+.ft-open {
+  width: 100%;
+  padding: 0;
+  text-align: left;
+  border-radius: 10px;
+}
+.ft-open:focus-visible {
+  outline: 2px solid var(--primary);
+  outline-offset: 3px;
 }
 .ft-visual {
   display: grid;

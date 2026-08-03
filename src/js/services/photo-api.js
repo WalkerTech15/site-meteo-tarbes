@@ -5,6 +5,7 @@ import { state } from "../core/state.js";
 import { PEXELS_KEY, FETCH_TIMEOUT_MS } from "../core/config.js";
 import { flagHtml } from "../data/flags.js";
 import { locCountry } from "../core/location.js";
+import { t } from "../core/i18n.js";
 
 export function gradBg(loc) {
   return `background:linear-gradient(145deg, ${loc.grad[0]}, ${loc.grad[1]})`;
@@ -77,9 +78,13 @@ export async function fetchPexelsPhoto(query) {
     if (!r.ok) throw new Error("HTTP " + r.status);
     const d = await r.json();
     const p = (d.photos || [])[0];
+    /* Keep every offered size so the browser — not this module — picks the one
+       that fits the viewport (see PEXELS_SIZES / srcset below). Fetching
+       large2x unconditionally shipped a ~1.9× wider image than a phone can use. */
     const out = p
       ? {
-          src: (p.src && (p.src.large2x || p.src.large || p.src.medium)) || "",
+          src: (p.src && (p.src.large || p.src.medium || p.src.large2x)) || "",
+          sizes: p.src || {},
           photographer: p.photographer || "",
           link: p.url || "",
         }
@@ -100,15 +105,55 @@ export function locPhotoHtml(loc, cls = "") {
   </div>`;
 }
 
-export async function hydrateLocPhoto(el, loc) {
+/* Pexels publishes `large` at 940px wide and `large2x` at 1880px; the other
+   keys are height-constrained, so only these two carry a reliable `w`
+   descriptor. Letting the browser choose spares phones a 1880px download. */
+function pexelsSrcset(sizes = {}) {
+  return [sizes.large && `${sizes.large} 940w`, sizes.large2x && `${sizes.large2x} 1880w`]
+    .filter(Boolean)
+    .join(", ");
+}
+const PEXELS_SIZES_ATTR = "(max-width: 640px) 100vw, (max-width: 1080px) 65vw, 720px";
+
+/* Pexels' licence asks for a visible, linked credit. Only ever called for a real
+   Pexels result — curated local images, flags and emoji fallbacks get none.
+   `host` is separate from the photo element because two of the three photo
+   containers can't hold readable text: the hero's landmark layer is
+   pointer-events:none behind the hero copy, and the map info thumbnail is
+   96×66px. Callers point the credit at a sensible nearby container instead. */
+function renderPhotoCredit(host, photo, extraClass = "") {
+  host.querySelector(":scope > .loc-credit")?.remove();
+  /* the URL comes from a third-party API — only ever follow a real https link */
+  if (!photo.photographer || !/^https:\/\//i.test(photo.link || "")) return;
+  const label = t("photoCredit").replace("{photographer}", photo.photographer);
+  const a = document.createElement("a");
+  a.className = `loc-credit ${extraClass}`.trim();
+  a.href = photo.link;
+  a.target = "_blank";
+  a.rel = "noopener noreferrer";
+  a.textContent = label; // textContent, so a hostile photographer name can't inject markup
+  host.dataset.credit = label;
+  host.appendChild(a);
+}
+
+export async function hydrateLocPhoto(el, loc, opts = {}) {
   if (!el || !loc) return;
   const token = photoToken;
+  const creditHost = opts.creditHost || el;
   const done = () => {
     if (token === photoToken) el.classList.remove("loading");
   };
-  const swap = (src, credit) => {
+  /* `photo` is null for local/curated images — that's what suppresses the credit */
+  const swap = (src, photo) => {
     if (token !== photoToken || !src) return done();
+    const srcset = photo ? pexelsSrcset(photo.sizes) : "";
     const pre = new Image();
+    /* preload through the same srcset/sizes the real <img> will use, so the
+       candidate the browser picks is already cached when we swap it in */
+    if (srcset) {
+      pre.sizes = PEXELS_SIZES_ATTR;
+      pre.srcset = srcset;
+    }
     pre.onload = () => {
       if (token !== photoToken) return;
       let img = el.querySelector("img.loc-photo-img");
@@ -119,19 +164,20 @@ export async function hydrateLocPhoto(el, loc) {
         img.decoding = "async";
         el.appendChild(img);
       }
+      if (srcset) {
+        img.sizes = PEXELS_SIZES_ATTR;
+        img.srcset = srcset;
+      }
       img.src = src;
       el.classList.add("has-photo");
-      if (credit) {
-        el.dataset.credit = credit;
-        el.title = credit;
-      }
+      if (photo) renderPhotoCredit(creditHost, photo, opts.creditClass);
       done();
     };
     pre.onerror = done;
     pre.src = src;
   };
-  if (loc.landmark && loc.landmark.img) return swap(loc.landmark.img, "");
-  if (loc.img) return swap(loc.img, "");
+  if (loc.landmark && loc.landmark.img) return swap(loc.landmark.img, null);
+  if (loc.img) return swap(loc.img, null);
   let photo;
   try {
     photo = await fetchPexelsPhoto(pexelsQuery(loc));
@@ -139,7 +185,6 @@ export async function hydrateLocPhoto(el, loc) {
     return done();
   }
   if (token !== photoToken) return;
-  if (photo && photo.src)
-    swap(photo.src, photo.photographer ? `Photo : ${photo.photographer} / Pexels` : "");
+  if (photo && photo.src) swap(photo.src, photo);
   else done(); // keep gradient/SVG fallback
 }

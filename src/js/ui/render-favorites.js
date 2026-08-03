@@ -21,8 +21,13 @@ function favAgoText() {
 
 function favCardHtml(loc, i) {
   const w = favWx[loc.id];
+  const openLabel = esc(t("openLocation").replace("{name}", locName(loc)));
+  /* A plain <article> container with two sibling buttons: a full-bleed overlay
+     button that opens the location, and the remove button raised above it. The
+     previous role="button" wrapper nested the remove control inside another
+     control, which is invalid and made the card unusable with a screen reader. */
   return `
-    <div class="favx-card" role="button" tabindex="0" data-loc="${esc(loc.id)}" aria-label="${esc(locName(loc))}" style="animation-delay:${i * 60}ms">
+    <article class="favx-card" style="animation-delay:${i * 60}ms">
       <span class="favx-bg" style="${gradBg(loc)}" aria-hidden="true"></span>
       <span class="favx-emoji" aria-hidden="true">${locVisual(loc)}</span>
       <span class="favx-top">
@@ -49,18 +54,19 @@ function favCardHtml(loc, i) {
         <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>
         ${t("updated")} ${favAgoText()}
       </span>
-    </div>`;
+      <button class="favx-open" data-loc="${esc(loc.id)}" aria-label="${openLabel}"></button>
+    </article>`;
 }
 
 function favRowHtml(loc) {
   const w = favWx[loc.id];
   return `
-    <tr data-loc="${esc(loc.id)}" tabindex="0">
+    <tr data-loc="${esc(loc.id)}">
       <td>
-        <span class="ft-place">
+        <button class="ft-open ft-place">
           <span class="ft-visual" style="${gradBg(loc)}" aria-hidden="true">${locVisual(loc)}</span>
           <span class="ft-names">${flagHtml(loc.cc, "", state.lang)} <b>${esc(locName(loc))}</b><span>${esc(locCountry(loc))}</span></span>
-        </span>
+        </button>
       </td>
       <td><span class="ft-cond">${w ? `<span class="ft-wicon">${weatherIcon(wmo(w.code).icon, w.isDay)}</span> ${wxDesc(w.code, state.lang)}` : "…"}</span></td>
       <td><b>${w ? fmtTemp(w.temp) + tempUnit() : "—"}</b></td>
@@ -115,10 +121,12 @@ export function renderFavorites() {
     return;
   }
 
+  /* exactly one of the two representations is ever in the DOM flow — showing
+     both meant the "grid" view also rendered the full table underneath it */
   grid.hidden = state.favView === "list";
+  listBlock.hidden = state.favView !== "list";
   grid.innerHTML = state.favorites.map(favCardHtml).join("");
 
-  listBlock.hidden = false;
   $("#favTable").innerHTML = `
     <thead><tr>
       <th>${t("colPlace")}</th><th>${t("colConditions")}</th><th>${t("colTemp")}</th>
@@ -127,16 +135,8 @@ export function renderFavorites() {
     </tr></thead>
     <tbody>${state.favorites.map(favRowHtml).join("")}</tbody>`;
 
+  /* every interactive target is now a real <button>, so Enter/Space activate
+     natively and no synthetic keydown handler is needed */
   grid.onclick = favClickHandler;
   $("#favTable").onclick = favClickHandler;
-  /* cards are divs with role=button; rows are focusable — support Enter/Space */
-  const keyHandler = (e) => {
-    if (e.key !== "Enter" && e.key !== " ") return;
-    if (e.target.closest("button")) return; /* real buttons handle keys natively */
-    if (!e.target.closest("[data-loc]")) return;
-    e.preventDefault();
-    favClickHandler(e);
-  };
-  grid.onkeydown = keyHandler;
-  $("#favTable").onkeydown = keyHandler;
 }
