@@ -4,6 +4,7 @@ export const I18N = {
   en: {
     skipToContent: "Skip to content",
     openMenu: "Open menu",
+    closeMenu: "Close menu",
     searchPlaceholder: "Search a city, region, or country…",
     searchAria: "Search location",
     searchNoResult: "No match found — press Enter to search the world.",
@@ -368,6 +369,7 @@ export const I18N = {
   fr: {
     skipToContent: "Aller au contenu",
     openMenu: "Ouvrir le menu",
+    closeMenu: "Fermer le menu",
     searchPlaceholder: "Rechercher une ville, une région ou un pays…",
     searchAria: "Rechercher un lieu",
     searchNoResult: "Aucun résultat — appuyez sur Entrée pour chercher dans le monde.",

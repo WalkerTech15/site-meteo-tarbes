@@ -96,6 +96,34 @@ test.describe("mobile sidebar", () => {
     await expect(app.locator("#view-map")).toBeVisible();
   });
 
+  test("8g. the burger is a real toggle: a second click closes what the first opened", async ({
+    app,
+  }) => {
+    const sidebar = app.locator("#sidebar");
+    const burger = app.locator("#burgerBtn");
+
+    await burger.click();
+    await expect(burger).toHaveAttribute("aria-expanded", "true");
+    await expect(sidebar).toHaveAttribute("aria-hidden", "false");
+
+    await burger.click();
+    await expect(burger).toHaveAttribute("aria-expanded", "false");
+    await expect(sidebar).toHaveAttribute("aria-hidden", "true");
+    await expect(sidebar).toHaveAttribute("inert", "");
+    /* focus was already on the burger when it closed the drawer itself —
+       it must stay there, not jump anywhere else */
+    await expect(burger).toBeFocused();
+  });
+
+  test("8h. the burger's accessible name reflects open/closed state", async ({ app }) => {
+    const burger = app.locator("#burgerBtn");
+    await expect(burger).toHaveAttribute("aria-label", "Ouvrir le menu");
+    await burger.click();
+    await expect(burger).toHaveAttribute("aria-label", "Fermer le menu");
+    await burger.click();
+    await expect(burger).toHaveAttribute("aria-label", "Ouvrir le menu");
+  });
+
   test("8f. touch targets on key controls are at least 44px", async ({ app }) => {
     const targets = ["#burgerBtn", "#themeBtn", "#langBtn", "#heroFavBtn"];
     for (const sel of targets) {

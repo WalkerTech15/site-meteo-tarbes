@@ -80,7 +80,7 @@
     padding: 0 var(--s-2);
     gap: var(--s-2);
   }
-  .nav-burger {
+  .icon-btn.nav-burger {
     display: inline-flex;
   }
   .shell {

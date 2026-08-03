@@ -4,7 +4,7 @@ import { state } from "../core/state.js";
 import { $, $$ } from "../core/dom.js";
 import { setStr, KEYS } from "../core/storage.js";
 import { applyStaticI18n } from "../core/i18n.js";
-import { syncSegToggle } from "../ui/navigation.js";
+import { syncSegToggle, syncSidebarA11y } from "../ui/navigation.js";
 import { renderChart, renderExplore } from "../ui/render-home.js";
 import { renderFavorites } from "../ui/render-favorites.js";
 import { renderAllWeather } from "./location.js";
@@ -106,6 +106,10 @@ export function setLang(lang) {
   );
   updateSettingsUI();
   applyStaticI18n();
+  /* applyStaticI18n() just reset the burger's aria-label to its static
+     data-i18n-aria fallback ("openMenu") — reassert the real open/closed
+     wording in case the drawer is currently open. */
+  syncSidebarA11y();
   /* toggle labels change width with the language — realign the thumb */
   syncSegToggle($("#modeToggle"), "mode", state.mode);
   syncSegToggle($("#modeToggleSide"), "mode", state.mode);

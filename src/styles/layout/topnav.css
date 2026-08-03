@@ -105,6 +105,12 @@ body[data-theme="dark"] .topnav {
   font-weight: 600;
 }
 
-.nav-burger {
+/* `.icon-btn` (components/buttons.css) sets its own unconditional
+   `display: inline-flex` and loads AFTER this file in main.css's cascade —
+   same specificity, later source order wins, so a bare `.nav-burger` rule
+   here would lose and the button would stay visible at every width. The
+   compound selector outranks it without needing `!important` or touching
+   the shared `.icon-btn` component. */
+.icon-btn.nav-burger {
   display: none;
 }

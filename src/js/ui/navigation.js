@@ -2,6 +2,7 @@
    by the mode switch (nav + sidebar) and settings unit chips. */
 import { state } from "../core/state.js";
 import { $, $$ } from "../core/dom.js";
+import { t } from "../core/i18n.js";
 import { closeThemeMenu } from "../features/settings.js";
 import { renderMap } from "../features/map.js";
 import { loadFavWeather } from "../features/favorites.js";
@@ -58,15 +59,18 @@ function drawerFocusables() {
    breakpoint change, so the two modes can never disagree. */
 export function syncSidebarA11y() {
   const sidebar = $("#sidebar");
+  const burger = $("#burgerBtn");
   const open = sidebar.classList.contains("is-open");
   if (isDrawerMode()) {
     sidebar.inert = !open;
     sidebar.setAttribute("aria-hidden", String(!open));
-    $("#burgerBtn").setAttribute("aria-expanded", String(open));
+    burger.setAttribute("aria-expanded", String(open));
+    burger.setAttribute("aria-label", t(open ? "closeMenu" : "openMenu"));
   } else {
     sidebar.inert = false;
     sidebar.removeAttribute("aria-hidden");
-    $("#burgerBtn").setAttribute("aria-expanded", "false");
+    burger.setAttribute("aria-expanded", "false");
+    burger.setAttribute("aria-label", t("openMenu"));
   }
 }
 
@@ -93,6 +97,15 @@ export function closeSidebar() {
     $("#burgerBtn").focus();
   }
   syncSidebarA11y();
+}
+
+/* The burger's own click handler — open/closeSidebar stay the single source
+   of truth for state changes triggered elsewhere (nav-item selection, Escape,
+   the scrim), so this only decides which of the two to call. */
+export function toggleSidebar() {
+  const sidebar = $("#sidebar");
+  if (sidebar.classList.contains("is-open")) closeSidebar();
+  else openSidebar();
 }
 
 export function bindSidebarA11y() {

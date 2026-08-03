@@ -24,7 +24,7 @@ import { resizeMaps, bindMapLayerControls, bindCountryFilters } from "./features
 import { selectLocation } from "./features/location.js";
 import {
   switchView,
-  openSidebar,
+  toggleSidebar,
   closeSidebar,
   bindSidebarA11y,
   positionThumb,
@@ -168,7 +168,7 @@ $("#logoLink").addEventListener("click", (e) => {
   e.preventDefault();
   switchView("home");
 });
-$("#burgerBtn").addEventListener("click", openSidebar);
+$("#burgerBtn").addEventListener("click", toggleSidebar);
 $("#sidebarScrim").addEventListener("click", () => closeSidebar());
 bindSidebarA11y();
 
