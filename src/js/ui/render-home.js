@@ -514,23 +514,93 @@ export function renderHomeHourly() {
     .join("");
 }
 
+/* Explore cards are 220px wide (180px on phones), so the browser must not be
+   told to reach for the 1880px candidate the hero uses. */
+const EXPLORE_PHOTO_SIZES = "(max-width: 720px) 180px, 220px";
+/* Ten cards would otherwise open ten connections at once and starve the
+   weather requests the page actually needs first. */
+const MAX_PARALLEL_PHOTOS = 3;
+
+let exploreObserver = null;
+let photoRunning = 0;
+const photoQueue = [];
+
+function pumpPhotoQueue() {
+  while (photoRunning < MAX_PARALLEL_PHOTOS && photoQueue.length) {
+    const job = photoQueue.shift();
+    photoRunning++;
+    job().finally(() => {
+      photoRunning--;
+      pumpPhotoQueue();
+    });
+  }
+}
+
+function queueExplorePhoto(card) {
+  const loc = LOCATIONS.find((l) => l.id === card.dataset.loc);
+  const bg = card.querySelector(".explore-bg");
+  if (!loc || !bg || bg.classList.contains("has-photo")) return;
+  photoQueue.push(() =>
+    /* raceGuard off: these cards show their own fixed place, so selecting a
+       different location must not cancel them. The photo service dedupes and
+       caches by query, so a re-render (language switch) costs no request. */
+    hydrateLocPhoto(bg, loc, {
+      raceGuard: false,
+      decorative: true /* the card's button already names the place */,
+      sizes: EXPLORE_PHOTO_SIZES,
+      creditHost: card,
+      creditClass: "explore-credit",
+    }),
+  );
+  pumpPhotoQueue();
+}
+
+/* Photos load only for cards at or near the viewport — the carousel scrolls
+   horizontally and usually shows three of ten. Never blocks the render: the
+   cards are already on screen with their gradient and emoji. */
+function hydrateExploreCards() {
+  exploreObserver?.disconnect();
+  photoQueue.length = 0;
+  const cards = $$("#exploreCarousel .explore-card");
+  if (typeof IntersectionObserver !== "function") {
+    cards.forEach(queueExplorePhoto); // no observer support → just load them
+    return;
+  }
+  exploreObserver = new IntersectionObserver(
+    (entries, obs) => {
+      for (const entry of entries) {
+        if (!entry.isIntersecting) continue;
+        obs.unobserve(entry.target); // one request per card, ever
+        queueExplorePhoto(entry.target);
+      }
+    },
+    { rootMargin: "200px" },
+  );
+  cards.forEach((card) => exploreObserver.observe(card));
+}
+
 export function renderExplore() {
   $("#exploreCarousel").innerHTML = EXPLORE_IDS.map((id) => {
     const loc = LOCATIONS.find((l) => l.id === id);
+    /* A container, not a <button>: the Pexels credit is a link, and a link
+       inside a button is invalid and unreachable by keyboard. The open control
+       is a real sibling button covering the card, exactly like a favorite. */
     return `
-      <button class="explore-card" data-loc="${esc(loc.id)}" aria-label="${esc(locAccessibleName(loc))}">
-        <span class="explore-bg" style="${gradBg(loc)}" aria-hidden="true"></span>
+      <article class="explore-card" data-loc="${esc(loc.id)}">
+        <span class="explore-bg loc-photo" style="${gradBg(loc)}" aria-hidden="true"></span>
         <span class="explore-emoji" aria-hidden="true">${locVisual(loc)}</span>
         <span class="explore-txt">
           <span class="explore-name">${esc(locName(loc))}</span>
           <span class="explore-country">${flagsHtml(loc, "small")} ${loc.kind === "country" ? kindLabel(loc.kind) : esc(locCountry(loc))}</span>
         </span>
-      </button>`;
+        <button class="explore-open" type="button" aria-label="${esc(locAccessibleName(loc))}"></button>
+      </article>`;
   }).join("");
-  $$(".explore-card").forEach((card) =>
-    card.addEventListener("click", () => {
-      selectLocation(LOCATIONS.find((l) => l.id === card.dataset.loc));
+  $$("#exploreCarousel .explore-open").forEach((btn) =>
+    btn.addEventListener("click", () => {
+      selectLocation(LOCATIONS.find((l) => l.id === btn.closest(".explore-card").dataset.loc));
       switchView("home");
     }),
   );
+  hydrateExploreCards();
 }

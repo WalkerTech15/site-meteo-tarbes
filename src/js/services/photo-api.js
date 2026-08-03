@@ -47,6 +47,7 @@ export function locVisual(loc) {
    never an ambiguous city name alone)  3) the SVG/gradient fallback above.
    Async, race-guarded (photoToken), and cached (incl. negative results). */
 const PHOTO_CACHE = new Map(); // query → {src, sizes, photographer, link, alt} | null
+const IN_FLIGHT = new Map(); // query → Promise, so N cards asking at once = 1 request
 let photoToken = 0; // bumped per location change → ignore stale swaps
 export function bumpPhotoToken() {
   photoToken++;
@@ -56,18 +57,29 @@ export function bumpPhotoToken() {
    each unit test needs to start from empty. */
 export function __resetPhotoCacheForTests() {
   PHOTO_CACHE.clear();
+  IN_FLIGHT.clear();
 }
 
+/* Places that photograph like a townscape; everything else (countries, states,
+   provinces, regions) reads better as scenery. */
+const CITYSCAPE_KINDS = new Set(["city", "town", "village", "address", "poi"]);
+
+/* A bare city name is ambiguous to an image search — "Paris" returns Paris,
+   Texas as readily as Paris, France, and "Tarbes" returns nothing recognisable.
+   Qualify it with the canonical region and country from the geocoder, plus the
+   kind of imagery wanted, e.g.
+     "Tarbes Occitanie France city skyline landmark"
+     "Japan Asia Japan landscape travel"  */
 export function pexelsQuery(loc) {
+  if (!loc) return "";
   const name = (loc.name && (loc.name.en || loc.name.fr)) || "";
+  if (!name) return "";
   const region = (loc.region && loc.region.en) || "";
   const country = (loc.country && loc.country.en) || locCountry(loc) || "";
-  const suffix = loc.landmark
-    ? "landmark"
-    : loc.kind === "city" || loc.kind === "village"
-      ? "skyline"
-      : "landscape";
-  return [name, region, country, suffix].filter(Boolean).join(" ");
+  const suffix = CITYSCAPE_KINDS.has(loc.kind) ? "city skyline landmark" : "landscape travel";
+  /* a country's country is itself — don't say it twice */
+  const parts = loc.kind === "country" ? [name, region] : [name, region, country];
+  return [...parts, suffix].filter(Boolean).join(" ");
 }
 
 /* Asks the SAME-ORIGIN proxy for a photo — never Pexels directly, because that
@@ -78,9 +90,19 @@ export function pexelsQuery(loc) {
    Every non-200 (and every malformed 200) is treated identically: no photo, so
    the caller keeps its gradient/emoji fallback. Failures are negative-cached so
    a rate-limited or unconfigured deployment isn't hammered for the session. */
-export async function fetchPexelsPhoto(query) {
-  if (!query) return null;
-  if (PHOTO_CACHE.has(query)) return PHOTO_CACHE.get(query);
+export function fetchPexelsPhoto(query) {
+  if (!query) return Promise.resolve(null);
+  if (PHOTO_CACHE.has(query)) return Promise.resolve(PHOTO_CACHE.get(query));
+  /* The cache is only written once the response lands, so without this a row of
+     cards hydrating together would each fire the same request. */
+  const pending = IN_FLIGHT.get(query);
+  if (pending) return pending;
+  const run = requestPhoto(query).finally(() => IN_FLIGHT.delete(query));
+  IN_FLIGHT.set(query, run);
+  return run;
+}
+
+async function requestPhoto(query) {
   try {
     const url = `${PEXELS_PROXY_URL}?query=${encodeURIComponent(query)}`;
     const r = await fetch(url, {
@@ -157,22 +179,28 @@ export async function hydrateLocPhoto(el, loc, opts = {}) {
   if (!el || !loc) return;
   const token = photoToken;
   const creditHost = opts.creditHost || el;
+  const sizesAttr = opts.sizes || PEXELS_SIZES_ATTR;
+  /* The token guards the ONE visual that tracks the selected location (hero,
+     map info): a new selection must cancel the previous fetch's swap. Cards
+     that show a fixed place of their own — the explore carousel — opt out, or
+     picking a location mid-load would leave them stuck on the fallback. */
+  const stale = () => opts.raceGuard !== false && token !== photoToken;
   const done = () => {
-    if (token === photoToken) el.classList.remove("loading");
+    if (!stale()) el.classList.remove("loading");
   };
   /* `photo` is null for local/curated images — that's what suppresses the credit */
   const swap = (src, photo) => {
-    if (token !== photoToken || !src) return done();
+    if (stale() || !src) return done();
     const srcset = photo ? pexelsSrcset(photo.sizes) : "";
     const pre = new Image();
     /* preload through the same srcset/sizes the real <img> will use, so the
        candidate the browser picks is already cached when we swap it in */
     if (srcset) {
-      pre.sizes = PEXELS_SIZES_ATTR;
+      pre.sizes = sizesAttr;
       pre.srcset = srcset;
     }
     pre.onload = () => {
-      if (token !== photoToken) return;
+      if (stale()) return;
       let img = el.querySelector("img.loc-photo-img");
       if (!img) {
         img = document.createElement("img");
@@ -183,9 +211,9 @@ export async function hydrateLocPhoto(el, loc, opts = {}) {
       /* Pexels supplies a description ("Eiffel Tower at dusk"); curated and
          fallback visuals stay decorative with an empty alt. Assigned via the
          property, so the value is escaped by the DOM rather than by us. */
-      img.alt = (photo && photo.alt) || "";
+      img.alt = opts.decorative ? "" : (photo && photo.alt) || "";
       if (srcset) {
-        img.sizes = PEXELS_SIZES_ATTR;
+        img.sizes = sizesAttr;
         img.srcset = srcset;
       }
       img.src = src;
@@ -204,7 +232,7 @@ export async function hydrateLocPhoto(el, loc, opts = {}) {
   } catch {
     return done();
   }
-  if (token !== photoToken) return;
+  if (stale()) return;
   if (photo && photo.src) swap(photo.src, photo);
   else done(); // keep gradient/SVG fallback
 }

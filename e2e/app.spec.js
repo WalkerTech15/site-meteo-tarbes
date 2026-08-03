@@ -129,18 +129,19 @@ test.describe("bilingual accessible names", () => {
   });
 
   test("12. a country card is not named twice", async ({ app }) => {
-    const franceCard = app.locator('.explore-card[data-loc="france"]');
+    /* the card is a container; its accessible name lives on the open button */
+    const franceCard = app.locator('.explore-card[data-loc="france"] .explore-open');
     await expect(franceCard).toHaveAttribute("aria-label", "France, pays");
 
     await setLang(app, "en");
     await expect(franceCard).toHaveAttribute("aria-label", "France, country");
     /* the duplication this replaces */
-    await expect(app.locator('.explore-card[aria-label="France, France"]')).toHaveCount(0);
-    await expect(app.locator('.explore-card[aria-label="Japan, Japan"]')).toHaveCount(0);
-    await expect(app.locator('.explore-card[aria-label="Vietnam, Vietnam"]')).toHaveCount(0);
+    await expect(app.locator('.explore-open[aria-label="France, France"]')).toHaveCount(0);
+    await expect(app.locator('.explore-open[aria-label="Japan, Japan"]')).toHaveCount(0);
+    await expect(app.locator('.explore-open[aria-label="Vietnam, Vietnam"]')).toHaveCount(0);
 
     /* cities keep place + country */
-    await expect(app.locator('.explore-card[data-loc="tokyo"]')).toHaveAttribute(
+    await expect(app.locator('.explore-card[data-loc="tokyo"] .explore-open')).toHaveAttribute(
       "aria-label",
       "Tokyo, Japan",
     );
@@ -182,6 +183,142 @@ test.describe("bilingual accessible names", () => {
       "aria-label",
       "Map marker",
     );
+  });
+});
+
+/* The explore carousel shows a real photograph per city, hydrated lazily after
+   the cards are already on screen. */
+test.describe("explore carousel photos", () => {
+  const proxyQueries = (page) => {
+    const seen = [];
+    page.on("request", (r) => {
+      const url = new URL(r.url());
+      if (url.pathname.endsWith("/api/pexels.php")) seen.push(url.searchParams.get("query"));
+    });
+    return seen;
+  };
+  const card = (page, id) => page.locator(`.explore-card[data-loc="${id}"]`);
+
+  test("14. each card asks for its own precise query, never a bare city name", async ({ page }) => {
+    const queries = proxyQueries(page);
+    await installMocks(page);
+    await page.goto("/");
+    await expect(page.locator("#heroCityName")).not.toBeEmpty();
+
+    /* nothing loads until the carousel is near the viewport */
+    expect(queries.some((q) => q.includes("Tokyo"))).toBe(false);
+
+    await page.locator("#exploreCarousel").scrollIntoViewIfNeeded();
+    await expect(card(page, "losangeles").locator("img.loc-photo-img")).toHaveCount(1);
+    /* the carousel scrolls sideways: cards past its right edge still wait */
+    expect(queries.some((q) => q.includes("Japan"))).toBe(false);
+
+    for (const id of ["tokyo", "japan"]) {
+      await card(page, id).scrollIntoViewIfNeeded();
+      await expect(card(page, id).locator("img.loc-photo-img")).toHaveCount(1);
+    }
+
+    expect(queries).toContain("Paris Île-de-France France city skyline landmark");
+    expect(queries).toContain("Tokyo Kantō Japan city skyline landmark");
+    /* countries ask for scenery instead */
+    expect(queries).toContain("Japan East Asia landscape travel");
+    /* no query is ever just a place name */
+    for (const q of queries) expect(q.split(" ").length).toBeGreaterThan(2);
+    /* and no card asks twice */
+    expect(new Set(queries).size).toBe(queries.length);
+  });
+
+  test("15. the photo replaces the emoji, with a credit", async ({ page }) => {
+    await installMocks(page);
+    await page.goto("/");
+    await expect(page.locator("#heroCityName")).not.toBeEmpty();
+    await page.locator("#exploreCarousel").scrollIntoViewIfNeeded();
+
+    const paris = card(page, "paris");
+    await expect(paris.locator(".explore-bg.has-photo")).toHaveCount(1);
+    await expect(paris.locator("img.loc-photo-img")).toHaveCSS("opacity", "1");
+    /* the emoji placeholder steps aside once the photograph is in */
+    await expect(paris.locator(".explore-emoji")).toHaveCSS("opacity", "0");
+
+    /* the photo is decorative: the card's button already names the place */
+    await expect(paris.locator("img.loc-photo-img")).toHaveAttribute("alt", "");
+    await expect(paris.locator(".explore-open")).toHaveAttribute("aria-label", "Paris, France");
+
+    const credit = paris.locator("a.explore-credit");
+    await expect(credit).toBeVisible();
+    await expect(credit).toContainText(PEXELS_PHOTOGRAPHER);
+    await expect(credit).toContainText("Pexels");
+    await expect(credit).toHaveAttribute("target", "_blank");
+    await expect(credit).toHaveAttribute("rel", "noopener noreferrer");
+    await expect(credit).toHaveAttribute("href", /^https:\/\/www\.pexels\.com\//);
+  });
+
+  test("16. clicking a card still opens that location", async ({ page }) => {
+    await installMocks(page);
+    await page.goto("/");
+    await expect(page.locator("#heroCityName")).not.toBeEmpty();
+    await page.locator("#exploreCarousel").scrollIntoViewIfNeeded();
+
+    await card(page, "tokyo").locator(".explore-open").click();
+    await expect(page.locator("#view-home")).toBeVisible();
+    await expect(page.locator("#heroCityName")).toContainText("Tokyo");
+  });
+
+  test("17. a failing proxy leaves the emoji and gradient in place", async ({ page }) => {
+    await installMocks(page, {
+      photoProxy: (route) =>
+        route.fulfill({
+          status: 503,
+          contentType: "application/json",
+          body: JSON.stringify({ error: "unavailable" }),
+        }),
+    });
+    await page.goto("/");
+    await expect(page.locator("#heroCityName")).not.toBeEmpty();
+    await page.locator("#exploreCarousel").scrollIntoViewIfNeeded();
+    await page.waitForTimeout(500);
+
+    await expect(page.locator("#exploreCarousel .explore-bg.has-photo")).toHaveCount(0);
+    await expect(page.locator("#exploreCarousel img.loc-photo-img")).toHaveCount(0);
+    /* no photo → no attribution, and the emoji is still the visual */
+    await expect(page.locator("#exploreCarousel .loc-credit")).toHaveCount(0);
+    await expect(card(page, "paris").locator(".explore-emoji")).toHaveCSS("opacity", "0.85");
+    await expect(card(page, "paris")).toBeVisible();
+  });
+
+  /* The carousel is a fixed list; it must not start following the search box,
+     and the hero must keep tracking the location the user actually chose. */
+  test("19. the hero photo follows the searched city, the carousel does not", async ({ page }) => {
+    const queries = proxyQueries(page);
+    await installMocks(page);
+    await page.goto("/");
+    await expect(page.locator("#heroCityName")).not.toBeEmpty();
+
+    await page.locator("#searchInput").fill(GEOCODE_LABEL);
+    await page.locator("#searchResults .search-item").first().click();
+    await expect(page.locator("#heroCityName")).toContainText(GEOCODE_LABEL);
+
+    await expect
+      .poll(() => queries.some((q) => q.startsWith(`${GEOCODE_LABEL} `) && q.includes("Iceland")))
+      .toBe(true);
+    /* the explore list is unchanged — still the same ten curated places */
+    await expect(page.locator("#exploreCarousel .explore-card")).toHaveCount(10);
+    await expect(page.locator(`.explore-card[data-loc="paris"] .explore-open`)).toHaveAttribute(
+      "aria-label",
+      "Paris, France",
+    );
+  });
+
+  test("18. the carousel never talks to Pexels directly", async ({ page }) => {
+    const requested = [];
+    page.on("request", (r) => requested.push(r.url()));
+    await installMocks(page);
+    await page.goto("/");
+    await page.locator("#exploreCarousel").scrollIntoViewIfNeeded();
+    await expect(page.locator("#exploreCarousel img.loc-photo-img").first()).toHaveCount(1);
+
+    expect(requested.some((u) => u.includes("/api/pexels.php?query="))).toBe(true);
+    expect(requested.some((u) => u.includes("api.pexels.com"))).toBe(false);
   });
 });
 

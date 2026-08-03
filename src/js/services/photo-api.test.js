@@ -5,7 +5,8 @@
  * photo" for every failure mode the proxy can report. `fetch` is stubbed, so
  * nothing here touches the network. */
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
-import { fetchPexelsPhoto, __resetPhotoCacheForTests } from "./photo-api.js";
+import { fetchPexelsPhoto, pexelsQuery, __resetPhotoCacheForTests } from "./photo-api.js";
+import { state } from "../core/state.js";
 
 const PROXY_PATH = "api/pexels.php";
 
@@ -148,5 +149,106 @@ describe("fetchPexelsPhoto — proxy contract", () => {
     const calls = stubFetch(() => jsonResponse(200, { photo: null }));
     await expect(fetchPexelsPhoto("")).resolves.toBeNull();
     expect(calls).toHaveLength(0);
+  });
+
+  /* The cache is only written once a response lands, so ten explore cards
+     hydrating together would each fire the same request without this. */
+  it("collapses concurrent requests for the same query into one", async () => {
+    let resolveIt;
+    const gate = new Promise((r) => (resolveIt = r));
+    const calls = stubFetch(async () => {
+      await gate;
+      return jsonResponse(200, {
+        photo: { src: { large: "https://images.pexels.com/l.jpg" }, photographer: "A", link: "" },
+      });
+    });
+
+    const all = Promise.all([
+      fetchPexelsPhoto("Paris Île-de-France France city skyline landmark"),
+      fetchPexelsPhoto("Paris Île-de-France France city skyline landmark"),
+      fetchPexelsPhoto("Paris Île-de-France France city skyline landmark"),
+    ]);
+    resolveIt();
+    const [a, b, c] = await all;
+
+    expect(calls).toHaveLength(1);
+    expect(a).toBe(b);
+    expect(b).toBe(c);
+  });
+
+  it("releases the in-flight slot so a later miss can still be retried", async () => {
+    const calls = stubFetch(() => {
+      throw new TypeError("network down");
+    });
+    await fetchPexelsPhoto("Lyon Auvergne-Rhône-Alpes France city skyline landmark");
+    await fetchPexelsPhoto("Nice Provence France city skyline landmark");
+    expect(calls).toHaveLength(2); // two distinct queries, neither stuck pending
+  });
+});
+
+/* An image search on a bare city name is ambiguous — "Paris" is as likely to
+   return Paris, Texas, and "Tarbes" returns nothing recognisable at all. */
+describe("pexelsQuery — precise, unambiguous queries", () => {
+  const TARBES = {
+    kind: "city",
+    cc: "FR",
+    name: { en: "Tarbes", fr: "Tarbes" },
+    region: { en: "Occitanie" },
+    country: { en: "France" },
+  };
+  const TOKYO = {
+    kind: "city",
+    cc: "JP",
+    name: { en: "Tokyo", fr: "Tokyo" },
+    region: { en: "Kanto" },
+    country: { en: "Japan" },
+  };
+  const JAPAN = {
+    kind: "country",
+    cc: "JP",
+    name: { en: "Japan", fr: "Japon" },
+    region: { en: "Asia" },
+    country: { en: "Japan" },
+  };
+
+  it("qualifies a city with its region, country and the imagery wanted", () => {
+    expect(pexelsQuery(TARBES)).toBe("Tarbes Occitanie France city skyline landmark");
+  });
+
+  it("asks for scenery, not a skyline, for a country — and never repeats it", () => {
+    expect(pexelsQuery(JAPAN)).toBe("Japan Asia landscape travel");
+  });
+
+  it("gives two different cities two different queries", () => {
+    expect(pexelsQuery(TARBES)).not.toBe(pexelsQuery(TOKYO));
+    expect(pexelsQuery(TOKYO)).toBe("Tokyo Kanto Japan city skyline landmark");
+  });
+
+  it("never returns a bare place name", () => {
+    for (const loc of [TARBES, TOKYO, JAPAN]) {
+      expect(pexelsQuery(loc).split(" ").length).toBeGreaterThan(2);
+    }
+  });
+
+  it("stays in English so the cache is shared between both interfaces", () => {
+    const original = state.lang;
+    try {
+      state.lang = "fr";
+      const inFrench = pexelsQuery(TOKYO);
+      state.lang = "en";
+      expect(pexelsQuery(TOKYO)).toBe(inFrench);
+    } finally {
+      state.lang = original;
+    }
+  });
+
+  it("returns an empty query for an unusable location, so no request is made", () => {
+    expect(pexelsQuery(null)).toBe("");
+    expect(pexelsQuery({ kind: "city", name: {} })).toBe("");
+  });
+
+  it("survives a geocoder result with no region or country", () => {
+    const sparse = { kind: "city", name: { en: "Springfield" }, region: {}, country: {} };
+    expect(pexelsQuery(sparse)).toBe("Springfield city skyline landmark");
   });
 });

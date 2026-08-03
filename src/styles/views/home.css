@@ -695,11 +695,44 @@ body[data-mode="simple"] .home-duo {
   line-height: 1;
   opacity: 0.85;
   transform: rotate(-6deg);
-  transition: transform 0.45s var(--ease);
+  transition:
+    transform 0.45s var(--ease),
+    opacity 0.45s ease;
   user-select: none;
 }
 .explore-card:hover .explore-emoji {
   transform: rotate(0deg) scale(1.08);
+}
+/* the emoji is the placeholder — once a real photo has faded in, it steps aside */
+.explore-bg.has-photo ~ .explore-emoji {
+  opacity: 0;
+}
+
+/* Full-card open control. Transparent and on top, so the whole card stays
+   clickable while the name, flags and credit below it stay visible. */
+.explore-open {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  border-radius: inherit;
+}
+.explore-open:focus-visible {
+  outline: 3px solid #fff;
+  outline-offset: -4px;
+}
+/* Above the open button, so the photographer's link is actually clickable.
+   Top-right, clear of the name/country block in the bottom corner. */
+.explore-credit {
+  top: 0;
+  right: 0;
+  bottom: auto;
+  z-index: 2;
+  /* quieter than the hero's credit — these cards are only 220px wide */
+  max-width: calc(100% - 10px);
+  padding: 3px 7px;
+  font-size: 9.5px;
+  background: rgba(2, 6, 23, 0.38);
+  border-radius: 0 var(--r-md) 0 8px;
 }
 .explore-txt {
   position: absolute;
