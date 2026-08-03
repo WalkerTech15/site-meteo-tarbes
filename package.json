@@ -18,7 +18,8 @@
     "lint:fix": "eslint . --fix && stylelint \"src/**/*.css\" --fix",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
-    "check": "npm run lint && npm run format:check && npm run test && npm run build",
+    "verify:secrets": "node scripts/verify-no-secrets.mjs",
+    "check": "npm run lint && npm run format:check && npm run test && npm run build && npm run verify:secrets",
     "optimize:flags": "svgo -rf public/assets/flags --multipass"
   },
   "dependencies": {

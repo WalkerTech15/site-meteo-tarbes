@@ -37,6 +37,16 @@ export default [
     },
   },
   {
+    /* Build tooling: the Vite config (including the dev-only Pexels proxy
+       middleware) and the release scripts are Node programs. */
+    files: ["vite.config.js", "scripts/**/*.{js,mjs}"],
+    languageOptions: {
+      globals: {
+        ...globals.node,
+      },
+    },
+  },
+  {
     ignores: ["dist/**", "node_modules/**", "public/**", "test-results/**", "playwright-report/**"],
   },
 ];

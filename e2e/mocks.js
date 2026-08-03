@@ -105,18 +105,22 @@ function maptilerGeocodePayload() {
 
 export const PEXELS_PHOTOGRAPHER = "Ada Lovelace";
 export const PEXELS_LINK = "https://www.pexels.com/photo/test-12345/";
+export const PEXELS_ALT = "A city skyline at dusk";
 /* 1×1 transparent GIF — a real, instantly-decodable image so the <img> load
    handler fires and the fade/has-photo path is genuinely exercised. */
 const PIXEL = "data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7";
-function pexelsPayload() {
+
+/* The browser now talks to the SAME-ORIGIN proxy (/api/pexels.php), never to
+   Pexels — the key lives on the server. So this is the proxy's response shape,
+   not Pexels': {"photo": {...}} | {"photo": null}. */
+export function photoProxyPayload() {
   return {
-    photos: [
-      {
-        url: PEXELS_LINK,
-        photographer: PEXELS_PHOTOGRAPHER,
-        src: { large: PIXEL, large2x: PIXEL, medium: PIXEL },
-      },
-    ],
+    photo: {
+      src: { medium: PIXEL, large: PIXEL, large2x: PIXEL },
+      photographer: PEXELS_PHOTOGRAPHER,
+      link: PEXELS_LINK,
+      alt: PEXELS_ALT,
+    },
   };
 }
 
@@ -140,7 +144,7 @@ const json = (body) => ({
 /* ── Installer ─────────────────────────────────────────────────────────── */
 
 export async function installMocks(page, overrides = {}) {
-  const { weatherStatus = 200 } = overrides;
+  const { weatherStatus = 200, photoProxy } = overrides;
 
   /* Registered FIRST on purpose: Playwright resolves routes in reverse
      registration order, so the specific handlers below override this one.
@@ -171,10 +175,25 @@ export async function installMocks(page, overrides = {}) {
     route.fulfill(json(maptilerGeocodePayload())),
   );
   await page.route("**://api.bigdatacloud.net/**", (route) => route.fulfill(json({})));
-  await page.route("**://api.pexels.com/**", (route) => route.fulfill(json(pexelsPayload())));
   /* the Inter webfont is a third-party request too — block it so runs are
      offline-clean and don't wait on rsms.me */
   await page.route("**://rsms.me/**", (route) => route.abort());
+
+  /* The photo proxy is SAME-ORIGIN, so the cross-origin catch-all above would
+     let it through to the real dev middleware — and that middleware holds a
+     real key. Intercept it explicitly: no test may ever reach Pexels.
+     `photoProxy` lets a test choose the status/body to simulate 429/502/503. */
+  await page.route("**/api/pexels.php*", (route) => {
+    if (typeof photoProxy === "function") return photoProxy(route);
+    return route.fulfill(json(photoProxyPayload()));
+  });
+
+  /* Belt and braces: if a future change ever calls Pexels from the browser
+     again, fail loudly instead of silently succeeding. */
+  await page.route("**://api.pexels.com/**", (route) => {
+    console.warn("[e2e] BLOCKED direct browser call to api.pexels.com");
+    return route.abort();
+  });
 }
 
 /* `app` fixture: mocks installed, storage clean, home view rendered. */

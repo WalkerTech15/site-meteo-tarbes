@@ -6,16 +6,31 @@ Options -Indexes
 # Serve index.html for the root
 DirectoryIndex index.html
 
-# Do not serve local secret files if they are ever uploaded by mistake
+# Do not serve local secret files if they are ever uploaded by mistake.
+# The real production secret belongs OUTSIDE public_html (see README
+# "Deploying to Hostinger"); these rules are the safety net for the case where
+# someone drops a copy in the web root anyway.
 <FilesMatch "^\.env">
   Require all denied
 </FilesMatch>
+<FilesMatch "(^|-)secrets?(-|\.)">
+  Require all denied
+</FilesMatch>
+
+# The Pexels proxy must never be cached at the edge with its query string
+# stripped, and it sets its own Cache-Control per response.
+<IfModule mod_headers.c>
+  <FilesMatch "^pexels\.php$">
+    Header always set X-Content-Type-Options "nosniff"
+    Header always unset Access-Control-Allow-Origin
+  </FilesMatch>
+</IfModule>
 
 # Baseline security headers
 <IfModule mod_headers.c>
   # Never let the browser guess a MIME type different from the declared one
   Header set X-Content-Type-Options "nosniff"
-  # Don't leak the full URL to third-party APIs (Open-Meteo, MapTiler, Pexels)
+  # Don't leak the full URL to third-party APIs (Open-Meteo, MapTiler)
   Header set Referrer-Policy "strict-origin-when-cross-origin"
   # The site is never meant to be framed by another page
   Header set X-Frame-Options "SAMEORIGIN"

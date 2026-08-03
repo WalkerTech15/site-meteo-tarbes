@@ -2,7 +2,7 @@
    with an optional real photo fetched from Pexels layered on top once it
    loads (never blocking the initial render, never causing layout shift). */
 import { state } from "../core/state.js";
-import { PEXELS_KEY, FETCH_TIMEOUT_MS } from "../core/config.js";
+import { PEXELS_PROXY_URL, FETCH_TIMEOUT_MS } from "../core/config.js";
 import { flagHtml } from "../data/flags.js";
 import { locCountry } from "../core/location.js";
 import { t } from "../core/i18n.js";
@@ -46,10 +46,16 @@ export function locVisual(loc) {
    1) curated local image  2) Pexels (query built from full geocoding metadata,
    never an ambiguous city name alone)  3) the SVG/gradient fallback above.
    Async, race-guarded (photoToken), and cached (incl. negative results). */
-const PHOTO_CACHE = new Map(); // query → {src, photographer, link} | null
+const PHOTO_CACHE = new Map(); // query → {src, sizes, photographer, link, alt} | null
 let photoToken = 0; // bumped per location change → ignore stale swaps
 export function bumpPhotoToken() {
   photoToken++;
+}
+
+/* Test seam only: the cache is intentionally process-lifetime in the app, but
+   each unit test needs to start from empty. */
+export function __resetPhotoCacheForTests() {
+  PHOTO_CACHE.clear();
 }
 
 export function pexelsQuery(loc) {
@@ -64,29 +70,40 @@ export function pexelsQuery(loc) {
   return [name, region, country, suffix].filter(Boolean).join(" ");
 }
 
+/* Asks the SAME-ORIGIN proxy for a photo — never Pexels directly, because that
+   would require shipping the Pexels key to the browser. The proxy holds the key
+   server-side and answers with a narrow, already-validated shape:
+     200 {"photo": {...}} | {"photo": null}
+     400 invalid_query · 429 rate_limited · 502 upstream_error · 503 unavailable
+   Every non-200 (and every malformed 200) is treated identically: no photo, so
+   the caller keeps its gradient/emoji fallback. Failures are negative-cached so
+   a rate-limited or unconfigured deployment isn't hammered for the session. */
 export async function fetchPexelsPhoto(query) {
-  if (!PEXELS_KEY || !query) return null;
+  if (!query) return null;
   if (PHOTO_CACHE.has(query)) return PHOTO_CACHE.get(query);
   try {
-    const url =
-      `https://api.pexels.com/v1/search?query=${encodeURIComponent(query)}` +
-      `&orientation=landscape&per_page=1&size=medium`;
+    const url = `${PEXELS_PROXY_URL}?query=${encodeURIComponent(query)}`;
     const r = await fetch(url, {
-      headers: { Authorization: PEXELS_KEY },
+      headers: { Accept: "application/json" },
       signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
     });
-    if (!r.ok) throw new Error("HTTP " + r.status);
+    /* No branch per status code on purpose: 400/429/502/503 all mean the same
+       thing to the UI, and the response body is never surfaced to the user. */
+    if (!r.ok) throw new Error("proxy " + r.status);
     const d = await r.json();
-    const p = (d.photos || [])[0];
+    const p = d && d.photo;
     /* Keep every offered size so the browser — not this module — picks the one
-       that fits the viewport (see PEXELS_SIZES / srcset below). Fetching
-       large2x unconditionally shipped a ~1.9× wider image than a phone can use. */
-    const out = p
+       that fits the viewport (see pexelsSrcset below). Requesting large2x
+       unconditionally shipped a ~1.9× wider image than a phone can use. */
+    const sizes = (p && p.src) || {};
+    const src = sizes.large || sizes.medium || sizes.large2x || "";
+    const out = src
       ? {
-          src: (p.src && (p.src.large || p.src.medium || p.src.large2x)) || "",
-          sizes: p.src || {},
+          src,
+          sizes,
           photographer: p.photographer || "",
-          link: p.url || "",
+          link: p.link || "",
+          alt: p.alt || "",
         }
       : null;
     PHOTO_CACHE.set(query, out);
@@ -160,10 +177,13 @@ export async function hydrateLocPhoto(el, loc, opts = {}) {
       if (!img) {
         img = document.createElement("img");
         img.className = "loc-photo-img";
-        img.alt = "";
         img.decoding = "async";
         el.appendChild(img);
       }
+      /* Pexels supplies a description ("Eiffel Tower at dusk"); curated and
+         fallback visuals stay decorative with an empty alt. Assigned via the
+         property, so the value is escaped by the DOM rather than by us. */
+      img.alt = (photo && photo.alt) || "";
       if (srcset) {
         img.sizes = PEXELS_SIZES_ATTR;
         img.srcset = srcset;

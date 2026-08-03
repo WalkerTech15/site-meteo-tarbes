@@ -1,4 +1,11 @@
-import { test, expect, installMocks, GEOCODE_LABEL, PEXELS_PHOTOGRAPHER } from "./mocks.js";
+import {
+  test,
+  expect,
+  installMocks,
+  GEOCODE_LABEL,
+  PEXELS_PHOTOGRAPHER,
+  PEXELS_ALT,
+} from "./mocks.js";
 
 test.describe("home", () => {
   test("1. homepage loads with weather data and no console errors", async ({ app }) => {
@@ -149,6 +156,8 @@ test.describe("photo attribution", () => {
     await expect(credit).toHaveAttribute("target", "_blank");
     await expect(credit).toHaveAttribute("rel", "noopener noreferrer");
     await expect(credit).toHaveAttribute("href", /^https:\/\/www\.pexels\.com\//);
+    /* the proxy also forwards Pexels' description, used as the image's alt */
+    await expect(app.locator("#heroLandmark img.loc-photo-img")).toHaveAttribute("alt", PEXELS_ALT);
   });
 
   test("9b. the credit is in French, and switches with the interface language", async ({ app }) => {
@@ -164,20 +173,84 @@ test.describe("photo attribution", () => {
   });
 
   test("9c. no credit is rendered when the image is not from Pexels", async ({ page }) => {
-    /* Pexels returns nothing → the gradient/emoji fallback is used, and a
+    /* The proxy reports no match → the gradient/emoji fallback is used, and a
        fallback visual must never be credited to a photographer. */
-    await installMocks(page);
-    await page.route("**://api.pexels.com/**", (route) =>
-      route.fulfill({
-        status: 200,
-        contentType: "application/json",
-        body: JSON.stringify({ photos: [] }),
-      }),
-    );
+    await installMocks(page, {
+      photoProxy: (route) =>
+        route.fulfill({
+          status: 200,
+          contentType: "application/json",
+          body: JSON.stringify({ photo: null }),
+        }),
+    });
     await page.goto("/");
     await expect(page.locator("#heroCityName")).not.toBeEmpty();
 
     await expect(page.locator(".loc-photo.has-photo")).toHaveCount(0);
     await expect(page.locator(".loc-credit")).toHaveCount(0);
+  });
+
+  test("9d. the photo comes from the same-origin proxy, never from Pexels", async ({ page }) => {
+    const requested = [];
+    page.on("request", (r) => requested.push(r.url()));
+
+    await installMocks(page);
+    await page.goto("/");
+    await expect(page.locator("#heroInner .loc-credit")).toBeVisible();
+
+    /* the proxy was called... */
+    expect(requested.some((u) => u.includes("/api/pexels.php?query="))).toBe(true);
+    /* ...and the browser never went to Pexels itself, which is what would
+       require shipping the API key to client code */
+    expect(requested.some((u) => u.includes("api.pexels.com"))).toBe(false);
+  });
+});
+
+/* Task requirement 7: every way the proxy can fail must leave the user with the
+   existing gradient/emoji fallback and no server detail on screen. */
+test.describe("photo proxy failures", () => {
+  const failures = [
+    ["missing server secret", 503, { error: "unavailable" }],
+    ["Pexels rate limit", 429, { error: "rate_limited" }],
+    ["upstream failure", 502, { error: "upstream_error" }],
+    ["invalid query", 400, { error: "invalid_query" }],
+  ];
+
+  for (const [label, status, body] of failures) {
+    test(`7. ${label} (${status}) falls back without breaking the page`, async ({ page }) => {
+      const errors = [];
+      page.on("console", (m) => m.type() === "error" && errors.push(m.text()));
+
+      await installMocks(page, {
+        photoProxy: (route) =>
+          route.fulfill({
+            status,
+            contentType: "application/json",
+            body: JSON.stringify(body),
+          }),
+      });
+      await page.goto("/");
+
+      /* the app still renders completely */
+      await expect(page.locator("#heroCityName")).not.toBeEmpty();
+      await expect(page.locator(".hero-temp")).toContainText("°");
+      /* the fallback visual is what's shown, with no photo and no credit */
+      await expect(page.locator(".loc-photo.has-photo")).toHaveCount(0);
+      await expect(page.locator(".loc-credit")).toHaveCount(0);
+      /* and no server error text leaks into the UI */
+      await expect(page.locator("body")).not.toContainText(body.error);
+      expect(errors.filter((e) => !/Failed to load resource/i.test(e))).toEqual([]);
+    });
+  }
+
+  test("7b. a proxy that never answers falls back once the timeout fires", async ({ page }) => {
+    await installMocks(page, { photoProxy: (route) => route.abort() });
+    await page.goto("/");
+
+    await expect(page.locator("#heroCityName")).not.toBeEmpty();
+    await expect(page.locator(".loc-photo.has-photo")).toHaveCount(0);
+    await expect(page.locator(".loc-credit")).toHaveCount(0);
+    /* the skeleton shimmer must be cleared, not left spinning forever */
+    await expect(page.locator("#heroLandmark .loc-photo.loading")).toHaveCount(0);
   });
 });

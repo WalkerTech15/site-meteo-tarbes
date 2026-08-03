@@ -14,9 +14,9 @@
 
 **[Code]** WeatherSphere is a single-page weather dashboard built with vanilla JavaScript ES modules and Vite — no UI framework. It shows current conditions, hourly and 7-day forecasts, an interactive world map, a favourites list, and a settings page, in French and English, with light/dark theming.
 
-It draws on four public APIs (Open-Meteo for weather and air quality, MapTiler for maps and geocoding, Pexels for location photography) and stores all user preferences locally in the browser. There is no backend and no database: the entire application is static files.
+It draws on four public APIs (Open-Meteo for weather and air quality, MapTiler for maps and geocoding, Pexels for location photography) and stores all user preferences locally in the browser. There is no database and no user accounts. The app is static files plus **one server-side PHP endpoint**, which exists for exactly one reason: to keep the Pexels API key off the browser (see §15).
 
-**[Code]** The codebase is organised into five JavaScript layers (`core`, `data`, `services`, `features`, `ui`) and five CSS layers (`foundation`, `layout`, `components`, `views`, `utilities`), with 39 unit tests over the pure logic and 18 end-to-end browser tests over the user-facing behaviour.
+**[Code]** The codebase is organised into five JavaScript layers (`core`, `data`, `services`, `features`, `ui`) and five CSS layers (`foundation`, `layout`, `components`, `views`, `utilities`), with 53 unit tests over the pure logic and 24 end-to-end browser tests over the user-facing behaviour.
 
 **[Inference]** The strongest thing about the project is not any single feature — it is that a framework-free codebase of this size stayed navigable, tested, and honest about its own limits.
 
@@ -94,7 +94,7 @@ Be upfront about these. A jury respects a student who names their own gaps.
 | **Notifications**                      | **Preferences only.** The four switches write to localStorage and nothing else. No notification is ever sent, and the app never requests browser notification permission. Labelled "Prototype" in the UI, and the settings text says so explicitly in both languages. |
 | **Offline support**                    | **Does not exist.** There is no service worker and nothing is precached. The demo dataset is an in-session fallback for _failed API calls_, not offline capability — the app cannot be opened from scratch without a network.                                         |
 | **"Export my data"**                   | Works, but exports only what the app itself stored (settings, favourites, last location).                                                                                                                                                                             |
-| **Pexels photos**                      | Optional. Without a key, locations fall back to gradients and emoji.                                                                                                                                                                                                  |
+| **Pexels photos**                      | Optional, and they need a PHP host: the key is held by a server-side proxy, so on a static host (e.g. GitHub Pages) the endpoint can't run and locations fall back to gradients and emoji. Same fallback when no key is configured.                                   |
 | **Air quality**                        | European AQI only (the Open-Meteo endpoint used), so the scale is less meaningful outside Europe.                                                                                                                                                                     |
 | **Blog / Contact / Help footer links** | Present in the footer; several are placeholders.                                                                                                                                                                                                                      |
 
@@ -159,7 +159,17 @@ selectLocation(loc)
         │
         ├──► on ANY failure ──► demoWeather(loc)   deterministic local generator, state.isDemo = true
         │
-        └──► hydrateLocPhoto() ──► api.pexels.com   (optional; falls back to gradient + emoji)
+        └──► hydrateLocPhoto()
+                  │
+                  └──► GET /api/pexels.php?query=…      SAME ORIGIN — no key in the browser
+                             │
+                             │  (PHP in production, Vite middleware in dev)
+                             │  reads the key from outside the web root
+                             ▼
+                        api.pexels.com                  Authorization header, server-side only
+                             │
+                             └──► {"photo": {...}} | {"photo": null} | 4xx/5xx
+                                       └──► any failure ⇒ gradient + emoji fallback
 ```
 
 | API                        | Used for                                 | Key needed? | What happens without it                                     |
@@ -168,7 +178,7 @@ selectLocation(loc)
 | **Open-Meteo air quality** | European AQI                             | No          | field shows "—"                                             |
 | **Open-Meteo geocoding**   | search fallback                          | No          | —                                                           |
 | **MapTiler**               | map tiles + primary global search        | **Yes**     | map shows an error message; search falls back to Open-Meteo |
-| **Pexels**                 | location photos                          | Optional    | gradient + emoji fallback                                   |
+| **Pexels** (via own proxy) | location photos                          | Optional    | gradient + emoji fallback                                   |
 | **BigDataCloud**           | reverse geocoding without a MapTiler key | No          | —                                                           |
 
 **Three things worth pointing out to a jury** — all **[Code]**:
@@ -268,21 +278,33 @@ Supporting choices: `env(safe-area-inset-*)` padding for notched phones; charts 
 - All data stays in localStorage, and the settings page offers a full reset.
 - Geolocation is opt-in, only ever sent to a geocoder to resolve a place name, and cached for 30 minutes.
 
-**API keys — the honest limitation.** This is the part to state plainly rather than hope nobody asks.
+**API keys — and how one of them stopped being a problem.** This is worth explaining carefully, because it is the clearest example in the project of a security decision with a real trade-off.
 
-Any key in a client-side app is **visible to anyone** who opens devtools. Vite bundles `VITE_`-prefixed variables straight into the JavaScript. There is no way around this without a backend.
+**The rule:** anything Vite exposes to the browser is public. Vite only exposes variables whose name starts with `VITE_`, and it compiles them into the JavaScript bundle as plain string literals. Minification does not hide them. So the prefix is not a naming convention — it is the decision about whether a key is published.
 
-The two keys are therefore **not** equally safe:
+The two keys need different answers because the two services offer different protections:
 
-|                                  | MapTiler                                      | Pexels                            |
-| -------------------------------- | --------------------------------------------- | --------------------------------- |
-| Visible in the bundle            | Yes                                           | Yes                               |
-| Can be restricted to your domain | **Yes** — allowed-origins list                | **No**                            |
-| Practical risk                   | Low: a stolen key only works from your domain | Real: a stolen key works anywhere |
+|                                  | MapTiler                             | Pexels                                               |
+| -------------------------------- | ------------------------------------ | ---------------------------------------------------- |
+| Must run in the browser?         | Yes — it draws the map               | No — only the resulting image URL is needed          |
+| Can be restricted to your domain | **Yes** — allowed-origins list       | **No** — Pexels offers no origin restriction         |
+| Where the key lives now          | In the bundle, deliberately          | On the server only                                   |
+| If someone copies it             | It answers 403 from any other origin | It would work anywhere — which is why it isn't there |
 
-**[Code]** Mitigations actually in place: `.env.local` is gitignored and has never been committed; `.env.local.example` documents the setup with empty values; the README explains the exposure; the app degrades gracefully when a key is absent; **the correct fix — a backend proxy — is documented as a known limitation rather than pretended away.**
+**[Code] MapTiler stays in the browser**, because a map library genuinely needs it client-side and MapTiler keys can be locked to an allowed-origins list (localhost for development, the production domain for the live site). A restricted key is worthless to anyone who copies it.
 
-**[You]** Whether a backend was allowed or out of scope for your assignment.
+**[Code] Pexels was moved to the server.** The browser now calls a same-origin endpoint, `/api/pexels.php?query=…`, which attaches the key server-side and returns only what the UI needs — image URLs, the photographer's name, the Pexels link, and alt text:
+
+- **Production:** `public/api/pexels.php` reads the key from a file **outside `public_html`** (`/home/<user>/private/weathersphere-secrets.php`). Nothing under the web root contains it.
+- **Development:** a Vite middleware serves the same path from Node, reading the unprefixed `PEXELS_API_KEY`.
+
+The proxy accepts GET only, validates and length-bounds the single `query` parameter, rejects control characters, fixes the upstream parameters server-side, sends the key in an `Authorization` header (never a query string, which would land in access logs), applies connect/total timeouts, sets no permissive CORS header, and answers a generic 503 if the secret is unavailable. `npm run verify:secrets` scans the built bundle and fails the build if a credential or a direct `api.pexels.com` call reappears.
+
+**[Code] What this does and does not achieve.** The proxy stops the key from being _published_. It does not stop someone from calling your proxy — it is a public endpoint by design, so a third party could still use your quota through it. That is why it also rate-limits per IP. Closing that gap completely would need authentication, which a public weather site has no basis for.
+
+**[Inference]** The honest framing for a jury: the previous version documented this as a known limitation and did nothing about it; this version fixes it properly for the credential and is explicit about the residual risk that remains.
+
+**[You]** Whether a PHP host was available to you from the start, or whether this constrained your hosting choice.
 
 ---
 
@@ -290,9 +312,9 @@ The two keys are therefore **not** equally safe:
 
 Two layers, deliberately separated.
 
-**Unit tests — Vitest, 39 tests in 5 files, colocated with the code they test.** They cover _pure logic only_, where a test can be exact: unit conversion and formatting, the TTL cache and its in-flight deduplication, safe localStorage parsing (including deliberately corrupted values), location-search scoring, and WMO weather-code lookup.
+**Unit tests — Vitest, 53 tests in 6 files, colocated with the code they test.** They cover _pure logic only_, where a test can be exact: unit conversion and formatting, the TTL cache and its in-flight deduplication, safe localStorage parsing (including deliberately corrupted values), location-search scoring, WMO weather-code lookup, and the photo-proxy contract — success, no-result, every error status (400/405/429/502/503), timeout, negative caching, plus assertions that the client sends **no** `Authorization` header and never addresses `api.pexels.com`.
 
-**End-to-end tests — Playwright, 18 tests, real Chromium.** Desktop and an emulated Pixel 5:
+**End-to-end tests — Playwright, 24 tests, real Chromium.** Desktop and an emulated Pixel 5:
 
 1. Homepage loads with weather and no console errors
 2. Selecting a search suggestion switches location
@@ -302,10 +324,13 @@ Two layers, deliberately separated.
 6. Add, open, and remove a favourite
 7. Grid/list views are mutually exclusive; rows aren't focusable
 8. Mobile drawer: inert when closed, focus on open, Tab trapped, Escape restores focus, scrim and nav both close it, touch targets ≥ 44 px
-9. Pexels attribution appears **only** for Pexels images, in the right language
+9. Pexels attribution appears **only** for Pexels images, in the right language, with the photo fetched from the same-origin proxy and never from Pexels
 10. Settings persist across a reload
+11. Every proxy failure (400/429/502/503, and a proxy that never answers) leaves the gradient fallback, no console errors, and no server message on screen
 
-**The rule that makes them trustworthy:** **[Code]** no e2e test ever touches a live API. Every external origin is intercepted and served a fixture, and a catch-all route **aborts anything unmocked** — so if someone later adds a live call, the suite fails loudly instead of becoming flaky. The test server is also started with placeholder API keys that override `.env.local`, so real keys can never reach the test browser.
+**Plus a build-artifact check:** `npm run verify:secrets` scans `dist/` for the old public variable, the server-side variable name, a direct `api.pexels.com` call, credential-shaped strings, and — when a key is present in the environment — that exact value. It fails the build on a hit and **never prints the matched value**, only the file and which rule fired.
+
+**The rule that makes the e2e suite trustworthy:** **[Code]** no test ever touches a live API. Every external origin is intercepted and served a fixture, and a catch-all route **aborts anything unmocked**. The photo proxy needed special care: it is _same-origin_, so the cross-origin catch-all would have let it through to the real dev middleware, which holds a real key — it is therefore intercepted explicitly, and the test server is started with an intentionally **empty** `PEXELS_API_KEY` so that even an escaped request could only produce a 503.
 
 **[Inference]** The split is the point: unit tests answer "is the maths right?", e2e tests answer "does a person get what they expect?". Neither can replace the other.
 
@@ -321,8 +346,9 @@ Two layers, deliberately separated.
 4. **Measurable performance work.** 210 KB gzipped of map library moved off the initial load; flag SVGs optimised from 6.3 MB to 4.4 MB (–31 %).
 5. **Real test coverage at two levels**, with e2e tests that cannot silently start hitting the network.
 6. **Bilingual by construction**, not by retrofit.
+7. **A credential moved out of the browser, with the reasoning to back it.** Not "I added a proxy", but: I can say which of my two keys belongs client-side and why, what the prefix actually controls, where the secret lives on the server and why that directory, what the endpoint validates, and what the proxy still does _not_ protect against.
 
-**[Inference]** 7. **It is honest about itself.** The prototype badge, the corrected offline wording, and the documented key exposure are all cases where the project says "this doesn't work yet" instead of hiding it. That is a defensible engineering value, and it is rarer than working code.
+**[Inference]** 8. **It is honest about itself.** The prototype badge and the corrected offline wording are cases where the project says "this doesn't work yet" instead of hiding it. The Pexels key is the counter-example that proves the point: it was documented as a known limitation, and then actually fixed.
 
 ---
 
@@ -330,14 +356,17 @@ Two layers, deliberately separated.
 
 1. No service worker → **not** an offline app.
 2. Notifications are preferences only.
-3. Pexels key is exposed and cannot be origin-restricted.
-4. Air quality is the European index only.
-5. No routing — views aren't linkable or bookmarkable, and the Back button doesn't move between them.
-6. No backend → no cross-device sync, no accounts, no server-side caching.
-7. `dist/index.html` is large (~64 KB) because all six views ship in one document.
-8. MapLibre is 787 KB raw; code-split, but still large if you do open the map.
-9. Weather accuracy is entirely Open-Meteo's; the app adds no modelling of its own.
-10. Curated data covers 33 locations; everywhere else depends on live geocoding.
+3. **Photos now need a PHP host.** The Pexels key is server-side, so a purely static deployment (GitHub Pages) can't run the proxy and falls back to gradients. That is a deliberate trade: portability given up for a credential that is no longer published.
+4. **The proxy is open by design.** It keeps the key private, but anyone can call `/api/pexels.php` and consume your quota. Per-IP rate limiting blunts this; only authentication would close it, and a public weather site has no basis for that.
+5. **The rate limiter is best-effort.** It uses per-IP files in the system temp directory and deliberately fails _open_ — if the directory is unwritable on shared hosting, requests pass rather than the site breaking. It also does not survive a load-balanced multi-server setup.
+6. The MapTiler key is still browser-visible. That is correct for a map library, but it is only safe if the allowed-origins list is actually configured — an unrestricted key is as exposed as the old Pexels one was.
+7. Air quality is the European index only.
+8. No routing — views aren't linkable or bookmarkable, and the Back button doesn't move between them.
+9. No accounts or database → no cross-device sync.
+10. `dist/index.html` is large (~64 KB) because all six views ship in one document.
+11. MapLibre is 787 KB raw; code-split, but still large if you do open the map.
+12. Weather accuracy is entirely Open-Meteo's; the app adds no modelling of its own.
+13. Curated data covers 33 locations; everywhere else depends on live geocoding.
 
 ---
 
@@ -354,7 +383,7 @@ Ordered by effort-to-value. **[Inference]** throughout — these are proposals, 
 **Medium**
 
 4. A service worker precaching the app shell — this, and only this, would make the offline claim true.
-5. A tiny serverless proxy (one function) for the Pexels key, closing the exposure in §15.
+5. A short-lived server-side cache in the photo proxy (query → result), so repeat visitors don't each spend a Pexels request, and quota abuse via the open endpoint costs less.
 6. Weather alerts from a real warnings API — which would make the notifications section real.
 7. Regional air-quality indices instead of European-only.
 
@@ -384,7 +413,7 @@ Ordered by effort-to-value. **[Inference]** throughout — these are proposals, 
 
 **(1:20–1:45) The engineering I'm proudest of.** Three things. First, resilience: 8-second timeouts, a 5-minute cache that deduplicates simultaneous requests, and a deterministic demo dataset if everything fails — so the page is never broken. Second, performance: the map library is 210 KB gzipped, and it's code-split so you only download it if you actually open a map. Third, accessibility: real buttons everywhere, and the mobile menu is properly `inert` when it's closed, so it isn't secretly tabbable.
 
-**(1:45–2:00) What's honest about it.** Notifications are a prototype — they save preferences and nothing else, and the UI says so. It is not an offline app; the demo data is a fallback for failed requests, not offline support. And the Pexels key is exposed, because any client-side key is — fixing that properly needs a backend, which I've documented rather than faked.
+**(1:45–2:00) What's honest about it.** Notifications are a prototype — they save preferences and nothing else, and the UI says so. It is not an offline app; the demo data is a fallback for failed requests, not offline support. One thing I did fix rather than document: my Pexels key used to be compiled into the JavaScript, because anything with Vite's `VITE_` prefix is. Pexels keys can't be domain-restricted, so that key was effectively published. It now sits in a file outside the web root and the browser calls my own endpoint instead. The build fails if a credential ever reappears in the bundle.
 
 ---
 
@@ -404,7 +433,7 @@ Ordered by effort-to-value. **[Inference]** throughout — these are proposals, 
 
 **5. Testing (45 s)** — the two layers and why they're separate. The strongest line: _"No end-to-end test can touch the network — anything unmocked is aborted, so the suite can't silently become flaky."_
 
-**6. Limitations and next steps (45 s)** — say these before you're asked. Notifications are a prototype; it isn't offline; the Pexels key is exposed. Then the fixes: a service worker, and a one-function proxy.
+**6. Limitations and next steps (45 s)** — say these before you're asked. Notifications are a prototype; it isn't offline; the photo proxy keeps the key private but is itself open to anyone who calls it, and it needs a PHP host, so a static deployment loses photos. Then the fixes: a service worker, and a server-side cache in front of the proxy.
 
 **7. Close (30 s)** — **[You]** what you learned. The most credible version names something that surprised you or that you got wrong first.
 
@@ -445,7 +474,19 @@ Rehearse this. **[Code]** — every step works.
 
 **3. "Your API key is in the JavaScript. Isn't that a security hole?"**
 
-> Yes, and it's unavoidable in a client-side app — every key gets bundled. The two keys aren't equally risky, though. MapTiler lets me restrict a key to my domain, so a stolen key doesn't work anywhere else. Pexels doesn't offer that, so that key is genuinely exposed. The correct fix is a backend proxy, which I documented as a known limitation rather than pretending it's solved.
+> One of them is in the JavaScript deliberately, and one used to be by mistake.
+>
+> Vite only exposes variables whose name starts with `VITE_`, and it compiles them into the bundle as plain strings — minifying doesn't hide them. So that prefix is really a decision about whether a key is published.
+>
+> MapTiler has to be in the browser, because the map library runs there. That's acceptable because MapTiler keys can be locked to an allowed-origins list — localhost and my domain — so a copied key returns 403 anywhere else.
+>
+> Pexels can't be restricted that way, so my Pexels key was effectively published. I moved it server-side: the browser now calls my own `/api/pexels.php`, which attaches the key and returns only the image URLs, the photographer, the link, and the alt text. On the server the key lives in a file above `public_html`, so it isn't reachable over HTTP at all. And because the old key had been shipped, I rotated it — removing a key from the current bundle doesn't un-publish the old one.
+>
+> What that does **not** fix: my proxy is a public endpoint, so someone could still call it and use my quota. I rate-limit per IP; genuinely closing it would need authentication, which a public weather site can't justify.
+
+**3b. "How do you know the key isn't still in there?"**
+
+> `npm run verify:secrets` runs after every build and scans `dist/` for the old variable name, the server-side variable name, any direct call to `api.pexels.com`, credential-shaped strings, and — if a key is set in the environment — that exact value. It fails the build on a hit, and it prints the file and which rule matched but never the value itself, so the check can't leak what it's protecting. There's also a unit test asserting the client sends no `Authorization` header, and an end-to-end test asserting the browser requests `/api/pexels.php` and never `api.pexels.com`.
 
 **4. "How accurate is the weather?"**
 
@@ -477,7 +518,7 @@ Rehearse this. **[Code]** — every step works.
 
 ---
 
-## 25. Five difficult technical questions
+## 25. Difficult technical questions
 
 **1. "Your services are cached. What happens if two components request the same location at the same moment?"**
 
@@ -499,24 +540,42 @@ Rehearse this. **[Code]** — every step works.
 
 > Because the drawer is _animated_ — it slides in with a CSS transform, so it has to remain rendered. Being off-screen it was still in the tab order and still announced by screen readers: you could tab into an invisible menu. `inert` removes it from focus and from the accessibility tree without touching layout, so the animation is preserved. I pair it with `aria-hidden`, and both are removed above 900px where the sidebar is genuinely visible — a state machine that has to react to breakpoint changes, not just clicks.
 
+**6. "Your proxy takes a user-supplied string and sends it to another API. What stops someone abusing that?"**
+
+> Several things, and it's worth being precise because "I validate the input" on its own isn't an answer.
+>
+> The endpoint accepts GET only and exactly one parameter, `query` — anything else in the URL is ignored, so a caller can't smuggle in `per_page=10000` or a different endpoint. The query must be valid UTF-8, must contain no control characters, is whitespace-collapsed, and must be between 2 and 120 characters. Everything that shapes the upstream request — orientation, page size, the endpoint itself — is fixed server-side.
+>
+> The key goes in an `Authorization` header, never the URL, because query strings end up in access logs, proxy logs and `Referer` headers. There's a connect and a total timeout so a slow upstream can't pile up PHP workers. And the response is re-projected rather than forwarded: I build a new object with the four fields the UI needs and validate that each URL actually starts with `https://`, so nothing unexpected from upstream reaches the browser.
+>
+> What remains is quota abuse — the endpoint is public, so someone could call it in a loop. There's a per-IP sliding-window rate limit for that, which deliberately fails _open_: on shared hosting, if the temp directory isn't writable, I'd rather lose rate limiting than have the site stop working.
+
+**7. "What happens if the PHP host is missing an extension your proxy uses?"**
+
+> That was a real bug I hit while testing. My first version used `mb_check_encoding` and `mb_substr`, and my local PHP had no mbstring — so the proxy died with a fatal error and returned a 500 containing a stack trace with absolute file paths. Exactly what a proxy holding a secret must never do.
+>
+> Two fixes. The UTF-8 handling now uses pcre, which is always compiled in — an empty pattern with the `/u` flag fails on invalid UTF-8, which is a dependency-free encoding check — and only uses mbstring when it happens to be available. Separately I added an exception handler and a shutdown handler so that _any_ fatal, whatever causes it, produces a generic `{"error":"upstream_error"}` instead of a trace. The same reasoning covers a host with no cURL and no HTTPS stream wrapper: it's detected and reported as an upstream failure rather than crashing.
+>
+> **[Inference]** The general lesson is that on shared hosting you can't assume your local PHP build matches the server's, and an error path in security-sensitive code deserves as much attention as the success path.
+
 ---
 
 ## 26. Claims to avoid
 
 These are the ways a good project loses credibility. **[Code]** — each corresponds to something the code does _not_ do.
 
-| ❌ Don't say                              | ✅ Say instead                                                                                                                                                                                                   |
-| ----------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| "It works offline."                       | "It falls back to demo data if an API fails while the app is open. It's not an offline app — there's no service worker."                                                                                         |
-| "It sends weather alerts."                | "The notification switches save preferences. Nothing is sent yet — they're a prototype."                                                                                                                         |
-| "My API keys are secure."                 | "They're bundled into the client, like any client-side key. MapTiler's is domain-restricted; Pexels' can't be, so it's exposed. Fixing it needs a backend."                                                      |
-| "It's fully accessible / WCAG compliant." | "I made specific accessibility decisions — real buttons, `inert` on the closed drawer, focus trapping, reduced-motion support." **[You]** — only claim conformance if you actually audited against the standard. |
-| "It's a PWA."                             | It isn't. No manifest, no service worker.                                                                                                                                                                        |
-| "I built the weather forecasting."        | "I consume Open-Meteo's forecasts and handle conversion, caching, and presentation."                                                                                                                             |
-| "It's fast" (unquantified)                | "38 KB gzipped initial JS, with the 210 KB map library code-split out of the first load."                                                                                                                        |
-| "It works on every browser."              | **[You]** — name the browsers you actually tested. The code uses `inert`, `:has()`, and `AbortSignal.timeout()`, which need reasonably recent browsers.                                                          |
-| "It's production-ready."                  | "It's deployed and working, with limitations I've documented."                                                                                                                                                   |
-| Overstating test coverage                 | "39 unit tests over pure logic and 18 browser tests over user flows." Don't imply a coverage percentage you haven't measured.                                                                                    |
+| ❌ Don't say                              | ✅ Say instead                                                                                                                                                                                                                                        |
+| ----------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| "It works offline."                       | "It falls back to demo data if an API fails while the app is open. It's not an offline app — there's no service worker."                                                                                                                              |
+| "It sends weather alerts."                | "The notification switches save preferences. Nothing is sent yet — they're a prototype."                                                                                                                                                              |
+| "My API keys are secure."                 | "The Pexels key is server-side and never reaches the browser. The MapTiler key is in the bundle on purpose and is protected by an allowed-origins list, not by secrecy. And my proxy is still an open endpoint — it protects the key, not the quota." |
+| "It's fully accessible / WCAG compliant." | "I made specific accessibility decisions — real buttons, `inert` on the closed drawer, focus trapping, reduced-motion support." **[You]** — only claim conformance if you actually audited against the standard.                                      |
+| "It's a PWA."                             | It isn't. No manifest, no service worker.                                                                                                                                                                                                             |
+| "I built the weather forecasting."        | "I consume Open-Meteo's forecasts and handle conversion, caching, and presentation."                                                                                                                                                                  |
+| "It's fast" (unquantified)                | "38 KB gzipped initial JS, with the 210 KB map library code-split out of the first load."                                                                                                                                                             |
+| "It works on every browser."              | **[You]** — name the browsers you actually tested. The code uses `inert`, `:has()`, and `AbortSignal.timeout()`, which need reasonably recent browsers.                                                                                               |
+| "It's production-ready."                  | "It's deployed and working, with limitations I've documented."                                                                                                                                                                                        |
+| Overstating test coverage                 | "39 unit tests over pure logic and 18 browser tests over user flows." Don't imply a coverage percentage you haven't measured.                                                                                                                         |
 
 ---
 

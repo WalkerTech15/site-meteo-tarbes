@@ -1,16 +1,24 @@
-/* App-wide constants: API keys (from Vite env vars), cache TTLs, timeouts.
+/* App-wide constants: the browser-side API key, endpoints, cache TTLs, timeouts.
 
-   Both keys below are bundled into the client-side JS at build time — Vite
-   exposes every VITE_-prefixed variable to the browser, so neither is a true
-   secret. MapTiler supports restricting a key to a list of allowed origins
-   (configure this in the MapTiler dashboard), which is what makes it
-   reasonably safe to ship in a browser bundle. Pexels keys cannot be
-   origin-restricted, so PEXELS_KEY is fully exposed once built — see
-   README.md "API keys & security" for the full picture. */
+   Anything VITE_-prefixed is compiled into the JavaScript bundle and is
+   therefore PUBLIC — that is what the prefix means. Exactly one key is allowed
+   to be public here:
+
+   - MapTiler: designed for browser use and restrictable to a list of allowed
+     origins in the MapTiler Cloud dashboard. Restricting it is what makes
+     shipping it safe; an unrestricted key would be abusable from any site.
+   - Pexels: NOT here, on purpose. Pexels offers no origin restriction, so a
+     Pexels key in the bundle is a published credential. It now lives on the
+     server and is reached through the same-origin proxy below
+     (public/api/pexels.php in production, a Vite middleware in dev).
+     See README.md "API keys & security". */
 export const MAPTILER_KEY = import.meta.env.VITE_MAPTILER_KEY || "";
-export const PEXELS_KEY = import.meta.env.VITE_PEXELS_KEY || "";
 
 export const MAP_STYLE = `https://api.maptiler.com/maps/hybrid-v4/style.json?key=${MAPTILER_KEY}`;
+
+/* Same-origin photo proxy. BASE_URL-relative rather than a leading slash so the
+   build keeps working from a subdirectory as well as from a domain root. */
+export const PEXELS_PROXY_URL = `${import.meta.env.BASE_URL}api/pexels.php`;
 
 /* Request timeouts */
 export const FETCH_TIMEOUT_MS = 8000;

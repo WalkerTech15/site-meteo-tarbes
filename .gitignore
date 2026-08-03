@@ -3,6 +3,14 @@
 .env.local
 .env.*.local
 
+# Server-side secrets. The real file belongs OUTSIDE public_html on the host
+# (see deploy/weathersphere-secrets.example.php) and must never land in the
+# repo — these patterns make an accidental copy uncommittable.
+weathersphere-secrets.php
+/private/
+public/api/*secret*
+
+
 # Build output & dependencies
 node_modules/
 dist/

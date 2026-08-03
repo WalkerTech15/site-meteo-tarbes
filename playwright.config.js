@@ -35,9 +35,12 @@ export default defineConfig({
   ],
   /* Dedicated port + a server of our own (never reused), because the suite
      depends on the placeholder keys below. Vite gives prefixed process.env
-     variables precedence over .env.local, so the developer's REAL MapTiler and
-     Pexels keys are overridden here and can never reach the test browser —
-     which also guarantees the mocked routes are the only thing answering. */
+     variables precedence over .env.local, and vite.config.js prefers
+     process.env.PEXELS_API_KEY over the file — so the developer's REAL keys are
+     overridden here and can never reach the test browser or the dev proxy.
+     PEXELS_API_KEY is blanked rather than faked: with no key the dev middleware
+     answers 503, so even a mock that somehow failed to intercept could not
+     produce a live Pexels call. */
   webServer: {
     command: "npm run dev -- --port 5174 --strictPort",
     url: "http://localhost:5174",
@@ -45,7 +48,7 @@ export default defineConfig({
     timeout: 60_000,
     env: {
       VITE_MAPTILER_KEY: "e2e-placeholder-key",
-      VITE_PEXELS_KEY: "e2e-placeholder-key",
+      PEXELS_API_KEY: "",
     },
   },
 });

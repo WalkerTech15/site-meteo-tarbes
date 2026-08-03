@@ -558,6 +558,23 @@ body[data-mode="simple"] .home-duo {
   flex-direction: column;
   gap: var(--s-2);
 }
+/* On desktop the map is taller than the three insight cards. Stretch both
+   columns to the same height and center the cards in the available space so
+   the left side does not look top-heavy. Stacked tablet/mobile layouts keep
+   their natural content height. */
+@media (min-width: 1081px) {
+  body[data-mode="detailed"] .home-duo {
+    align-items: stretch;
+  }
+  body[data-mode="detailed"] .home-duo > .duo-col {
+    display: flex;
+    flex-direction: column;
+  }
+  body[data-mode="detailed"] .insights-list {
+    flex: 1;
+    justify-content: center;
+  }
+}
 .insight-card {
   display: flex;
   align-items: center;
