@@ -68,6 +68,16 @@ export function locRegion(loc) {
   /* display-only: geocoders return the anglicized "Quebec" in both languages */
   return state.lang === "fr" ? r.replace(/\bQuebec\b/g, "Québec") : r;
 }
+/* Accessible name for a place card: "Lyon, France".
+   A country is its own country, so the naive name + country pair produced
+   "France, France" / "Vietnam, Vietnam" — describe the type instead. */
+export function locAccessibleName(loc) {
+  const name = locName(loc);
+  if (loc.kind === "country") return t("countryAria").replace("{name}", name);
+  const country = locCountry(loc);
+  return country && country !== name ? `${name}, ${country}` : name;
+}
+
 export function kindLabel(kind) {
   return (
     {

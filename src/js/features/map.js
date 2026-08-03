@@ -53,6 +53,50 @@ function popupHtml(loc) {
   </div>`;
 }
 
+/* MapLibre ships its own English UI strings ("Map", "Zoom in", "Toggle
+   attribution"…). They are the accessible names of real controls, so they have
+   to follow the interface language like everything else. The `locale` option
+   covers map creation; applyMapControlLabels() covers a later language switch,
+   which MapLibre has no API for. */
+function mapLocale() {
+  return {
+    "Map.Title": t("mapTitle"),
+    "Marker.Title": t("mapMarker"),
+    "Popup.Close": t("mapClosePopup"),
+    "NavigationControl.ZoomIn": t("mapZoomIn"),
+    "NavigationControl.ZoomOut": t("mapZoomOut"),
+    "AttributionControl.ToggleAttribution": t("mapToggleAttribution"),
+  };
+}
+
+/* selector → translation key, for the controls that carry a visible-less name */
+const CONTROL_LABELS = [
+  [".maplibregl-ctrl-zoom-in", "mapZoomIn"],
+  [".maplibregl-ctrl-zoom-out", "mapZoomOut"],
+  [".maplibregl-ctrl-attrib-button", "mapToggleAttribution"],
+  [".maplibregl-popup-close-button", "mapClosePopup"],
+  [".maplibregl-marker", "mapMarker"],
+];
+
+function applyMapControlLabels(map) {
+  let root;
+  try {
+    const canvas = map.getCanvas();
+    if (canvas) canvas.setAttribute("aria-label", t("mapTitle"));
+    root = map.getContainer();
+  } catch {
+    return; /* map already removed (style/key failure) */
+  }
+  if (!root) return;
+  for (const [selector, key] of CONTROL_LABELS) {
+    root.querySelectorAll(selector).forEach((el) => {
+      el.setAttribute("aria-label", t(key));
+      /* MapLibre sets title on some of them; keep the tooltip in sync too */
+      if (el.hasAttribute("title")) el.setAttribute("title", t(key));
+    });
+  }
+}
+
 const MAP_CONFIG = {
   worldMap: { view: "map", autoPopup: true },
   homeMap: { view: "home", autoPopup: false },
@@ -90,6 +134,7 @@ export function refreshMapLanguage() {
   Object.values(MAPS).forEach((inst) => {
     if (inst.map.isStyleLoaded()) applyMapLanguage(inst.map);
     else inst.map.once("idle", () => applyMapLanguage(inst.map));
+    applyMapControlLabels(inst.map);
   });
 }
 
@@ -128,11 +173,13 @@ async function updateMap(id) {
       renderWorldCopies: false,
       minZoom: 1 /* mercator already clamps latitude at ±85° — no pole panning */,
       attributionControl: { compact: true },
+      locale: mapLocale(),
     });
     map.addControl(new maplibregl.NavigationControl({ showCompass: false }), "top-left");
     map.on("load", () => {
       el.classList.remove("is-loading");
       applyMapLanguage(map);
+      applyMapControlLabels(map);
     });
     map.once("error", () => {
       if (!map.isStyleLoaded()) {
@@ -159,6 +206,7 @@ async function updateMap(id) {
       const popupEl = popup.getElement && popup.getElement();
       const btn = popupEl && popupEl.querySelector(".mp-link");
       if (btn) btn.addEventListener("click", () => switchView("home"), { once: true });
+      applyMapControlLabels(map);
     });
     const marker = new maplibregl.Marker({ element: pin })
       .setLngLat([loc.lon, loc.lat])
@@ -170,7 +218,10 @@ async function updateMap(id) {
   inst.map.resize();
   /* re-apply the "you are here" overlay on a map that was created after a fix */
   if (userPos) setUserLocationOn(inst, userPos.lat, userPos.lon, userPos.acc);
+  /* setHTML rebuilds the popup's close button from the locale MapLibre captured
+     at construction, so its label has to be re-applied after every refresh */
   inst.popup.setHTML(popupHtml(loc));
+  applyMapControlLabels(inst.map);
   inst.marker.setLngLat([loc.lon, loc.lat]);
   const key = `${loc.lat},${loc.lon}`;
   if (inst.lastKey !== key) {

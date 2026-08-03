@@ -39,7 +39,13 @@
         </svg>
       </button>
 
-      <a class="logo" href="#" id="logoLink" aria-label="WeatherSphere home">
+      <a
+        class="logo"
+        href="#"
+        id="logoLink"
+        aria-label="WeatherSphere home"
+        data-i18n-aria="logoHome"
+      >
         <span class="logo-mark" aria-hidden="true">
           <svg viewBox="0 0 32 32" width="22" height="22">
             <defs>
@@ -88,7 +94,7 @@
             id="searchInput"
             autocomplete="off"
             spellcheck="false"
-            placeholder="Search a city, state, province or country…"
+            placeholder="Search a city, region, or country…"
             data-i18n-ph="searchPlaceholder"
             aria-label="Search location"
             data-i18n-aria="searchAria"
@@ -103,6 +109,7 @@
             id="searchResults"
             role="listbox"
             aria-label="Search suggestions"
+            data-i18n-aria="searchSuggestions"
           ></ul>
         </div>
       </div>
@@ -228,7 +235,7 @@
 
     <div class="shell">
       <!-- ══════════ SIDEBAR ══════════ -->
-      <nav class="sidebar" id="sidebar" aria-label="Main navigation">
+      <nav class="sidebar" id="sidebar" aria-label="Main navigation" data-i18n-aria="mainNav">
         <ul class="side-list">
           <li>
             <button class="side-item is-active" data-view="home" aria-current="page">
@@ -460,7 +467,13 @@
           <section class="block detailed-only" aria-labelledby="chartsTitle">
             <div class="block-head">
               <h2 class="section-title" id="chartsTitle" data-i18n="next24h">Next 24 hours</h2>
-              <div class="chart-tabs" role="tablist" aria-label="Chart metric" id="chartTabs"></div>
+              <div
+                class="chart-tabs"
+                role="tablist"
+                aria-label="Chart metric"
+                data-i18n-aria="chartMetric"
+                id="chartTabs"
+              ></div>
             </div>
             <div class="card chart-card">
               <div class="chart-host" id="chartHost" role="img"></div>
@@ -468,7 +481,7 @@
           </section>
 
           <!-- Insights + world map -->
-          <section class="block" aria-label="Insights and map">
+          <section class="block" aria-label="Insights and map" data-i18n-aria="insightsMapRegion">
             <div class="home-duo">
               <div class="duo-col detailed-only">
                 <h2 class="section-title sm" id="insightsTitle" data-i18n="insights">
@@ -535,6 +548,7 @@
               id="exploreCarousel"
               tabindex="0"
               aria-label="Explore destinations"
+              data-i18n-aria="exploreCarousel"
             ></div>
           </section>
         </section>
@@ -649,7 +663,13 @@
             <div class="card fc-chart-card">
               <div class="fc-card-head">
                 <h2 data-i18n="hourlyForecast">Hourly forecast</h2>
-                <div class="chart-tabs" role="tablist" aria-label="Hourly metric" id="fcTabs"></div>
+                <div
+                  class="chart-tabs"
+                  role="tablist"
+                  aria-label="Hourly metric"
+                  data-i18n-aria="hourlyMetric"
+                  id="fcTabs"
+                ></div>
               </div>
               <div class="chart-host sm" id="fcChartHost" role="img"></div>
             </div>
@@ -727,7 +747,12 @@
               </p>
             </div>
             <div class="map-actions">
-              <div class="seg-icons" role="radiogroup" aria-label="View">
+              <div
+                class="seg-icons"
+                role="radiogroup"
+                aria-label="Favorites layout"
+                data-i18n-aria="favViewMode"
+              >
                 <button
                   role="radio"
                   aria-checked="true"
@@ -1564,19 +1589,19 @@
             </span>
             <p data-i18n="footerTag">Real-time weather, everywhere in the world.</p>
           </div>
-          <nav class="footer-col" aria-label="Product">
+          <nav class="footer-col" aria-label="Product" data-i18n-aria="footProduct">
             <h3 data-i18n="footProduct">Product</h3>
             <button data-view="home" data-i18n="navHome">Home</button>
             <button data-view="forecast" data-i18n="navForecast">Forecast</button>
             <button data-view="map" data-i18n="navMap">Map</button>
             <button data-view="favorites" data-i18n="navFavorites">Favorites</button>
           </nav>
-          <nav class="footer-col" aria-label="About">
+          <nav class="footer-col" aria-label="About" data-i18n-aria="navAbout">
             <h3 data-i18n="navAbout">About</h3>
             <button data-view="about" data-i18n="footMission">Our mission</button>
             <button data-view="about" data-i18n="footWeatherData">Weather data</button>
           </nav>
-          <nav class="footer-col" aria-label="Resources">
+          <nav class="footer-col" aria-label="Resources" data-i18n-aria="footResources">
             <h3 data-i18n="footResources">Resources</h3>
             <button data-view="about" data-i18n="footHelp">Help centre</button>
             <button data-view="settings" data-i18n="footPrivacy">Privacy</button>
@@ -1594,7 +1619,7 @@
             © 2026 WeatherSphere. <span data-i18n="footRights">All rights reserved.</span>
           </p>
           <p class="footer-note">
-            <span data-i18n="footerData">Data</span>: Open-Meteo · OpenStreetMap
+            <span data-i18n="footerData">Data: Open-Meteo · OpenStreetMap</span>
           </p>
         </div>
       </div>

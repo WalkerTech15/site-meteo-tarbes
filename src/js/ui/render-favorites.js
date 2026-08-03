@@ -5,7 +5,7 @@ import { t } from "../core/i18n.js";
 import { weatherIcon } from "../data/icons.js";
 import { wmo, wxDesc } from "../data/weather-codes.js";
 import { fmtTemp, tempUnit, fmtWind, windUnit } from "../core/units.js";
-import { locName, locCountry, flagsHtml } from "../core/location.js";
+import { locName, locCountry, kindLabel, flagsHtml } from "../core/location.js";
 import { flagHtml } from "../data/flags.js";
 import { gradBg, locVisual } from "../services/photo-api.js";
 import { favWx, favWxAt, persistFavs } from "../features/favorites.js";
@@ -13,6 +13,13 @@ import { showToast } from "./notifications.js";
 import { selectLocation } from "../features/location.js";
 import { switchView } from "./navigation.js";
 import { renderHero } from "./render-home.js";
+
+/* Secondary line under a favorite's name. A country's country is itself, so
+   naming it twice ("France / France") is noise for sighted users and reads as
+   "France, France" to a screen reader — show what the place IS instead. */
+function favSubtitle(loc) {
+  return loc.kind === "country" ? kindLabel(loc.kind) : esc(locCountry(loc));
+}
 
 function favAgoText() {
   const mins = Math.max(0, Math.round((Date.now() - favWxAt) / 60000));
@@ -32,7 +39,7 @@ function favCardHtml(loc, i) {
       <span class="favx-emoji" aria-hidden="true">${locVisual(loc)}</span>
       <span class="favx-top">
         ${flagsHtml(loc, "small")}
-        <span class="favx-names"><b>${esc(locName(loc))}</b><span>${esc(locCountry(loc))}</span></span>
+        <span class="favx-names"><b>${esc(locName(loc))}</b><span>${favSubtitle(loc)}</span></span>
         <button class="favx-star" data-remove="${esc(loc.id)}" aria-label="${t("removeFavorite")}">
           <svg viewBox="0 0 24 24" width="16" height="16" fill="#FBBF24" stroke="#FBBF24" stroke-width="1.6" stroke-linejoin="round"><path d="m12 3 2.7 5.6 6.3.9-4.5 4.4 1 6.1L12 17l-5.5 3 1-6.1L3 9.5l6.3-.9L12 3z"/></svg>
         </button>
@@ -65,7 +72,7 @@ function favRowHtml(loc) {
       <td>
         <button class="ft-open ft-place">
           <span class="ft-visual" style="${gradBg(loc)}" aria-hidden="true">${locVisual(loc)}</span>
-          <span class="ft-names">${flagHtml(loc.cc, "", state.lang)} <b>${esc(locName(loc))}</b><span>${esc(locCountry(loc))}</span></span>
+          <span class="ft-names">${flagHtml(loc.cc, "", state.lang)} <b>${esc(locName(loc))}</b><span>${favSubtitle(loc)}</span></span>
         </button>
       </td>
       <td><span class="ft-cond">${w ? `<span class="ft-wicon">${weatherIcon(wmo(w.code).icon, w.isDay)}</span> ${wxDesc(w.code, state.lang)}` : "…"}</span></td>

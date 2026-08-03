@@ -94,6 +94,97 @@ test.describe("preferences", () => {
   });
 });
 
+/* Accessible names are UI text too: a screen-reader user who picked French must
+   not hear "Main navigation". These labels carry no visible text, so nothing
+   else in the suite would notice them staying English. */
+test.describe("bilingual accessible names", () => {
+  const setLang = async (app, lang) => {
+    await app.locator("#langBtn").click();
+    await app.locator(`#langMenu button[data-lang="${lang}"]`).click();
+    await expect(app.locator("html")).toHaveAttribute("lang", lang);
+  };
+
+  test("11. landmark and footer labels follow the interface language", async ({ app }) => {
+    const sidebar = app.locator("#sidebar");
+    const insights = app.locator('#view-home section[data-i18n-aria="insightsMapRegion"]');
+    const footerNavs = () =>
+      app
+        .locator(".footer-col[aria-label]")
+        .evaluateAll((els) => els.map((el) => el.getAttribute("aria-label")));
+
+    await expect(sidebar).toHaveAttribute("aria-label", "Navigation principale");
+    await expect(insights).toHaveAttribute("aria-label", "Analyses météo et carte");
+    expect(await footerNavs()).toEqual(["Produit", "À propos", "Ressources"]);
+    await expect(app.locator('[data-i18n="footerData"]')).toHaveText(
+      "Données : Open-Meteo · OpenStreetMap",
+    );
+
+    await setLang(app, "en");
+    await expect(sidebar).toHaveAttribute("aria-label", "Main navigation");
+    await expect(insights).toHaveAttribute("aria-label", "Insights and map");
+    expect(await footerNavs()).toEqual(["Product", "About", "Resources"]);
+    await expect(app.locator('[data-i18n="footerData"]')).toHaveText(
+      "Data: Open-Meteo · OpenStreetMap",
+    );
+  });
+
+  test("12. a country card is not named twice", async ({ app }) => {
+    const franceCard = app.locator('.explore-card[data-loc="france"]');
+    await expect(franceCard).toHaveAttribute("aria-label", "France, pays");
+
+    await setLang(app, "en");
+    await expect(franceCard).toHaveAttribute("aria-label", "France, country");
+    /* the duplication this replaces */
+    await expect(app.locator('.explore-card[aria-label="France, France"]')).toHaveCount(0);
+    await expect(app.locator('.explore-card[aria-label="Japan, Japan"]')).toHaveCount(0);
+    await expect(app.locator('.explore-card[aria-label="Vietnam, Vietnam"]')).toHaveCount(0);
+
+    /* cities keep place + country */
+    await expect(app.locator('.explore-card[data-loc="tokyo"]')).toHaveAttribute(
+      "aria-label",
+      "Tokyo, Japan",
+    );
+  });
+
+  test("13. MapLibre's own control labels are translated", async ({ app }) => {
+    await app.locator('.side-item[data-view="map"]').click();
+    const zoomIn = app.locator("#worldMap .maplibregl-ctrl-zoom-in");
+    await expect(zoomIn).toBeVisible();
+
+    await expect(zoomIn).toHaveAttribute("aria-label", "Zoom avant");
+    await expect(app.locator("#worldMap .maplibregl-ctrl-zoom-out")).toHaveAttribute(
+      "aria-label",
+      "Zoom arrière",
+    );
+    await expect(app.locator("#worldMap canvas.maplibregl-canvas")).toHaveAttribute(
+      "aria-label",
+      "Carte",
+    );
+    await expect(app.locator("#worldMap .maplibregl-ctrl-attrib-button")).toHaveAttribute(
+      "aria-label",
+      "Afficher ou masquer les attributions",
+    );
+
+    /* the popup's close button is rebuilt on every content refresh, from the
+       locale MapLibre captured when the map was created */
+    const closeBtn = app.locator("#worldMap .maplibregl-popup-close-button");
+    await expect(closeBtn).toHaveAttribute("aria-label", "Fermer la fenêtre");
+
+    /* and they follow a language switch, which MapLibre has no API for */
+    await setLang(app, "en");
+    await expect(zoomIn).toHaveAttribute("aria-label", "Zoom in");
+    await expect(app.locator("#worldMap canvas.maplibregl-canvas")).toHaveAttribute(
+      "aria-label",
+      "Map",
+    );
+    await expect(closeBtn).toHaveAttribute("aria-label", "Close popup");
+    await expect(app.locator("#worldMap .maplibregl-marker")).toHaveAttribute(
+      "aria-label",
+      "Map marker",
+    );
+  });
+});
+
 test.describe("favorites", () => {
   /* Adds the current location, opens it from the favorites view, then removes
      it — the full lifecycle through the refactored (non-nested) controls. */

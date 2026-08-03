@@ -4,7 +4,7 @@ export const I18N = {
   en: {
     skipToContent: "Skip to content",
     openMenu: "Open menu",
-    searchPlaceholder: "Search a city, state, province or country…",
+    searchPlaceholder: "Search a city, region, or country…",
     searchAria: "Search location",
     searchNoResult: "No match found — press Enter to search the world.",
     searchHint: "Suggestions",
@@ -15,6 +15,25 @@ export const I18N = {
     chooseTheme: "Choose theme",
     scrollLeft: "Scroll left",
     scrollRight: "Scroll right",
+
+    /* accessible names for landmarks/controls that carry no visible text */
+    logoHome: "WeatherSphere home",
+    searchSuggestions: "Search suggestions",
+    mainNav: "Main navigation",
+    insightsMapRegion: "Insights and map",
+    chartMetric: "Chart metric",
+    hourlyMetric: "Hourly metric",
+    favViewMode: "Favorites layout",
+    exploreCarousel: "Explore destinations",
+    /* MapLibre control strings (passed through the map's `locale` option) */
+    mapTitle: "Map",
+    mapZoomIn: "Zoom in",
+    mapZoomOut: "Zoom out",
+    mapToggleAttribution: "Toggle attribution",
+    mapMarker: "Map marker",
+    mapClosePopup: "Close popup",
+    /* a country card would otherwise read "France, France" */
+    countryAria: "{name}, country",
 
     navHome: "Home",
     navMap: "Map",
@@ -235,7 +254,7 @@ export const I18N = {
     dataExported: "Your data has been downloaded.",
 
     footerTag: "Real-time weather, everywhere in the world.",
-    footerData: "Data",
+    footerData: "Data: Open-Meteo · OpenStreetMap",
     myPosition: "My location",
     geoUse: "Tap to use my location",
     geoLocating: "Locating…",
@@ -266,7 +285,7 @@ export const I18N = {
   fr: {
     skipToContent: "Aller au contenu",
     openMenu: "Ouvrir le menu",
-    searchPlaceholder: "Rechercher une ville, un état, une province ou un pays…",
+    searchPlaceholder: "Rechercher une ville, une région ou un pays…",
     searchAria: "Rechercher un lieu",
     searchNoResult: "Aucun résultat — appuyez sur Entrée pour chercher dans le monde.",
     searchHint: "Suggestions",
@@ -277,6 +296,22 @@ export const I18N = {
     chooseTheme: "Choisir le thème",
     scrollLeft: "Défiler à gauche",
     scrollRight: "Défiler à droite",
+
+    logoHome: "Accueil WeatherSphere",
+    searchSuggestions: "Suggestions de recherche",
+    mainNav: "Navigation principale",
+    insightsMapRegion: "Analyses météo et carte",
+    chartMetric: "Donnée du graphique",
+    hourlyMetric: "Donnée horaire",
+    favViewMode: "Disposition des favoris",
+    exploreCarousel: "Explorer des destinations",
+    mapTitle: "Carte",
+    mapZoomIn: "Zoom avant",
+    mapZoomOut: "Zoom arrière",
+    mapToggleAttribution: "Afficher ou masquer les attributions",
+    mapMarker: "Repère sur la carte",
+    mapClosePopup: "Fermer la fenêtre",
+    countryAria: "{name}, pays",
 
     navHome: "Accueil",
     navMap: "Carte",
@@ -454,7 +489,7 @@ export const I18N = {
     srcOsm: "Fonds de carte collaboratifs.",
     srcEsri: "Imagerie satellite haute résolution.",
     srcMaptiler: "Tuiles vectorielles et géocodage (style satellite hybride).",
-    srcPexels: "Photos de lieux et monuments, libres de droits.",
+    srcPexels: "Photos gratuites de lieux et monuments.",
     srcNote: "Les données peuvent être sujettes à de légers écarts.",
     contactNote:
       "WeatherSphere est un projet scolaire réalisé par un élève. Il n'a pas d'adresse de contact.",
@@ -467,7 +502,7 @@ export const I18N = {
     setModeSub: "Choisissez la manière dont vous souhaitez voir les informations.",
     settingsSub: "Personnalisez votre expérience WeatherSphere.",
     modeDetailedDesc: "Affiche toutes les données et analyses météorologiques.",
-    modeSimpleDesc: "Montre uniquement l'essentiel pour aller à l'essentiel.",
+    modeSimpleDesc: "Affiche uniquement les informations essentielles.",
     themeTitle: "Thème",
     themeSub: "Personnalisez l'apparence de l'interface.",
     themeLight: "Clair",
@@ -503,7 +538,8 @@ export const I18N = {
     dataExported: "Vos données ont été téléchargées.",
 
     footerTag: "La météo en temps réel, partout dans le monde.",
-    footerData: "Données",
+    /* French typography puts a space before a colon */
+    footerData: "Données : Open-Meteo · OpenStreetMap",
     myPosition: "Ma position",
     geoUse: "Touchez pour utiliser ma position",
     geoLocating: "Localisation…",

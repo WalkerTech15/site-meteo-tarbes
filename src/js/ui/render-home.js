@@ -21,6 +21,7 @@ import {
   locName,
   locRegion,
   locCountry,
+  locAccessibleName,
   kindLabel,
   localTimeStr,
   flagsHtml,
@@ -517,7 +518,7 @@ export function renderExplore() {
   $("#exploreCarousel").innerHTML = EXPLORE_IDS.map((id) => {
     const loc = LOCATIONS.find((l) => l.id === id);
     return `
-      <button class="explore-card" data-loc="${esc(loc.id)}" aria-label="${esc(locName(loc))}, ${esc(locCountry(loc))}">
+      <button class="explore-card" data-loc="${esc(loc.id)}" aria-label="${esc(locAccessibleName(loc))}">
         <span class="explore-bg" style="${gradBg(loc)}" aria-hidden="true"></span>
         <span class="explore-emoji" aria-hidden="true">${locVisual(loc)}</span>
         <span class="explore-txt">
