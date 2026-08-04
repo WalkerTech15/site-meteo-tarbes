@@ -195,6 +195,9 @@ $$(".side-item").forEach((b) => b.addEventListener("click", () => switchView(b.d
 $$(".footer-col button[data-view]").forEach((b) =>
   b.addEventListener("click", () => switchView(b.dataset.view)),
 );
+$$(".resource-link[data-view]").forEach((b) =>
+  b.addEventListener("click", () => switchView(b.dataset.view)),
+);
 $("#logoLink").addEventListener("click", (e) => {
   e.preventDefault();
   switchView("home");
@@ -327,7 +330,7 @@ setInterval(() => {
 async function handlePrivacyAction(action, trigger) {
   if (action === "location") showToast(t("locMsg"));
   else if (action === "recents") await clearRecentSearches(trigger);
-  else if (action === "privacy") switchView("about");
+  else if (action === "privacy") switchView("privacy");
   else if (action === "cache") {
     const accepted = await confirmAction({
       title: t("priv3T"),

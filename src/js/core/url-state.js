@@ -24,7 +24,16 @@
  * caller decides what to pass in, and features/map-url-sync.js is the place
  * that enforces the privacy rule. */
 
-export const URL_VIEWS = ["home", "map", "forecast", "favorites", "settings", "about"];
+export const URL_VIEWS = [
+  "home",
+  "map",
+  "forecast",
+  "favorites",
+  "settings",
+  "about",
+  "help",
+  "privacy",
+];
 export const URL_LAYERS = ["satellite", "temperature", "rain", "wind"];
 export const URL_TIME_OFFSETS = [0, 3, 6];
 

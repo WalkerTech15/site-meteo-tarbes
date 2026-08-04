@@ -140,7 +140,7 @@
   display: grid;
   grid-template-columns: minmax(0, 1fr) minmax(0, 1.15fr);
   gap: var(--s-2);
-  align-items: stretch;
+  align-items: start;
 }
 .info-title.lg {
   font-size: 18px;
@@ -178,6 +178,20 @@
   font-size: 13px;
   font-weight: 600;
   color: var(--text-2);
+}
+
+/* Five-item groups (the core and quality tools) should not leave one icon on
+   a second row at wide desktop sizes. Narrower layouts keep the flexible
+   wrapping treatment above so long product names remain readable. */
+@media (min-width: 1280px) {
+  .tech-grid {
+    display: grid;
+    grid-template-columns: repeat(5, minmax(0, 1fr));
+  }
+  .tech-item {
+    min-width: 0;
+    text-align: center;
+  }
 }
 .tech-logo {
   display: grid;

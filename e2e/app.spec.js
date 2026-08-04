@@ -295,7 +295,7 @@ test.describe("settings page", () => {
     await expect(app.locator("#toast")).toBeVisible();
 
     await app.locator('.priv-tile[data-priv="privacy"]').click();
-    await expect(app.locator("#view-about")).toBeVisible();
+    await expect(app.locator("#view-privacy")).toBeVisible();
   });
 
   test("73. exporting data includes preferences but never a key or credential", async ({ app }) => {

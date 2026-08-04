@@ -1,0 +1,177 @@
+/* Help and privacy pages deliberately use page-specific classes so their
+   layout cannot affect the similarly named cards on the About page. */
+
+.resource-section-title {
+  margin: 0 0 var(--s-3);
+  font-size: 18px;
+}
+
+.help-step-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: var(--s-3);
+}
+
+.help-step,
+.policy-card {
+  padding: var(--s-4);
+}
+
+.help-step {
+  display: flex;
+  min-height: 238px;
+  flex-direction: column;
+}
+
+.step-number {
+  display: grid;
+  width: 32px;
+  height: 32px;
+  place-items: center;
+  border-radius: 50%;
+  background: var(--primary-soft);
+  color: var(--primary-600);
+  font-size: 14px;
+  font-weight: 800;
+}
+
+.help-step h3,
+.policy-card h2,
+.privacy-summary h2,
+.privacy-controls h2 {
+  margin: var(--s-2) 0 0;
+  font-size: 17px;
+}
+
+.help-step p,
+.policy-card p,
+.privacy-summary p,
+.privacy-controls p,
+.faq-item p {
+  color: var(--text-2);
+  font-size: 14px;
+  line-height: 1.6;
+}
+
+.help-step p,
+.policy-card p,
+.privacy-summary p,
+.privacy-controls p {
+  margin: var(--s-2) 0 0;
+}
+
+.resource-link {
+  margin-top: auto;
+  align-self: flex-start;
+  padding: var(--s-3) 0 0;
+  border: 0;
+  background: transparent;
+  color: var(--primary-600);
+  cursor: pointer;
+  font: inherit;
+  font-weight: 750;
+  text-decoration: underline;
+  text-decoration-thickness: 1px;
+  text-underline-offset: 3px;
+}
+
+.resource-link:hover {
+  color: var(--primary-700);
+}
+
+.faq-section {
+  max-width: 860px;
+  margin-top: var(--s-4);
+}
+
+.faq-item {
+  padding: 0 var(--s-3);
+  border: 1px solid var(--border);
+  border-radius: var(--r-sm);
+  background: var(--card);
+}
+
+.faq-item + .faq-item {
+  margin-top: var(--s-2);
+}
+
+.faq-item summary {
+  padding: var(--s-3) 0;
+  cursor: pointer;
+  font-weight: 700;
+}
+
+.faq-item p {
+  max-width: 68ch;
+  margin: 0 0 var(--s-3);
+}
+
+.privacy-summary {
+  padding: var(--s-4);
+  border-color: color-mix(in srgb, var(--primary) 25%, var(--border));
+  background: linear-gradient(
+    120deg,
+    color-mix(in srgb, var(--primary-soft) 65%, var(--card)),
+    var(--card)
+  );
+}
+
+.privacy-kicker {
+  margin: 0;
+  color: var(--primary-600);
+  font-size: 12px;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.privacy-summary h2 {
+  margin-top: var(--s-2);
+}
+
+.privacy-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--s-3);
+  margin-top: var(--s-3);
+}
+
+.policy-card h2 {
+  margin-top: 0;
+}
+
+.privacy-controls {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--s-3);
+  margin-top: var(--s-3);
+  padding: var(--s-4);
+  border-left: 3px solid var(--primary);
+}
+
+.privacy-controls h2 {
+  margin-top: 0;
+}
+
+@media (max-width: 1080px) {
+  .help-step-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 640px) {
+  .help-step-grid,
+  .privacy-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .help-step {
+    min-height: 0;
+  }
+
+  .privacy-controls {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+}

@@ -336,6 +336,53 @@ export const I18N = {
     srcBigdatacloud: "Fallback reverse geocoding used to identify a location.",
     srcNote: "Data may be subject to slight variations.",
     contactNote: "WeatherSphere is a student project built for school. It has no support address.",
+    helpTitle: "Help centre",
+    helpSub: "Find the main features of WeatherSphere and how to use them.",
+    helpSearchT: "Search for a place",
+    helpSearchX: "Use the search bar to find a city, town, region, state, province or country.",
+    helpMapT: "Explore the map",
+    helpMapX: "Select a location or click the map to see current conditions and forecasts.",
+    helpFavT: "Save favourites",
+    helpFavX: "Select the star beside a location to save it in your favourites list.",
+    helpSchoolT: "School project",
+    helpSchoolX:
+      "WeatherSphere is a school project. It is designed for learning and does not replace official weather warnings.",
+    helpStepsTitle: "Start with these three steps",
+    helpGoHome: "Open home",
+    helpGoMap: "Open map",
+    helpGoFav: "Open favourites",
+    faqTitle: "Common questions",
+    faqSearchQ: "Why do I see several search results?",
+    faqSearchA:
+      "Some place names exist in more than one country. Choose the result with the correct region and country.",
+    faqMapQ: "Can I select a place directly on the map?",
+    faqMapA:
+      "Yes. Click or tap a point on the map to identify the nearest place and view its weather.",
+    faqDataQ: "Are the weather alerts official?",
+    faqDataA:
+      "No. WeatherSphere is a school project and does not replace official weather warnings.",
+    privacyTitle: "Privacy",
+    privacySub: "A clear explanation of the information WeatherSphere uses and stores.",
+    privacyLocalT: "Stored on this device",
+    privacyLocalX:
+      "Your display preferences and favourites stay in this browser. Recent searches are stored only when you turn that option on.",
+    privacyLocationT: "Your location",
+    privacyLocationX:
+      "Your position is used only after your browser gives permission. You can change that permission in your browser settings.",
+    privacyAccountsT: "No user account",
+    privacyAccountsX:
+      "WeatherSphere does not require an account and does not operate a user-profile database.",
+    privacyControlT: "You stay in control",
+    privacyControlX:
+      "You can clear recent searches, export stored data, reset the application, or change location permission from the Settings page.",
+    privacyKicker: "Your privacy at a glance",
+    privacyPromiseT: "No account. No user profile.",
+    privacyPromiseX:
+      "WeatherSphere stores only the preferences you choose to keep in this browser.",
+    privacyRecentsT: "Recent searches",
+    privacyRecentsX:
+      "Recent locations are optional, limited to five places and can be cleared at any time.",
+    privacyGoSettings: "Open privacy settings",
 
     setUnits: "Units",
     setUnitsSub: "Choose your preferred measurement units.",
@@ -745,6 +792,56 @@ export const I18N = {
     srcNote: "Les données peuvent être sujettes à de légers écarts.",
     contactNote:
       "WeatherSphere est un projet scolaire réalisé par un élève. Il n'a pas d'adresse de contact.",
+    helpTitle: "Aide",
+    helpSub: "Retrouvez les principales fonctionnalités de WeatherSphere et leur utilisation.",
+    helpSearchT: "Rechercher un lieu",
+    helpSearchX:
+      "Utilisez la barre de recherche pour trouver une ville, un village, une région, un État, une province ou un pays.",
+    helpMapT: "Explorer la carte",
+    helpMapX:
+      "Sélectionnez un lieu ou cliquez sur la carte pour consulter les conditions actuelles et les prévisions.",
+    helpFavT: "Enregistrer des favoris",
+    helpFavX: "Sélectionnez l'étoile près d'un lieu pour l'ajouter à votre liste de favoris.",
+    helpSchoolT: "Projet scolaire",
+    helpSchoolX:
+      "WeatherSphere est un projet scolaire. Il est conçu pour l'apprentissage et ne remplace pas les alertes météorologiques officielles.",
+    helpStepsTitle: "Commencez par ces trois étapes",
+    helpGoHome: "Ouvrir l'accueil",
+    helpGoMap: "Ouvrir la carte",
+    helpGoFav: "Ouvrir les favoris",
+    faqTitle: "Questions fréquentes",
+    faqSearchQ: "Pourquoi plusieurs résultats de recherche sont-ils affichés ?",
+    faqSearchA:
+      "Certains noms de lieux existent dans plusieurs pays. Choisissez le résultat avec la bonne région et le bon pays.",
+    faqMapQ: "Puis-je sélectionner un lieu directement sur la carte ?",
+    faqMapA:
+      "Oui. Cliquez ou touchez un point sur la carte pour identifier le lieu le plus proche et consulter sa météo.",
+    faqDataQ: "Les alertes météo sont-elles officielles ?",
+    faqDataA:
+      "Non. WeatherSphere est un projet scolaire et ne remplace pas les alertes météorologiques officielles.",
+    privacyTitle: "Confidentialité",
+    privacySub:
+      "Une explication claire des informations utilisées et enregistrées par WeatherSphere.",
+    privacyLocalT: "Enregistré sur cet appareil",
+    privacyLocalX:
+      "Vos préférences d'affichage et vos favoris restent dans ce navigateur. Les recherches récentes ne sont enregistrées que si vous activez cette option.",
+    privacyLocationT: "Votre localisation",
+    privacyLocationX:
+      "Votre position est utilisée seulement après l'autorisation de votre navigateur. Vous pouvez modifier cette autorisation dans les réglages du navigateur.",
+    privacyAccountsT: "Aucun compte utilisateur",
+    privacyAccountsX:
+      "WeatherSphere ne nécessite pas de compte et ne gère pas de base de données de profils utilisateurs.",
+    privacyControlT: "Vous gardez le contrôle",
+    privacyControlX:
+      "Vous pouvez effacer les recherches récentes, exporter les données enregistrées, réinitialiser l'application ou modifier l'autorisation de localisation depuis les réglages.",
+    privacyKicker: "Votre confidentialité en bref",
+    privacyPromiseT: "Aucun compte. Aucun profil utilisateur.",
+    privacyPromiseX:
+      "WeatherSphere enregistre uniquement les préférences que vous choisissez de conserver dans ce navigateur.",
+    privacyRecentsT: "Recherches récentes",
+    privacyRecentsX:
+      "Les lieux récents sont facultatifs, limités à cinq et peuvent être effacés à tout moment.",
+    privacyGoSettings: "Ouvrir les réglages de confidentialité",
 
     setUnits: "Unités",
     setUnitsSub: "Choisissez vos unités de mesure préférées.",

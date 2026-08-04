@@ -1415,6 +1415,152 @@
           </div>
         </section>
 
+        <!-- ── HELP VIEW ── -->
+        <section class="view" id="view-help" aria-labelledby="helpTitle" hidden>
+          <div class="block-head">
+            <div>
+              <h1 class="section-title" id="helpTitle" data-i18n="helpTitle">Help centre</h1>
+              <p class="section-sub" data-i18n="helpSub">
+                Find the main features of WeatherSphere and how to use them.
+              </p>
+            </div>
+          </div>
+          <section class="help-steps" aria-labelledby="helpStepsTitle">
+            <h2 class="resource-section-title" id="helpStepsTitle" data-i18n="helpStepsTitle">
+              Start with these three steps
+            </h2>
+            <div class="help-step-grid">
+              <article class="card help-step">
+                <span class="step-number" aria-hidden="true">1</span>
+                <h3 data-i18n="helpSearchT">Search for a place</h3>
+                <p data-i18n="helpSearchX">
+                  Use the search bar to find a city, town, region, state, province or country.
+                </p>
+                <button class="resource-link" type="button" data-view="home" data-i18n="helpGoHome">
+                  Open home
+                </button>
+              </article>
+              <article class="card help-step">
+                <span class="step-number" aria-hidden="true">2</span>
+                <h3 data-i18n="helpMapT">Explore the map</h3>
+                <p data-i18n="helpMapX">
+                  Select a location or click the map to see current conditions and forecasts.
+                </p>
+                <button class="resource-link" type="button" data-view="map" data-i18n="helpGoMap">
+                  Open map
+                </button>
+              </article>
+              <article class="card help-step">
+                <span class="step-number" aria-hidden="true">3</span>
+                <h3 data-i18n="helpFavT">Save favourites</h3>
+                <p data-i18n="helpFavX">
+                  Select the star beside a location to save it in your favourites list.
+                </p>
+                <button
+                  class="resource-link"
+                  type="button"
+                  data-view="favorites"
+                  data-i18n="helpGoFav"
+                >
+                  Open favourites
+                </button>
+              </article>
+            </div>
+          </section>
+          <section class="faq-section" aria-labelledby="faqTitle">
+            <h2 class="resource-section-title" id="faqTitle" data-i18n="faqTitle">
+              Common questions
+            </h2>
+            <details class="faq-item" open>
+              <summary data-i18n="faqSearchQ">Why do I see several search results?</summary>
+              <p data-i18n="faqSearchA">
+                Some place names exist in more than one country. Choose the result with the correct
+                region and country.
+              </p>
+            </details>
+            <details class="faq-item">
+              <summary data-i18n="faqMapQ">Can I select a place directly on the map?</summary>
+              <p data-i18n="faqMapA">
+                Yes. Click or tap a point on the map to identify the nearest place and view its
+                weather.
+              </p>
+            </details>
+            <details class="faq-item">
+              <summary data-i18n="faqDataQ">Are the weather alerts official?</summary>
+              <p data-i18n="faqDataA">
+                No. WeatherSphere is a school project and does not replace official weather
+                warnings.
+              </p>
+            </details>
+          </section>
+        </section>
+
+        <!-- ── PRIVACY VIEW ── -->
+        <section class="view" id="view-privacy" aria-labelledby="privacyTitle" hidden>
+          <div class="block-head">
+            <div>
+              <h1 class="section-title" id="privacyTitle" data-i18n="privacyTitle">Privacy</h1>
+              <p class="section-sub" data-i18n="privacySub">
+                A clear explanation of the information WeatherSphere uses and stores.
+              </p>
+            </div>
+          </div>
+          <article class="card privacy-summary">
+            <span class="privacy-kicker" data-i18n="privacyKicker">Your privacy at a glance</span>
+            <h2 data-i18n="privacyPromiseT">No account. No user profile.</h2>
+            <p data-i18n="privacyPromiseX">
+              WeatherSphere stores only the preferences you choose to keep in this browser.
+            </p>
+          </article>
+          <div class="privacy-grid">
+            <article class="card policy-card">
+              <h2 data-i18n="privacyLocationT">Your location</h2>
+              <p data-i18n="privacyLocationX">
+                Your position is used only after your browser gives permission. You can change that
+                permission in your browser settings.
+              </p>
+            </article>
+            <article class="card policy-card">
+              <h2 data-i18n="privacyLocalT">Stored on this device</h2>
+              <p data-i18n="privacyLocalX">
+                Your display preferences and favourites stay in this browser. Recent searches are
+                stored only when you turn that option on.
+              </p>
+            </article>
+            <article class="card policy-card">
+              <h2 data-i18n="privacyRecentsT">Recent searches</h2>
+              <p data-i18n="privacyRecentsX">
+                Recent locations are optional, limited to five places and can be cleared at any
+                time.
+              </p>
+            </article>
+            <article class="card policy-card">
+              <h2 data-i18n="privacyAccountsT">No user account</h2>
+              <p data-i18n="privacyAccountsX">
+                WeatherSphere does not require an account and does not operate a user-profile
+                database.
+              </p>
+            </article>
+          </div>
+          <article class="card privacy-controls">
+            <div>
+              <h2 data-i18n="privacyControlT">You stay in control</h2>
+              <p data-i18n="privacyControlX">
+                You can clear recent searches, export stored data, reset the application, or change
+                location permission from the Settings page.
+              </p>
+            </div>
+            <button
+              class="resource-link"
+              type="button"
+              data-view="settings"
+              data-i18n="privacyGoSettings"
+            >
+              Open privacy settings
+            </button>
+          </article>
+        </section>
+
         <!-- ── SETTINGS VIEW ── -->
         <section class="view" id="view-settings" aria-labelledby="settingsTitle" hidden>
           <div class="block-head">
@@ -1831,7 +1977,7 @@
             </div>
             <!-- Recent searches: opt-IN, so this switch starts off for every
                  new visitor (core/state.js reads a missing flag as false). -->
-            <div class="notif-grid priv-switch-grid">
+            <div class="priv-grid">
               <div class="notif-item">
                 <span class="metric-ico tint-violet" aria-hidden="true"
                   ><svg
@@ -1859,8 +2005,6 @@
                   data-recents="save"
                 ></button>
               </div>
-            </div>
-            <div class="priv-grid">
               <button class="priv-tile" data-priv="recents">
                 <span class="metric-ico tint-rose" aria-hidden="true"
                   ><svg
@@ -1995,9 +2139,8 @@
           </nav>
           <nav class="footer-col" aria-label="Resources" data-i18n-aria="footResources">
             <h3 data-i18n="footResources">Resources</h3>
-            <button data-view="about" data-i18n="footHelp">Help centre</button>
-            <button data-view="settings" data-i18n="footPrivacy">Privacy</button>
-            <a href="https://open-meteo.com" target="_blank" rel="noopener">Open-Meteo</a>
+            <button data-view="help" data-i18n="footHelp">Help centre</button>
+            <button data-view="privacy" data-i18n="footPrivacy">Privacy</button>
           </nav>
           <div class="footer-col">
             <h3 data-i18n="footContact">Contact</h3>
