@@ -14,6 +14,19 @@ export const convWind = (k) =>
 export const fmtWind = (k) => Math.round(convWind(k));
 export const windUnit = () => ({ kmh: "km/h", mph: "mph", ms: "m/s" })[state.unitWind];
 
+/* Precipitation intensity. There is no separate precipitation unit in
+   Settings, so it follows the temperature unit — the app's only imperial/
+   metric signal, and the same pairing the old combined `ws_units` preference
+   used. mm/h and in/h are exactly the two units the MapTiler precipitation
+   layer itself reports (PrecipitationPickAt.value / .valueImperial), so a
+   legend built on them can never disagree with the map. */
+export const toInPerHour = (mm) => mm / 25.4;
+export const convPrecip = (mm) => (state.unitTemp === "f" ? toInPerHour(mm) : mm);
+export const precipUnit = () => (state.unitTemp === "f" ? "in/h" : "mm/h");
+
+/* m/s is the MapTiler wind layer's own unit; convWind() speaks km/h. */
+export const MS_TO_KMH = 3.6;
+
 const COMPASS_KEYS = [
   "windDirN",
   "windDirNE",

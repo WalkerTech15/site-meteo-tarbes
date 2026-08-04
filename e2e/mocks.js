@@ -153,8 +153,10 @@ function tarbesFeature() {
     place_type: ["place"],
     center: [0.0782, 43.2333],
     properties: { country_code: "fr" },
+    /* the region carries both languages, as MapTiler does for `language=fr,en`;
+       the country has only its (identical) local name */
     context: [
-      { id: "region.3", text: "Occitanie" },
+      { id: "region.3", text: "Occitanie", text_en: "Occitania", text_fr: "Occitanie" },
       { id: "country.3", text: "France", country_code: "fr" },
     ],
   };
@@ -183,6 +185,131 @@ function maptilerGeocodePayloadFor(url) {
   return maptilerGeocodePayload();
 }
 
+/* ── Reverse geocoding (map click / URL restore) ────────────────────────
+   MapTiler's reverse form is `/geocoding/<lon>,<lat>.json`. Four designated
+   coordinates, so a test can click a known point and assert exactly what the
+   app should do with it:
+
+     CLICK_CITY    an ordinary town, full country + region metadata
+     CLICK_REGION_POLY  an administrative region WITH a real polygon
+     CLICK_REGION_BBOX  an administrative region with only a point + bbox
+     CLICK_OCEAN   open water: the provider returns no feature at all
+
+   Anything else resolves to a generic feature named after the coordinate, so
+   two arbitrary clicks are always distinguishable from one another. */
+export const CLICK_CITY = { lon: 0.0782, lat: 43.2333, label: TARBES_LABEL };
+export const CLICK_REGION_POLY = { lon: 1.75, lat: 43.9, label: "Occitanie" };
+export const CLICK_REGION_BBOX = { lon: -99.9, lat: 31.4, label: "Texas" };
+export const CLICK_OCEAN = { lon: -41.5, lat: 33.2 };
+
+const near = (value, target) => Math.abs(value - target) < 0.4;
+
+/* A region with a genuine (tiny, square) MultiPolygon — the app must draw
+   THIS, not the bbox. Named in both languages, as MapTiler does when asked
+   for `language=en,fr`. */
+function occitanieRegionFeature() {
+  const { lon, lat } = CLICK_REGION_POLY;
+  return {
+    id: "region.e2e-occitanie",
+    text: "Occitanie",
+    text_en: "Occitania",
+    text_fr: "Occitanie",
+    place_name: "Occitanie, France",
+    place_type: ["region"],
+    center: [lon, lat],
+    bbox: [lon - 1.5, lat - 1.2, lon + 1.5, lat + 1.2],
+    properties: { short_code: "FR-OCC" },
+    geometry: {
+      type: "MultiPolygon",
+      coordinates: [
+        [
+          [
+            [lon - 1, lat - 0.8],
+            [lon + 1, lat - 0.8],
+            [lon + 1, lat + 0.8],
+            [lon - 1, lat + 0.8],
+            [lon - 1, lat - 0.8],
+          ],
+        ],
+      ],
+    },
+    context: [
+      { id: "country.9", text: "France", text_en: "France", text_fr: "France", country_code: "fr" },
+    ],
+  };
+}
+
+/* A US state the provider describes with a point + bbox and NO geometry —
+   the bbox may frame the camera but must never be drawn as a border. */
+function texasRegionFeature() {
+  const { lon, lat } = CLICK_REGION_BBOX;
+  return {
+    id: "region.e2e-texas",
+    text: "Texas",
+    text_en: "Texas",
+    text_fr: "Texas",
+    place_name: "Texas, United States",
+    place_type: ["region"],
+    center: [lon, lat],
+    bbox: [-106.65, 25.84, -93.51, 36.5],
+    geometry: { type: "Point", coordinates: [lon, lat] },
+    properties: { short_code: "US-TX" },
+    context: [
+      {
+        id: "country.10",
+        text: "United States",
+        text_en: "United States",
+        text_fr: "États-Unis",
+        country_code: "us",
+      },
+    ],
+  };
+}
+
+function genericReverseFeature(lon, lat) {
+  const name = `Zone ${lat.toFixed(2)},${lon.toFixed(2)}`;
+  return {
+    id: `place.e2e-${lat.toFixed(2)}-${lon.toFixed(2)}`,
+    text: name,
+    text_en: name,
+    text_fr: name,
+    place_name: name,
+    place_type: ["place"],
+    center: [lon, lat],
+    properties: { country_code: "fr" },
+    context: [
+      {
+        id: "country.11",
+        text: "France",
+        text_en: "France",
+        text_fr: "France",
+        country_code: "fr",
+      },
+    ],
+  };
+}
+
+export function reverseGeocodePayloadFor(lon, lat) {
+  if (near(lon, CLICK_OCEAN.lon) && near(lat, CLICK_OCEAN.lat)) return { features: [] };
+  if (near(lon, CLICK_REGION_POLY.lon) && near(lat, CLICK_REGION_POLY.lat)) {
+    return { features: [occitanieRegionFeature()] };
+  }
+  if (near(lon, CLICK_REGION_BBOX.lon) && near(lat, CLICK_REGION_BBOX.lat)) {
+    return { features: [texasRegionFeature()] };
+  }
+  if (near(lon, CLICK_CITY.lon) && near(lat, CLICK_CITY.lat)) {
+    return { features: [tarbesFeature()] };
+  }
+  return { features: [genericReverseFeature(lon, lat)] };
+}
+
+/* `/geocoding/2.35,48.85.json` → [2.35, 48.85]; a forward query → null. */
+const REVERSE_PATH = /\/geocoding\/(-?\d+(?:\.\d+)?),(-?\d+(?:\.\d+)?)\.json/;
+export function reverseCoordsFrom(url) {
+  const match = REVERSE_PATH.exec(decodeURIComponent(url));
+  return match ? [Number(match[1]), Number(match[2])] : null;
+}
+
 export const PEXELS_PHOTOGRAPHER = "Ada Lovelace";
 export const PEXELS_LINK = "https://www.pexels.com/photo/test-12345/";
 export const PEXELS_ALT = "A city skyline at dusk";
@@ -205,15 +332,75 @@ export function photoProxyPayload() {
 }
 
 /* Minimal but valid MapLibre style: no remote tiles, so the map initialises
-   and fires "load" without any network access. */
+   and fires "load" without any network access. It carries one symbol layer
+   because the app inserts the weather overlay and the selection boundary
+   *before* the first label layer — with no symbol layer at all that ordering
+   would never be exercised. */
 function mapStylePayload() {
   return {
     version: 8,
     name: "e2e-blank",
-    sources: {},
-    layers: [{ id: "bg", type: "background", paint: { "background-color": "#dbeafe" } }],
+    sources: {
+      labels: { type: "geojson", data: { type: "FeatureCollection", features: [] } },
+    },
+    layers: [
+      { id: "bg", type: "background", paint: { "background-color": "#dbeafe" } },
+      /* No text-field and no `glyphs` URL: the layer exists purely to give the
+         style a symbol layer to insert before, and rendering real text would
+         drag a font endpoint into an offline test run for no benefit. */
+      { id: "place-labels", type: "symbol", source: "labels" },
+    ],
   };
 }
+
+/* ── MapTiler weather ───────────────────────────────────────────────────
+   The real @maptiler/weather layers run in these tests: they fetch a
+   `weather/latest.json` manifest and then one raster tile pyramid per
+   keyframe. Both are served here, so the legend really does come from the
+   layer's own ColorRamp and the timeline really does move a TimeFrame
+   animation — no part of that pipeline is stubbed out.
+
+   Keyframes are generated relative to the moment of the request, on the hour,
+   spanning -3 h … +9 h. That is what makes "Now", "+3 h" and "+6 h" all
+   genuinely reachable whenever the suite runs. */
+export const WEATHER_KEYFRAME_HOURS = [-3, 0, 3, 6, 9];
+
+function weatherVariable(variableId, channels) {
+  const onTheHour = Math.floor(Date.now() / 3600000) * 3600000;
+  return {
+    tile_format: "png",
+    metadata: {
+      minzoom: 0,
+      maxzoom: 2,
+      weather_variable: {
+        variable_id: variableId,
+        decoding: { channels, min: -100, max: 100 },
+      },
+    },
+    keyframes: WEATHER_KEYFRAME_HOURS.map((hours) => ({
+      id: `${variableId}-${hours}`,
+      timestamp: new Date(onTheHour + hours * 3600000).toISOString(),
+    })),
+  };
+}
+
+function weatherLatestPayload() {
+  return {
+    variables: [
+      weatherVariable("temperature-2m:gfs", "R"),
+      weatherVariable("precipitation-1h:gfs", "R"),
+      /* wind is a two-channel (u/v) variable */
+      weatherVariable("wind-10m:gfs", "RG"),
+    ],
+  };
+}
+
+/* 1×1 opaque PNG — a real decodable image, so the layer's texture upload path
+   runs rather than erroring. */
+const WEATHER_TILE_PNG = Buffer.from(
+  "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==",
+  "base64",
+);
 
 const json = (body) => ({
   status: 200,
@@ -224,7 +411,7 @@ const json = (body) => ({
 /* ── Installer ─────────────────────────────────────────────────────────── */
 
 export async function installMocks(page, overrides = {}) {
-  const { weatherStatus = 200, photoProxy } = overrides;
+  const { weatherStatus = 200, photoProxy, reverseDelayMs } = overrides;
   /* "calm" by default. Pass a function to vary the weather per request — the
      URL carries the coordinates, which is how a test gives two cities two
      different forecasts. */
@@ -233,10 +420,19 @@ export async function installMocks(page, overrides = {}) {
   /* Registered FIRST on purpose: Playwright resolves routes in reverse
      registration order, so the specific handlers below override this one.
      Anything cross-origin they don't claim is a live call that shouldn't
-     exist — abort it loudly rather than let it through. */
-  await page.route("**://**", (route, request) => {
-    const url = new URL(request.url());
-    if (url.hostname === "localhost" || url.hostname === "127.0.0.1") return route.continue();
+     exist — abort it loudly rather than let it through.
+
+     The matcher is a PREDICATE that excludes same-origin requests rather than
+     a glob that matches everything and continues them. It looks equivalent,
+     but a `route.continue()` is a full round-trip through the test process,
+     and `vite dev` serves the app as several hundred unbundled modules per
+     page load. Funnelling all of those through the interceptor made the
+     handler queue the slowest thing in the run: under parallel load the app's
+     own 8 s fetch timeout could expire waiting on a mock, and tests failed
+     with a legitimate offline fallback instead of the mocked answer. Not
+     matching them at all keeps the guarantee and removes the bottleneck. */
+  const isExternal = (url) => url.hostname !== "localhost" && url.hostname !== "127.0.0.1";
+  await page.route(isExternal, (route, request) => {
     console.warn(`[e2e] blocked unmocked external request: ${request.url()}`);
     return route.abort();
   });
@@ -261,13 +457,36 @@ export async function installMocks(page, overrides = {}) {
   await page.route("**://api.maptiler.com/maps/**", (route) =>
     route.fulfill(json(mapStylePayload())),
   );
-  await page.route("**://api.maptiler.com/geocoding/**", (route, request) =>
-    route.fulfill(json(maptilerGeocodePayloadFor(request.url()))),
+  await page.route("**://api.maptiler.com/geocoding/**", async (route, request) => {
+    const coords = reverseCoordsFrom(request.url());
+    if (!coords) return route.fulfill(json(maptilerGeocodePayloadFor(request.url())));
+    /* `reverseDelayMs` lets a test make one reverse lookup slower than a
+       later one, which is how the stale-response guard is exercised. */
+    const delay = typeof reverseDelayMs === "function" ? reverseDelayMs(...coords) : 0;
+    if (delay > 0) await new Promise((resolve) => setTimeout(resolve, delay));
+    return route.fulfill(json(reverseGeocodePayloadFor(...coords)));
+  });
+  /* weather manifest + raster tiles for the real @maptiler/weather layers */
+  await page.route("**://api.maptiler.com/weather/latest.json*", (route) =>
+    route.fulfill(json(weatherLatestPayload())),
+  );
+  await page.route("**://api.maptiler.com/tiles/**", (route) =>
+    route.fulfill({ status: 200, contentType: "image/png", body: WEATHER_TILE_PNG }),
+  );
+  /* SDK usage telemetry. Answered rather than aborted: an aborted request
+     logs a console error, and these tests assert the console stays clean.
+     Matched by regex, not a glob — the URL carries a query string. */
+  await page.route(/https:\/\/api\.maptiler\.com\/metrics/, (route) =>
+    route.fulfill({ status: 204, body: "" }),
   );
   await page.route("**://api.bigdatacloud.net/**", (route) => route.fulfill(json({})));
-  /* the Inter webfont is a third-party request too — block it so runs are
-     offline-clean and don't wait on rsms.me */
-  await page.route("**://rsms.me/**", (route) => route.abort());
+  /* The Inter webfont is a third-party request too — served empty so runs stay
+     offline-clean without waiting on rsms.me. Answered rather than aborted: an
+     aborted stylesheet logs "Failed to load resource" to the console, and some
+     tests assert the console stays clean. */
+  await page.route("**://rsms.me/**", (route) =>
+    route.fulfill({ status: 200, contentType: "text/css", body: "" }),
+  );
 
   /* The photo proxy is SAME-ORIGIN, so the cross-origin catch-all above would
      let it through to the real dev middleware — and that middleware holds a

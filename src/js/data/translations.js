@@ -216,6 +216,46 @@ export const I18N = {
     showMapDetails: "Show details",
     mapFullscreen: "Fullscreen",
     mapError: "The map could not load — check your connection and reload.",
+
+    /* click-to-select on the map */
+    mapClickLoading: "Loading weather for this point…",
+    mapClickGeoError: "Place name unavailable — showing coordinates instead.",
+
+    /* weather-overlay legend + forecast-time controls */
+    mapWeatherControls: "Weather overlay controls",
+    mapTimeline: "Forecast time",
+    mapTimeNow: "Now",
+    mapTimePlus3: "+3 h",
+    mapTimePlus6: "+6 h",
+    mapTimeShowing: "Showing {time}",
+    mapTimeClamped: "nearest available forecast time",
+    mapTimeLoading: "Updating the weather overlay…",
+    mapTimeUnavailable: "Forecast times are unavailable for this layer.",
+    mapTimeError: "The weather overlay could not be updated.",
+    mapLegendScale: "Colour scale from {min} to {max} {unit}",
+    mapLegendUnavailable: "Legend unavailable for this layer.",
+
+    /* shareable map link */
+    mapShare: "Share view",
+    mapShareCopied: "Link to this map view copied.",
+    mapShareInAddressBar: "This map view is now in the address bar — copy it to share.",
+
+    /* recent searches */
+    recentTitle: "Recent locations",
+    recentSub: "The last {count} places you selected, kept on this device only.",
+    recentEmpty: "No recent locations yet — search or tap the map to add one.",
+    recentDisabled: "Recent locations are off. Turn them on in Settings to keep your last five.",
+    recentOpenSettings: "Open settings",
+    recentClear: "Clear recent locations",
+    recentClearTitle: "Clear recent locations?",
+    recentClearMessage:
+      "The list of places you recently selected will be removed from this device. Your favourites and settings are not affected.",
+    recentClearAction: "Clear list",
+    recentCleared: "Recent locations cleared.",
+    recentSettingT: "Save recent searches",
+    recentSettingX: "Keep the last five places you selected on this device.",
+    recentClearT: "Clear recent searches",
+    recentClearX: "Remove the stored list of recently selected places.",
     legendCountries: "Countries",
     legendStates: "States (US)",
     legendProvinces: "Provinces (CA)",
@@ -579,6 +619,48 @@ export const I18N = {
     showMapDetails: "Afficher les détails",
     mapFullscreen: "Plein écran",
     mapError: "Impossible de charger la carte — vérifiez votre connexion et rechargez.",
+
+    /* sélection par clic sur la carte */
+    mapClickLoading: "Chargement de la météo pour ce point…",
+    mapClickGeoError: "Nom de lieu indisponible — coordonnées affichées à la place.",
+
+    /* légende de la couche météo + choix de l'heure */
+    mapWeatherControls: "Commandes de la couche météo",
+    mapTimeline: "Heure de prévision",
+    mapTimeNow: "Maintenant",
+    mapTimePlus3: "+3 h",
+    mapTimePlus6: "+6 h",
+    mapTimeShowing: "Affichage : {time}",
+    mapTimeClamped: "heure de prévision disponible la plus proche",
+    mapTimeLoading: "Mise à jour de la couche météo…",
+    mapTimeUnavailable: "Heures de prévision indisponibles pour cette couche.",
+    mapTimeError: "La couche météo n'a pas pu être mise à jour.",
+    mapLegendScale: "Échelle de couleurs de {min} à {max} {unit}",
+    mapLegendUnavailable: "Légende indisponible pour cette couche.",
+
+    /* lien de carte partageable */
+    mapShare: "Partager la vue",
+    mapShareCopied: "Lien vers cette vue de la carte copié.",
+    mapShareInAddressBar:
+      "Cette vue de la carte est dans la barre d'adresse — copiez-la pour la partager.",
+
+    /* recherches récentes */
+    recentTitle: "Lieux récents",
+    recentSub: "Les {count} derniers lieux sélectionnés, conservés uniquement sur cet appareil.",
+    recentEmpty: "Aucun lieu récent — recherchez ou touchez la carte pour en ajouter un.",
+    recentDisabled:
+      "Les lieux récents sont désactivés. Activez-les dans les réglages pour conserver les cinq derniers.",
+    recentOpenSettings: "Ouvrir les réglages",
+    recentClear: "Effacer les lieux récents",
+    recentClearTitle: "Effacer les lieux récents ?",
+    recentClearMessage:
+      "La liste des lieux récemment sélectionnés sera supprimée de cet appareil. Vos favoris et vos réglages ne sont pas affectés.",
+    recentClearAction: "Effacer la liste",
+    recentCleared: "Lieux récents effacés.",
+    recentSettingT: "Enregistrer les recherches récentes",
+    recentSettingX: "Conserver sur cet appareil les cinq derniers lieux sélectionnés.",
+    recentClearT: "Effacer les recherches récentes",
+    recentClearX: "Supprimer la liste enregistrée des lieux récemment sélectionnés.",
     legendCountries: "Pays",
     legendStates: "États (US)",
     legendProvinces: "Provinces (CA)",

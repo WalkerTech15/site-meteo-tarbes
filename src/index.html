@@ -640,6 +640,31 @@
                 <span data-country="CA">Canada</span>
               </button>
             </div>
+            <!-- Kept out of .map-filters: those four are one quick-jump group,
+                 this is a separate action. Explicit share is also the only path
+                 allowed to publish a device-geolocation coordinate — see
+                 features/map-url-sync.js. -->
+            <div class="map-actions">
+              <button class="chip map-share-chip" id="mapShareBtn" type="button">
+                <span class="chip-icon" aria-hidden="true"
+                  ><svg
+                    viewBox="0 0 24 24"
+                    width="16"
+                    height="16"
+                    fill="none"
+                    stroke="currentColor"
+                    stroke-width="1.8"
+                    stroke-linecap="round"
+                    stroke-linejoin="round"
+                  >
+                    <circle cx="18" cy="5" r="3" />
+                    <circle cx="6" cy="12" r="3" />
+                    <circle cx="18" cy="19" r="3" />
+                    <path d="m8.6 13.5 6.8 4M15.4 6.5l-6.8 4" /></svg
+                ></span>
+                <span data-i18n="mapShare">Share view</span>
+              </button>
+            </div>
           </div>
           <div class="card map-card" id="mapCard">
             <div
@@ -700,11 +725,28 @@
               </button>
             </div>
             <div id="worldMap"></div>
+            <!-- Forecast-time selector + weather legend. A sibling of the map
+                 container, never a child of it, so a click here can't reach
+                 MapLibre's canvas listeners and be read as "select this
+                 coordinate". Populated by ui/render-map-weather.js. -->
+            <div
+              class="map-weather-controls"
+              id="mapWeatherControls"
+              aria-label="Weather overlay controls"
+              data-i18n-aria="mapWeatherControls"
+              role="group"
+              hidden
+            ></div>
             <aside class="map-weather-panel" id="mapWeatherPanel" aria-live="polite"></aside>
             <button class="map-show-panel" id="mapShowPanel" type="button" hidden>
               <span aria-hidden="true">☁</span><span data-i18n="showMapDetails">Show details</span>
             </button>
           </div>
+          <section
+            class="card map-recents-card"
+            id="mapRecents"
+            aria-labelledby="mapRecentsTitle"
+          ></section>
           <section
             class="card map-popular-card"
             id="mapPopular"
@@ -1781,7 +1823,58 @@
                 <p data-i18n="privSub"></p>
               </div>
             </div>
+            <!-- Recent searches: opt-IN, so this switch starts off for every
+                 new visitor (core/state.js reads a missing flag as false). -->
+            <div class="notif-grid priv-switch-grid">
+              <div class="notif-item">
+                <span class="metric-ico tint-violet" aria-hidden="true"
+                  ><svg
+                    viewBox="0 0 24 24"
+                    width="17"
+                    height="17"
+                    fill="none"
+                    stroke="currentColor"
+                    stroke-width="1.9"
+                    stroke-linecap="round"
+                    stroke-linejoin="round"
+                  >
+                    <path d="M3 12a9 9 0 1 0 2.6-6.4" />
+                    <path d="M3 4v5h5M12 8v4.5l3 1.8" /></svg
+                ></span>
+                <div class="notif-txt">
+                  <b id="recentsLbl" data-i18n="recentSettingT"></b
+                  ><span data-i18n="recentSettingX"></span>
+                </div>
+                <button
+                  class="switch"
+                  role="switch"
+                  aria-checked="false"
+                  aria-labelledby="recentsLbl"
+                  data-recents="save"
+                ></button>
+              </div>
+            </div>
             <div class="priv-grid">
+              <button class="priv-tile" data-priv="recents">
+                <span class="metric-ico tint-rose" aria-hidden="true"
+                  ><svg
+                    viewBox="0 0 24 24"
+                    width="17"
+                    height="17"
+                    fill="none"
+                    stroke="currentColor"
+                    stroke-width="1.9"
+                    stroke-linecap="round"
+                    stroke-linejoin="round"
+                  >
+                    <path d="M4 7h16M9 7V5a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2" />
+                    <path d="M6 7l1 13a1 1 0 0 0 1 1h8a1 1 0 0 0 1-1l1-13" />
+                    <path d="M10 11v6M14 11v6" /></svg
+                ></span>
+                <span class="priv-txt"
+                  ><b data-i18n="recentClearT"></b><span data-i18n="recentClearX"></span
+                ></span>
+              </button>
               <button class="priv-tile" data-priv="location">
                 <span class="metric-ico tint-blue" aria-hidden="true"
                   ><svg

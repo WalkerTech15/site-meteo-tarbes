@@ -4,17 +4,26 @@ import { $, $$, esc } from "../core/dom.js";
 import { t } from "../core/i18n.js";
 import { fmtHour } from "../core/datetime.js";
 import { FETCH_TIMEOUT_MS } from "../core/config.js";
+import { emit } from "../core/app-bus.js";
 import { LOCATIONS } from "../data/locations.js";
 import { weatherIcon } from "../data/icons.js";
 import { wmo, wxDesc } from "../data/weather-codes.js";
 import { fmtTemp, tempUnit, fmtWind, windUnit } from "../core/units.js";
-import { locName, kindLabel, flagsHtml } from "../core/location.js";
+import { locName, locRegion, locCountry, kindLabel, flagsHtml } from "../core/location.js";
+import { coordLabel } from "../core/coord-location.js";
 import { geoIdentityHtml } from "../core/geo-identity.js";
 import { demoWeather } from "../services/weather-api.js";
 import { selectLocation } from "../features/location.js";
 import { isFav, toggleFavorite } from "../features/favorites.js";
+import {
+  RECENTS_LIMIT,
+  clearRecents,
+  restoreRecents,
+  recentToLocation,
+} from "../features/recent-locations.js";
 import { switchView } from "./navigation.js";
 import { confirmAction } from "./confirm-dialog.js";
+import { showToast } from "./notifications.js";
 
 const POPULAR_IDS = ["paris", "newyork", "tokyo", "sydney", "london"];
 let popularCache = null;
@@ -116,6 +125,135 @@ function popularHtml() {
       .join("")}</div>`;
 }
 
+/* ── Map-click states ─────────────────────────────────────────────────────
+   A click on the map has to acknowledge itself before any network call
+   returns, so the panel gets a skeleton naming the exact coordinate that was
+   clicked. The panel is aria-live="polite", so the loading line and then the
+   resolved place are both announced. */
+export function isMapPanelOpen() {
+  return !panelHidden;
+}
+
+export function showMapPanel() {
+  const panel = $("#mapWeatherPanel");
+  const showButton = $("#mapShowPanel");
+  panelHidden = false;
+  if (panel) panel.hidden = false;
+  if (showButton) showButton.hidden = true;
+}
+
+/* Close without the confirmation dialog — used when restoring `panel=0` from
+   a shared URL, where the user already made that choice once. */
+export function hideMapPanel() {
+  const panel = $("#mapWeatherPanel");
+  const showButton = $("#mapShowPanel");
+  panelHidden = true;
+  if (panel) panel.hidden = true;
+  if (showButton) showButton.hidden = false;
+}
+
+export function renderMapPanelLoading(lat, lon) {
+  const panel = $("#mapWeatherPanel");
+  if (!panel) return;
+  panel.innerHTML = `
+    <div class="map-panel-loading">
+      <p class="map-panel-loading-title">
+        <span class="map-panel-spinner" aria-hidden="true"></span>${esc(t("mapClickLoading"))}
+      </p>
+      <p class="map-panel-loading-coords">${esc(coordLabel(lat, lon))}</p>
+    </div>`;
+}
+
+/* ── Recent searches ──────────────────────────────────────────────────────
+   Opt-in (off by default), capped at five, and stored with the minimum
+   needed to re-select a place — see features/recent-locations.js for the
+   privacy rules this renders. */
+function recentEntryHtml(entry, index) {
+  const loc = recentToLocation(entry);
+  const name = locName(loc);
+  const where = [locRegion(loc), locCountry(loc)].filter(Boolean).join(", ");
+  const label = [name, where].filter(Boolean).join(", ");
+  return `<li>
+      <button class="map-recent" type="button" data-recent="${index}"
+        aria-label="${esc(label)}">
+        ${flagsHtml(loc, "small")}
+        <span class="map-recent-text">
+          <b>${esc(name)}</b>
+          <span>${esc(where || kindLabel(loc.kind))}</span>
+        </span>
+        <span class="map-recent-kind">${esc(kindLabel(loc.kind))}</span>
+      </button>
+    </li>`;
+}
+
+function recentsBodyHtml() {
+  if (!state.saveRecents) {
+    return `<p class="map-recents-note" data-state="disabled">${esc(t("recentDisabled"))}</p>
+      <button class="map-recents-link" id="mapRecentsSettings" type="button">${esc(
+        t("recentOpenSettings"),
+      )}</button>`;
+  }
+  if (!state.recents.length) {
+    return `<p class="map-recents-note" data-state="empty">${esc(t("recentEmpty"))}</p>`;
+  }
+  return `<ol class="map-recents-list">${state.recents.map(recentEntryHtml).join("")}</ol>
+    <button class="map-recents-clear" id="mapRecentsClear" type="button">${esc(
+      t("recentClear"),
+    )}</button>`;
+}
+
+export function renderRecentLocations() {
+  const host = $("#mapRecents");
+  if (!host) return;
+  host.innerHTML = `
+    <div class="map-recents-head">
+      <h2 class="info-title" id="mapRecentsTitle">${esc(t("recentTitle"))}</h2>
+      <p class="map-recents-sub">${esc(t("recentSub").replace("{count}", RECENTS_LIMIT))}</p>
+    </div>
+    ${recentsBodyHtml()}`;
+
+  $$("#mapRecents .map-recent").forEach((button) =>
+    button.addEventListener("click", () => {
+      const entry = state.recents[Number(button.dataset.recent)];
+      const loc = recentToLocation(entry);
+      if (loc) selectLocation(loc);
+    }),
+  );
+
+  $("#mapRecentsSettings")?.addEventListener("click", () => switchView("settings"));
+
+  $("#mapRecentsClear")?.addEventListener("click", (event) =>
+    clearRecentSearches(event.currentTarget),
+  );
+}
+
+/* Shared by the map page's Clear button and the Settings privacy tile, so the
+   confirmation wording, the success message and the Undo window are the same
+   whichever one the user reaches for. */
+export async function clearRecentSearches(trigger) {
+  const accepted = await confirmAction({
+    title: t("recentClearTitle"),
+    message: t("recentClearMessage"),
+    confirmLabel: t("recentClearAction"),
+    cancelLabel: t("cancelAction"),
+    trigger,
+    danger: true,
+  });
+  if (!accepted) return false;
+  /* the snapshot is what makes Undo safe: nothing is re-derived, the exact
+     entries go back if the user changes their mind */
+  const removed = clearRecents();
+  renderRecentLocations();
+  showToast(t("recentCleared"), {
+    actionLabel: t("undoAction"),
+    onAction: () => {
+      restoreRecents(removed);
+      renderRecentLocations();
+    },
+  });
+  return true;
+}
+
 export function renderMapInfo() {
   const panel = $("#mapWeatherPanel");
   const popular = $("#mapPopular");
@@ -141,16 +279,14 @@ export function renderMapInfo() {
       danger: true,
     });
     if (!accepted) return;
-    panelHidden = true;
-    panel.hidden = true;
-    showButton.hidden = false;
+    hideMapPanel();
     showButton.focus();
+    emit("map:panel", { open: false });
   });
   showButton.onclick = () => {
-    panelHidden = false;
-    panel.hidden = false;
-    showButton.hidden = true;
+    showMapPanel();
     $("#mapPanelClose")?.focus();
+    emit("map:panel", { open: true });
   };
   $("#mapForecastBtn").addEventListener("click", () => switchView("forecast"));
   $$("#mapPopular .map-popular-place").forEach((button) =>

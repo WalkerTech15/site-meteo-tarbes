@@ -29,3 +29,7 @@ export const WEATHER_CACHE_TTL_MS = 5 * 60000;
 export const FAVORITES_WEATHER_TTL_MS = 4 * 60000;
 export const GEO_FIX_TTL_MS = 30 * 60000;
 export const MAPTILER_SEARCH_CACHE_MAX = 40;
+/* Reverse geocoding answers "what is at this coordinate" — a fact that does
+   not change. A long TTL means repeatedly clicking around the same spot on
+   the map costs one request, not one per click. */
+export const REVERSE_GEOCODE_TTL_MS = 30 * 60000;

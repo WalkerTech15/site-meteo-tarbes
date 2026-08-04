@@ -17,9 +17,20 @@ import { fmtTemp, tempUnit } from "../core/units.js";
 import { flagsHtml, locRegion, locCountry, locName, kindLabel } from "../core/location.js";
 import { COUNTRY_JUMPS } from "../data/country-jumps.js";
 import { computeFadeVisibility } from "../core/carousel-fade.js";
+import { normalizeBbox } from "../core/geo-bounds.js";
+import { selectionFeature, isAdministrativeArea } from "../core/selection-area.js";
+import { emit } from "../core/app-bus.js";
 import { switchView } from "../ui/navigation.js";
 import { showToast } from "../ui/notifications.js";
-import { WEATHER_LAYER_IDS, removeWeatherLayer, applyWeatherLayer } from "./weather-layers.js";
+import {
+  WEATHER_LAYER_IDS,
+  removeWeatherLayer,
+  applyWeatherLayer,
+  setWeatherLayerTime,
+  firstSymbolLayerId,
+} from "./weather-layers.js";
+import { normalizeOffset, availableOffsets } from "./map-timeline.js";
+import { renderWeatherOverlayUI } from "../ui/render-map-weather.js";
 
 let maplibreglPromise = null;
 function loadMapLibre() {
@@ -106,8 +117,10 @@ function applyMapControlLabels(map) {
 }
 
 const MAP_CONFIG = {
-  worldMap: { view: "map", autoPopup: false },
-  homeMap: { view: "home", autoPopup: false },
+  /* the map page's full-size map is the one you can click to pick a place;
+     the home preview stays a read-only summary of the current selection */
+  worldMap: { view: "map", autoPopup: false, selectable: true },
+  homeMap: { view: "home", autoPopup: false, selectable: false },
 };
 const MAPS = {}; // containerId → { map, marker, popup, lastKey }
 
@@ -160,17 +173,6 @@ const SELECTION_SOURCE = "weather-selection-area";
 const SELECTION_FILL = "weather-selection-fill";
 const SELECTION_LINE = "weather-selection-line";
 
-function selectionFeature(loc) {
-  if (!["Polygon", "MultiPolygon"].includes(loc?.geometry?.type)) {
-    return { type: "FeatureCollection", features: [] };
-  }
-  return {
-    type: "Feature",
-    properties: { kind: loc.kind || "place" },
-    geometry: loc.geometry,
-  };
-}
-
 /* Add a Google-Maps-style blue tint/outline only for real polygon geometry.
    Point-only geocoder results use the persistent marker focus ring instead;
    their rectangular bbox is deliberately never drawn as a fake boundary. */
@@ -184,7 +186,7 @@ function applySelectionArea(inst) {
     return;
   }
   map.addSource(SELECTION_SOURCE, { type: "geojson", data });
-  const firstLabel = (map.getStyle().layers || []).find((layer) => layer.type === "symbol")?.id;
+  const firstLabel = firstSymbolLayerId(map);
   map.addLayer(
     {
       id: SELECTION_FILL,
@@ -215,12 +217,17 @@ function updateSelectionArea(inst, loc) {
   else inst.map.once("idle", () => applySelectionArea(inst));
 }
 
+/* Keep the selected boundary above a freshly-added weather overlay, but still
+   below the basemap's labels — the weather layer is inserted before the first
+   symbol layer too (see firstSymbolLayerId), so this puts the boundary in the
+   slot between them: visible through the overlay, never covering place names. */
 function raiseSelectionArea(inst) {
   const map = inst?.map;
   if (!map?.getLayer(SELECTION_FILL)) return;
   try {
-    map.moveLayer(SELECTION_FILL);
-    map.moveLayer(SELECTION_LINE);
+    const firstLabel = firstSymbolLayerId(map);
+    map.moveLayer(SELECTION_FILL, firstLabel);
+    map.moveLayer(SELECTION_LINE, firstLabel);
   } catch {
     /* style/layer changed while an optional weather layer was loading */
   }
@@ -232,6 +239,151 @@ export function refreshMapLanguage() {
     else inst.map.once("idle", () => applyMapLanguage(inst.map));
     applyMapControlLabels(inst.map);
   });
+  renderWeatherOverlay(); /* legend labels and the timeline clock are translated */
+}
+
+/* ── Click-to-select ──────────────────────────────────────────────────────
+   A genuine map click is a press and release on the map surface itself.
+   MapLibre already withholds its `click` event when the pointer travelled
+   further than its clickTolerance between mousedown and mouseup, so a pan or
+   a pinch never arrives here at all. What it does NOT filter is a click that
+   landed on something drawn ON the map: the selection marker (whose own
+   handler toggles the popup), an open popup, or a map control. Those are
+   interactions with that element, not a request to select a new place. */
+const NON_MAP_TARGETS =
+  ".maplibregl-marker, .maplibregl-popup, .maplibregl-ctrl, .maplibregl-control-container";
+
+export function isSelectableMapClick(event) {
+  const target = event?.originalEvent?.target;
+  if (!target || typeof target.closest !== "function") return true;
+  return !target.closest(NON_MAP_TARGETS);
+}
+
+/* The async half (reverse geocoding, weather, panel) lives in
+   features/map-click.js and registers itself here, so this module never
+   imports the selection pipeline back and the module graph stays acyclic. */
+let mapClickHandler = null;
+export function setMapClickHandler(handler) {
+  mapClickHandler = handler;
+}
+
+function bindMapSelection(inst) {
+  inst.map.on("click", (event) => {
+    if (!mapClickHandler || !isSelectableMapClick(event)) return;
+    const { lng, lat } = event.lngLat;
+    /* Immediate feedback: the pin moves on this frame, before any network
+       call. Remembering the clicked key lets updateMap() tell a click-driven
+       selection from a search-driven one — a click should not yank the camera
+       away from the point the user just aimed at (unless what they hit turns
+       out to be a whole administrative area worth framing). */
+    inst.marker.setLngLat([lng, lat]);
+    inst.pendingClickKey = `${lat},${lng}`;
+    /* drop the previous place's administrative outline right away rather than
+       leaving it around a point the user did not select */
+    updateSelectionArea(inst, null);
+    mapClickHandler({ lat, lon: lng });
+  });
+}
+
+/* Camera changes are incidental state: reported so the URL can be updated
+   with a debounced replaceState, never a history entry (see map-url.js). */
+function bindCameraReporting(inst, id) {
+  inst.map.on("moveend", () => {
+    const center = inst.map.getCenter();
+    emit("map:moved", { id, lat: center.lat, lon: center.lng, zoom: inst.map.getZoom() });
+  });
+}
+
+/* Current camera of the map page's map, for URL serialization. */
+export function getMapCamera() {
+  const inst = MAPS.worldMap;
+  if (!inst) return null;
+  try {
+    const center = inst.map.getCenter();
+    return { lat: center.lat, lon: center.lng, zoom: inst.map.getZoom() };
+  } catch {
+    return null; /* map removed mid-call */
+  }
+}
+
+/* Creation is asynchronous (the SDK chunk is imported on demand), and several
+   callers can ask for the same map in the same tick — switchView() and the
+   weather fan-out both call renderMap(). Without this, each would get past the
+   `!MAPS[id]` check and build a second MapLibre instance on the same
+   container: duplicate canvases, duplicate listeners, and a camera applied to
+   whichever one lost. One in-flight promise per container fixes that. */
+const CREATING = {};
+
+async function createMapInstance(id, el, cfg) {
+  const loc = state.loc;
+  const maplibregl = await loadMapLibre();
+  /* container may have been swapped for an offline message while we awaited */
+  if (!$("#" + id)) return;
+  const map = new maplibregl.Map({
+    container: id,
+    style: MAP_STYLE,
+    center: [loc.lon, loc.lat],
+    /* slightly zoomed out so the first flyTo is a real flight — a no-op
+         flight would skip the popup offset and the moveend event */
+    zoom: zoomFor(loc) - 0.4,
+    renderWorldCopies: false,
+    minZoom: 1 /* mercator already clamps latitude at ±85° — no pole panning */,
+    navigationControl: false,
+    attributionControl: { compact: true },
+    locale: mapLocale(),
+  });
+  map.addControl(new maplibregl.NavigationControl({ showCompass: false }), "top-left");
+  map.on("load", () => {
+    el.classList.remove("is-loading");
+    applyMapLanguage(map);
+    applyMapControlLabels(map);
+    softenBaseBoundaries(map);
+  });
+  map.once("error", () => {
+    if (!map.isStyleLoaded()) {
+      try {
+        map.remove();
+      } catch {
+        /* already gone */
+      }
+      delete MAPS[id];
+      mapError(id);
+    }
+  });
+
+  const pin = document.createElement("div");
+  pin.className = "map-pin-icon";
+  pin.innerHTML =
+    '<span class="map-focus-ring"></span><span class="map-ping"></span><span class="map-dot"></span>';
+  /* anchor "bottom" = popup always above the marker; the flyTo offset below
+       shifts the marker under the center so the popup always fits the map */
+  const popup = new maplibregl.Popup({ offset: 16, maxWidth: "260px", anchor: "bottom" });
+  /* the popup's "view weather" button has no inline handler (unlike a plain
+       onclick="..." string, which would need switchView on window) — attach a
+       fresh listener each time the popup's content actually opens instead. */
+  popup.on("open", () => {
+    const popupEl = popup.getElement && popup.getElement();
+    const btn = popupEl && popupEl.querySelector(".mp-link");
+    if (btn) btn.addEventListener("click", () => switchView("home"), { once: true });
+    applyMapControlLabels(map);
+  });
+  const marker = new maplibregl.Marker({ element: pin })
+    .setLngLat([loc.lon, loc.lat])
+    .setPopup(popup)
+    .addTo(map);
+  MAPS[id] = {
+    map,
+    marker,
+    popup,
+    lastKey: null,
+    userMarker: null,
+    weatherLayer: null,
+    weatherLayerType: null,
+  };
+  /* bound once, at creation — never on a later updateMap() pass, so the map
+     can never accumulate duplicate listeners */
+  if (cfg.selectable) bindMapSelection(MAPS[id]);
+  bindCameraReporting(MAPS[id], id);
 }
 
 async function updateMap(id) {
@@ -250,68 +402,18 @@ async function updateMap(id) {
       return;
     }
     el.classList.add("is-loading");
-    let maplibregl;
+    if (!CREATING[id]) {
+      CREATING[id] = createMapInstance(id, el, cfg).finally(() => {
+        delete CREATING[id];
+      });
+    }
     try {
-      maplibregl = await loadMapLibre();
+      await CREATING[id];
     } catch {
       mapError(id);
       return;
     }
-    /* container may have been swapped for an offline message while we awaited */
-    if (!$("#" + id)) return;
-    const map = new maplibregl.Map({
-      container: id,
-      style: MAP_STYLE,
-      center: [loc.lon, loc.lat],
-      /* slightly zoomed out so the first flyTo is a real flight — a no-op
-         flight would skip the popup offset and the moveend event */
-      zoom: zoomFor(loc) - 0.4,
-      renderWorldCopies: false,
-      minZoom: 1 /* mercator already clamps latitude at ±85° — no pole panning */,
-      navigationControl: false,
-      attributionControl: { compact: true },
-      locale: mapLocale(),
-    });
-    map.addControl(new maplibregl.NavigationControl({ showCompass: false }), "top-left");
-    map.on("load", () => {
-      el.classList.remove("is-loading");
-      applyMapLanguage(map);
-      applyMapControlLabels(map);
-      softenBaseBoundaries(map);
-    });
-    map.once("error", () => {
-      if (!map.isStyleLoaded()) {
-        try {
-          map.remove();
-        } catch {
-          /* already gone */
-        }
-        delete MAPS[id];
-        mapError(id);
-      }
-    });
-
-    const pin = document.createElement("div");
-    pin.className = "map-pin-icon";
-    pin.innerHTML =
-      '<span class="map-focus-ring"></span><span class="map-ping"></span><span class="map-dot"></span>';
-    /* anchor "bottom" = popup always above the marker; the flyTo offset below
-       shifts the marker under the center so the popup always fits the map */
-    const popup = new maplibregl.Popup({ offset: 16, maxWidth: "260px", anchor: "bottom" });
-    /* the popup's "view weather" button has no inline handler (unlike a plain
-       onclick="..." string, which would need switchView on window) — attach a
-       fresh listener each time the popup's content actually opens instead. */
-    popup.on("open", () => {
-      const popupEl = popup.getElement && popup.getElement();
-      const btn = popupEl && popupEl.querySelector(".mp-link");
-      if (btn) btn.addEventListener("click", () => switchView("home"), { once: true });
-      applyMapControlLabels(map);
-    });
-    const marker = new maplibregl.Marker({ element: pin })
-      .setLngLat([loc.lon, loc.lat])
-      .setPopup(popup)
-      .addTo(map);
-    MAPS[id] = { map, marker, popup, lastKey: null, userMarker: null, weatherLayer: null };
+    if (!MAPS[id]) return; /* container disappeared mid-creation */
   }
   const inst = MAPS[id];
   inst.map.resize();
@@ -335,22 +437,32 @@ async function updateMap(id) {
       ping.className = "map-ping";
       oldPing.replaceWith(ping);
     }
-    /* bbox present (country/region/city extents) → frame it; else type-based zoom */
+    /* bbox present (country/region/city extents) → frame the WHOLE area; else
+       type-based zoom. normalizeBbox repairs an antimeridian-crossing box and
+       rejects a degenerate near-360°-wide one, which would otherwise zoom out
+       to the entire planet instead of showing the place. The box is only ever
+       used for the camera — the visible boundary comes from real polygon
+       geometry or from nothing at all (see applySelectionArea). */
     let cam = null;
-    if (loc.bbox) {
+    const bounds = normalizeBbox(loc.bbox);
+    if (bounds) {
       try {
-        cam = inst.map.cameraForBounds(
-          [
-            [loc.bbox[0], loc.bbox[1]],
-            [loc.bbox[2], loc.bbox[3]],
-          ],
-          { padding: 48, maxZoom: 14 },
-        );
+        cam = inst.map.cameraForBounds(bounds, { padding: 48, maxZoom: 14 });
       } catch {
         cam = null;
       }
     }
-    if (cam) inst.map.flyTo({ center: cam.center, zoom: cam.zoom, duration: 1100 });
+    /* A click on the map is already aimed at a point: moving the camera under
+       the user's cursor would be disorienting. The one exception is a click
+       that turned out to land on a whole country/state/province/region — then
+       framing its full extent is the point of the selection. */
+    const fromClick = inst.pendingClickKey === key;
+    inst.pendingClickKey = null;
+    const keepCamera = fromClick && !(cam && isAdministrativeArea(loc));
+
+    if (keepCamera) {
+      /* nothing to do: the marker is already where the user clicked */
+    } else if (cam) inst.map.flyTo({ center: cam.center, zoom: cam.zoom, duration: 1100 });
     else inst.map.flyTo({ center: [loc.lon, loc.lat], zoom: zoomFor(loc), duration: 1100 });
     if (cfg.autoPopup) {
       /* moveend never fires when the map is already at the target — timer fallback */
@@ -374,6 +486,9 @@ async function updateMap(id) {
       }, 1400);
     }
   }
+  /* A shared link's camera wins over the selection's own framing: it is the
+     view the sender chose to share. Applied last, and only once. */
+  applyPendingCamera(id);
   /* same location (language/unit change): popup content refreshed above,
      user's zoom and center untouched */
 }
@@ -382,6 +497,9 @@ export function renderMap() {
   if (!state.loc) return;
   updateMap("worldMap");
   updateMap("homeMap");
+  /* units and language both change what the legend and the timeline clock
+     read, and both funnel through renderAllWeather() → renderMap() */
+  renderWeatherOverlay();
 }
 
 /* ── MapTiler weather overlay switcher ────────────────────────────────────
@@ -401,25 +519,90 @@ function setLayerButtonState(active) {
   });
 }
 
+/* The one description of what the weather overlay is currently showing —
+   read by the legend, the timeline and the URL serializer, so those three can
+   never disagree about which layer or which forecast hour is active. */
+const overlay = {
+  type: "satellite",
+  status: "idle" /* idle | loading | ready | unavailable | error */,
+  offset: 0,
+  colorRamp: null,
+  timeMs: null,
+  clamped: false,
+  offsets: [],
+};
+
+export function getMapOverlayState() {
+  return { type: overlay.type, offset: overlay.offset, status: overlay.status };
+}
+
+function renderWeatherOverlay() {
+  renderWeatherOverlayUI(overlay, { onSelectTime: setMapTime });
+}
+
+function resetOverlay(type) {
+  overlay.type = type;
+  overlay.colorRamp = null;
+  overlay.timeMs = null;
+  overlay.clamped = false;
+  overlay.offsets = [];
+  if (type === "satellite") {
+    /* returning to the basemap resets the clock too, so re-enabling a layer
+       later starts from "now" rather than a forgotten +6 h */
+    overlay.offset = 0;
+    overlay.status = "idle";
+  }
+}
+
+/* Fold a weather-layers report into the overlay description. */
+function absorbReport(report) {
+  if (!report) return;
+  overlay.colorRamp = report.colorRamp;
+  overlay.timeMs = report.time?.timeMs ?? null;
+  overlay.clamped = Boolean(report.time?.clamped);
+  overlay.offsets = availableOffsets(report.layer);
+  overlay.status = report.sourceReady && report.time?.available ? "ready" : "unavailable";
+}
+
+/* A single counter for BOTH layer changes and time changes: whichever the
+   user asked for last is the only one allowed to finish, so a slow
+   "temperature" cannot land after a fast "wind", and a queued "+6 h" cannot
+   re-apply itself to a layer the user has already switched away from. */
 let layerRequestId = 0;
 
-export async function setMapLayer(type) {
+export async function setMapLayer(type, { offset = overlay.offset } = {}) {
   const requested = WEATHER_LAYER_IDS[type] ? type : "satellite";
   const requestId = ++layerRequestId;
   const isStale = () => requestId !== layerRequestId;
   const button = $(`.map-layer[data-map-layer="${requested}"]`);
   button?.classList.add("is-loading");
+
+  resetOverlay(requested);
+  overlay.offset = requested === "satellite" ? 0 : normalizeOffset(offset);
+  if (requested !== "satellite") overlay.status = "loading";
+  renderWeatherOverlay();
+
   try {
     await updateMap("worldMap");
     const inst = MAPS.worldMap;
     if (!inst) throw new Error("Map unavailable");
-    await applyWeatherLayer(inst, requested, { isStale, onLayerAdded: raiseSelectionArea });
+    const report = await applyWeatherLayer(inst, requested, {
+      isStale,
+      onLayerAdded: raiseSelectionArea,
+      offsetHours: overlay.offset,
+    });
     if (isStale()) return;
+    absorbReport(report);
     setLayerButtonState(requested);
+    renderWeatherOverlay();
+    emit("map:layer", getMapOverlayState());
   } catch {
     if (isStale()) return;
     removeWeatherLayer(MAPS.worldMap);
+    resetOverlay("satellite");
     setLayerButtonState("satellite");
+    renderWeatherOverlay();
+    emit("map:layer", getMapOverlayState());
     showToast(t("mapLayerError"));
   } finally {
     /* the winning request's own setLayerButtonState() above already clears
@@ -427,6 +610,36 @@ export async function setMapLayer(type) {
        own button immediately instead of leaving a stale spinner running
        until the newer request eventually finishes */
     if (isStale()) button?.classList.remove("is-loading");
+  }
+}
+
+/* Move the active overlay to now / +3 h / +6 h. No layer is recreated: this
+   is a setAnimationTime() call on the layer already on the map. */
+export async function setMapTime(offsetHours) {
+  const offset = normalizeOffset(offsetHours);
+  if (overlay.type === "satellite") return; /* nothing to re-time */
+  const requestId = ++layerRequestId;
+  const isStale = () => requestId !== layerRequestId;
+
+  overlay.offset = offset;
+  overlay.status = "loading";
+  renderWeatherOverlay();
+
+  try {
+    const report = await setWeatherLayerTime(MAPS.worldMap, offset, { isStale });
+    if (isStale()) return;
+    if (!report) {
+      overlay.status = "unavailable";
+      renderWeatherOverlay();
+      return;
+    }
+    absorbReport(report);
+    renderWeatherOverlay();
+    emit("map:layer", getMapOverlayState());
+  } catch {
+    if (isStale()) return;
+    overlay.status = "error";
+    renderWeatherOverlay();
   }
 }
 
@@ -520,8 +733,26 @@ export function showUserLocation(lat, lon, acc) {
   Object.values(MAPS).forEach((inst) => setUserLocationOn(inst, lat, lon, acc));
 }
 
-export function jumpTo(center, zoom) {
-  if (MAPS.worldMap) MAPS.worldMap.map.flyTo({ center, zoom, duration: 1200 });
+/* A camera asked for before the map exists — restoring a shared link opens
+   the map page and sets its view in the same breath, and the map itself is
+   created lazily one frame later. Held here and applied by updateMap(). */
+let pendingCamera = null;
+
+/* duration 0 = jump with no flight, used when restoring a shared/bookmarked
+   camera on page load: the view should already BE there, not fly there. */
+export function jumpTo(center, zoom, { duration = 1200 } = {}) {
+  if (!MAPS.worldMap) {
+    pendingCamera = { center, zoom, duration };
+    return;
+  }
+  MAPS.worldMap.map.flyTo({ center, zoom, duration });
+}
+
+function applyPendingCamera(id) {
+  if (id !== "worldMap" || !pendingCamera || !MAPS.worldMap) return;
+  const { center, zoom, duration } = pendingCamera;
+  pendingCamera = null;
+  MAPS.worldMap.map.flyTo({ center, zoom, duration });
 }
 
 /* Country-jump chips above the map card ("Monde"/France/États-Unis/Canada).

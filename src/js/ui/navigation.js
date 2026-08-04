@@ -3,6 +3,7 @@
 import { state } from "../core/state.js";
 import { $, $$ } from "../core/dom.js";
 import { t } from "../core/i18n.js";
+import { emit } from "../core/app-bus.js";
 import { closeThemeMenu } from "../features/settings.js";
 import { renderMap, updateMapLayerFades } from "../features/map.js";
 import { loadFavWeather } from "../features/favorites.js";
@@ -40,6 +41,9 @@ export function switchView(view) {
     if (view === "forecast") renderForecastPage();
   });
   window.scrollTo({ top: 0, behavior: "smooth" });
+  /* announced on the bus rather than by calling the URL layer directly, so
+     navigation.js keeps no dependency on it (see core/app-bus.js) */
+  emit("view:changed", view);
 }
 
 /* Below this width the sidebar becomes an off-canvas drawer (kept in sync with

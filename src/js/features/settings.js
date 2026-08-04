@@ -69,6 +69,7 @@ export function updateSettingsUI() {
   $$(".switch[data-notif]").forEach((b) =>
     b.setAttribute("aria-checked", !!state.notifs[b.dataset.notif]),
   );
+  $$(".switch[data-recents]").forEach((b) => b.setAttribute("aria-checked", !!state.saveRecents));
 }
 
 /* ── Navbar theme control ──

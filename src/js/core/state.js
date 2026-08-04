@@ -16,6 +16,11 @@ export const state = {
   theme: getStr(KEYS.theme, "light"),
   notifs: getJSON(KEYS.notifs, DEFAULT_NOTIFS),
   favorites: getJSON(KEYS.favorites, []),
+  /* Recent searches: opt-in, so a missing flag means off for a new visitor.
+     The list itself is loaded/sanitized by features/recent-locations.js at
+     startup — kept here so every view reads one shared value. */
+  saveRecents: getStr(KEYS.recentsOptIn) === "1",
+  recents: [],
   loc: null,
   wx: null,
   isDemo: false,

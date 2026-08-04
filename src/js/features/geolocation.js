@@ -7,6 +7,7 @@ import { $ } from "../core/dom.js";
 import { t } from "../core/i18n.js";
 import { getJSON, setJSON, KEYS } from "../core/storage.js";
 import { GEO_FIX_TTL_MS } from "../core/config.js";
+import { coordLocation } from "../core/coord-location.js";
 import { fmtTemp, tempUnit } from "../core/units.js";
 import { weatherIcon } from "../data/icons.js";
 import { wmo, wxDesc } from "../data/weather-codes.js";
@@ -19,27 +20,12 @@ import { switchView } from "../ui/navigation.js";
 
 export let geoState = { status: "idle", loc: null, wx: null };
 
+/* The "geo-me-<lat>,<lon>" id prefix is load-bearing in two places: favorites
+   match by id alone (so a second fix must not overwrite the first), and
+   features/recent-locations.js refuses to store anything carrying it, which is
+   what keeps device-position history out of the recent-searches list. */
 function geoLocFrom(lat, lon, info) {
-  /* honest fallback: raw coordinates when reverse geocoding gave nothing */
-  const name = info.name || `${lat.toFixed(2)}°, ${lon.toFixed(2)}°`;
-  return {
-    /* id must be coordinate-derived, not a constant: favorites are matched by id
-       alone, so a fixed "geo-me" made a second saved fix silently overwrite the
-       first one instead of adding a distinct favorite. ~11 m of precision. */
-    id: `geo-me-${lat.toFixed(4)},${lon.toFixed(4)}`,
-    kind: "city",
-    cc: info.cc || "",
-    flag: "📍",
-    lat,
-    lon,
-    name: { en: name, fr: name },
-    region: { en: info.region || "", fr: info.region || "" },
-    country: { en: info.country || "", fr: info.country || "" },
-    landmark: null,
-    aliases: [],
-    grad: ["#3B82F6", "#1E40AF"],
-    dynamic: true,
-  };
+  return coordLocation(lat, lon, info, { idPrefix: "geo-me" });
 }
 
 export async function applyGeoSuccess(lat, lon, info, opts = {}) {

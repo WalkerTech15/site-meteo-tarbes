@@ -3,15 +3,19 @@
  * it's exercised here with a fake `inst` rather than a real MapLibre map or
  * the (dynamically imported) @maptiler/weather SDK. */
 import { describe, it, expect, vi } from "vitest";
-import { applyWeatherLayer } from "./weather-layers.js";
+import { applyWeatherLayer, setWeatherLayerTime, firstSymbolLayerId } from "./weather-layers.js";
 
 /* Minimal stand-in for a MapLibre/MapTiler Map — just enough of the event +
    layer API applyWeatherLayer (via awaitMapReady) touches. */
-function fakeMapInstance({ styleLoaded = true } = {}) {
+function fakeMapInstance({ styleLoaded = true, styleLayers = null } = {}) {
   const layers = new Map();
   const listeners = new Map();
+  const addedBefore = [];
   const map = {
     isStyleLoaded: () => styleLoaded,
+    /* only defined when a test cares about label ordering — otherwise absent,
+       exactly like a map whose style has not resolved yet */
+    ...(styleLayers ? { getStyle: () => ({ layers: styleLayers }) } : {}),
     on(event, handler) {
       if (!listeners.has(event)) listeners.set(event, new Set());
       listeners.get(event).add(handler);
@@ -22,8 +26,9 @@ function fakeMapInstance({ styleLoaded = true } = {}) {
     emit(event, payload) {
       for (const handler of listeners.get(event) || []) handler(payload);
     },
-    addLayer(layer) {
+    addLayer(layer, beforeId) {
       layers.set(layer.id, layer);
+      addedBefore.push(beforeId);
     },
     removeLayer(id) {
       layers.delete(id);
@@ -39,17 +44,41 @@ function fakeMapInstance({ styleLoaded = true } = {}) {
     lastKey: null,
     userMarker: null,
     weatherLayer: null,
+    weatherLayerType: null,
     layers,
+    addedBefore,
   };
 }
 
+const HOUR = 3600 * 1000;
+const NOW = Date.UTC(2024, 5, 15, 12, 0, 0);
+
 /* Fake @maptiler/weather module: records what was constructed instead of
-   rendering real tiles. */
-function fakeWeatherModule() {
+   rendering real tiles. `sourceReady` and the time-frame accessors mirror the
+   real layers' API (seconds, not milliseconds — see features/map-timeline.js). */
+function fakeWeatherModule({ sourceReady = "immediate", ramp = null } = {}) {
   class FakeLayer {
     constructor(opts) {
       this.id = opts.id;
       this.opacity = opts.opacity;
+      this.animationTime = null;
+    }
+    onSourceReadyAsync() {
+      if (sourceReady === "immediate") return Promise.resolve();
+      if (sourceReady === "never") return new Promise(() => {});
+      return new Promise((resolve) => setTimeout(resolve, sourceReady));
+    }
+    getColorRamp() {
+      return ramp;
+    }
+    getAnimationStart() {
+      return (NOW - 3 * HOUR) / 1000;
+    }
+    getAnimationEnd() {
+      return (NOW + 9 * HOUR) / 1000;
+    }
+    setAnimationTime(seconds) {
+      this.animationTime = seconds;
     }
   }
   return {
@@ -171,5 +200,112 @@ describe("applyWeatherLayer", () => {
     await Promise.all([first, second]);
     expect(inst.weatherLayer.id).toBe("weather-wind");
     expect(inst.map.getLayer("weather-temperature")).toBeUndefined();
+  });
+});
+
+describe("layer ordering", () => {
+  it("finds the first symbol layer so weather goes under the labels", () => {
+    const map = {
+      getStyle: () => ({
+        layers: [
+          { id: "bg", type: "background" },
+          { id: "water", type: "fill" },
+          { id: "place-labels", type: "symbol" },
+          { id: "road-labels", type: "symbol" },
+        ],
+      }),
+    };
+    expect(firstSymbolLayerId(map)).toBe("place-labels");
+  });
+
+  it("returns undefined for a label-less or not-yet-loaded style, meaning 'on top'", () => {
+    expect(
+      firstSymbolLayerId({ getStyle: () => ({ layers: [{ id: "bg", type: "background" }] }) }),
+    ).toBeUndefined();
+    expect(firstSymbolLayerId({})).toBeUndefined();
+  });
+
+  it("inserts the weather layer before the first label layer", async () => {
+    const inst = fakeMapInstance({
+      styleLayers: [
+        { id: "bg", type: "background" },
+        { id: "place-labels", type: "symbol" },
+      ],
+    });
+    await applyWeatherLayer(inst, "rain", { loadWeather: async () => fakeWeatherModule() });
+    expect(inst.addedBefore).toEqual(["place-labels"]);
+  });
+});
+
+describe("forecast time", () => {
+  it("applies the requested offset once the source is ready", async () => {
+    const inst = fakeMapInstance();
+    const report = await applyWeatherLayer(inst, "temperature", {
+      loadWeather: async () => fakeWeatherModule(),
+      offsetHours: 3,
+      now: NOW,
+    });
+    expect(report.sourceReady).toBe(true);
+    expect(report.time).toMatchObject({ available: true, offset: 3, clamped: false });
+    expect(inst.weatherLayer.animationTime).toBe((NOW + 3 * HOUR) / 1000);
+  });
+
+  it("hands the caller the layer's own colour ramp for the legend", async () => {
+    const ramp = [{ value: 0, color: [1, 2, 3, 255] }];
+    const inst = fakeMapInstance();
+    const report = await applyWeatherLayer(inst, "wind", {
+      loadWeather: async () => fakeWeatherModule({ ramp }),
+      now: NOW,
+    });
+    expect(report.colorRamp).toBe(ramp);
+  });
+
+  it("reports the source as unavailable rather than hanging forever", async () => {
+    const inst = fakeMapInstance();
+    const report = await applyWeatherLayer(inst, "rain", {
+      loadWeather: async () => fakeWeatherModule({ sourceReady: "never" }),
+      timeoutMs: 10,
+      now: NOW,
+    });
+    expect(report.sourceReady).toBe(false);
+    expect(report.colorRamp).toBeNull();
+  });
+
+  it("re-times the existing layer without recreating or re-adding anything", async () => {
+    const inst = fakeMapInstance();
+    await applyWeatherLayer(inst, "wind", {
+      loadWeather: async () => fakeWeatherModule(),
+      now: NOW,
+    });
+    const layer = inst.weatherLayer;
+    const addedCount = inst.addedBefore.length;
+
+    const report = await setWeatherLayerTime(inst, 6, { now: NOW });
+    expect(inst.weatherLayer).toBe(layer); /* same instance, still on the map */
+    expect(inst.addedBefore).toHaveLength(addedCount); /* nothing re-added */
+    expect(layer.animationTime).toBe((NOW + 6 * HOUR) / 1000);
+    expect(report.type).toBe("wind");
+  });
+
+  it("does nothing when there is no overlay to re-time", async () => {
+    expect(await setWeatherLayerTime(fakeMapInstance(), 3, { now: NOW })).toBeNull();
+    expect(await setWeatherLayerTime(null, 3, { now: NOW })).toBeNull();
+  });
+
+  it("a time change superseded by a layer change never touches the new layer", async () => {
+    const inst = fakeMapInstance();
+    await applyWeatherLayer(inst, "temperature", {
+      loadWeather: async () => fakeWeatherModule({ sourceReady: 20 }),
+      now: NOW,
+    });
+    const slowTime = setWeatherLayerTime(inst, 6, { now: NOW });
+    /* the user switches layer while that +6 h request is still waiting */
+    await applyWeatherLayer(inst, "wind", {
+      loadWeather: async () => fakeWeatherModule(),
+      now: NOW,
+    });
+    expect(await slowTime).toBeNull();
+    expect(inst.weatherLayer.id).toBe("weather-wind");
+    expect(inst.weatherLayer.animationTime).toBe(NOW / 1000); /* still "now" */
   });
 });

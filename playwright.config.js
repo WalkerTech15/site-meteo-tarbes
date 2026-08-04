@@ -13,7 +13,14 @@ export default defineConfig({
   fullyParallel: true,
   forbidOnly: !!process.env.CI,
   retries: process.env.CI ? 2 : 0,
-  workers: process.env.CI ? 1 : undefined,
+  /* Capped rather than left to Playwright's default of half the cores. Much of
+     this suite drives a real MapLibre map, and several specs add a WebGL
+     weather layer on top of it. Chromium keeps only a limited number of live
+     WebGL contexts and silently drops the oldest when that ceiling is passed,
+     which on a many-core machine turned into map-readiness timeouts and
+     genuinely random failures. Four keeps the run parallel and the GPU sane;
+     CI already serialises. */
+  workers: process.env.CI ? 1 : 4,
   reporter: process.env.CI ? "list" : [["list"]],
   use: {
     baseURL: "http://localhost:5174",

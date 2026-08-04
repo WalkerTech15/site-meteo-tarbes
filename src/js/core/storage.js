@@ -13,6 +13,10 @@ export const KEYS = {
   favorites: "ws_favs",
   lastLocation: "ws_lastLoc",
   geo: "ws_geo",
+  /* Recent searches are opt-IN: the flag key is absent for a new visitor,
+     which reads as "off" everywhere (see features/recent-locations.js). */
+  recents: "ws_recents",
+  recentsOptIn: "ws_recents_on",
 };
 
 export function getStr(key, fallback = null) {

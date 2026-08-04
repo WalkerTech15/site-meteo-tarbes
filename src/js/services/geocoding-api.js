@@ -13,8 +13,9 @@ import {
   FETCH_TIMEOUT_MS,
   GEOCODE_FALLBACK_TIMEOUT_MS,
   MAPTILER_SEARCH_CACHE_MAX,
+  REVERSE_GEOCODE_TTL_MS,
 } from "../core/config.js";
-import { createBoundedCache } from "./cache.js";
+import { createBoundedCache, createAsyncCache } from "./cache.js";
 
 /* Geocoding fallback for places outside the curated set */
 export async function geocode(query) {
@@ -69,6 +70,25 @@ function ccFromFeature(f) {
   return "";
 }
 
+/* The two interface languages, requested together so a country/state/region
+   carries BOTH its English and French name in one response. That is what lets
+   a selected administrative area stay correctly named when the user switches
+   language, without a second round trip — and the plain `text` fallback keeps
+   the local name whenever the provider has no translation for that tier. */
+export const GEOCODE_LANGS = ["en", "fr"];
+
+/* MapTiler returns `text_<lang>` / `place_name_<lang>` alongside `text` when
+   the request asked for several languages. */
+function localizedText(feature) {
+  const base = (feature && feature.text) || "";
+  const out = {};
+  for (const lang of GEOCODE_LANGS) out[lang] = (feature && feature[`text_${lang}`]) || base;
+  return out;
+}
+
+const EMPTY_TEXT = { en: "", fr: "" };
+const hasText = (value) => Boolean(value && (value.en || value.fr));
+
 /* Convert one MapTiler GeoJSON feature into a WeatherSphere loc object. */
 function featureToLoc(f) {
   const primary = (f.place_type && f.place_type[0]) || "place";
@@ -76,11 +96,15 @@ function featureToLoc(f) {
   const ctx = f.context || [];
   const pick = (pfx) => {
     const c = ctx.find((x) => String(x.id || "").startsWith(pfx));
-    return c ? c.text : "";
+    return c ? localizedText(c) : null;
   };
-  const region = pick("region") || pick("subregion") || pick("county") || "";
-  const country = pick("country") || (map.kind === "country" ? f.text : "");
-  const name = f.text || (f.place_name || "").split(",")[0];
+  const region = pick("region") || pick("subregion") || pick("county") || EMPTY_TEXT;
+  const countryCtx = pick("country");
+  const country = countryCtx || (map.kind === "country" ? localizedText(f) : EMPTY_TEXT);
+  const fallbackName = f.text || (f.place_name || "").split(",")[0];
+  const name = hasText(localizedText(f))
+    ? localizedText(f)
+    : { en: fallbackName, fr: fallbackName };
   /* ISO 3166-2 region code (e.g. "US-TX") from the region context entry, or the
      feature itself when it IS a state/province — the surest region signal. */
   const regionCtx = ctx.find((x) => String(x.id || "").startsWith("region"));
@@ -98,20 +122,30 @@ function featureToLoc(f) {
     flag: "📍",
     lat: f.center[1],
     lon: f.center[0],
-    name: { en: name, fr: name },
-    region: { en: region, fr: region },
-    country: { en: country, fr: country },
+    name,
+    region,
+    country,
     landmark: null,
     aliases: [],
     grad: ["#3B82F6", "#1E40AF"],
     dynamic: true,
     bbox: Array.isArray(f.bbox) && f.bbox.length === 4 ? f.bbox : null,
     geometry,
-    fullName: f.place_name || name,
+    fullName: f[`place_name_${state.lang}`] || f.place_name || name.en || name.fr,
     placeType: primary,
     _zoom: map.zoom,
     regionCode,
   };
+}
+
+/* Exported for the reverse-geocoding tests, which check the multi-language and
+   administrative-shape handling on real provider payload shapes. */
+export { featureToLoc as __featureToLoc };
+
+/* Both interface languages, the active one first so MapTiler still ranks
+   results for the language the user is actually reading. */
+function geocodeLanguages() {
+  return [state.lang, ...GEOCODE_LANGS.filter((lang) => lang !== state.lang)].join(",");
 }
 
 /* Small LRU-ish cache of recent query→results (per language). */
@@ -227,7 +261,7 @@ export async function maptilerGeocode(query, signal) {
   if (cached) return cached;
   const url =
     `https://api.maptiler.com/geocoding/${encodeURIComponent(q)}.json` +
-    `?key=${MAPTILER_KEY}&language=${state.lang}&autocomplete=true&fuzzyMatch=true&limit=7`;
+    `?key=${MAPTILER_KEY}&language=${geocodeLanguages()}&autocomplete=true&fuzzyMatch=true&limit=7`;
   const res = await fetch(url, { signal });
   if (!res.ok) throw new Error("HTTP " + res.status);
   const d = await res.json();
@@ -238,47 +272,91 @@ export async function maptilerGeocode(query, signal) {
   return locs;
 }
 
-/* Reverse geocode a coordinate through MapTiler → {name, region, cc, country}.
-   Falls back to the keyless BigDataCloud provider when MapTiler is unavailable. */
+/* Settlement-level place types, preferred over a raw address or POI when
+   naming a clicked coordinate — "Tarbes" reads better than "12 Rue …". */
+const SETTLEMENT_TYPES = ["place", "municipality", "locality", "joint_municipality"];
+
+/* Reverse geocode a coordinate through MapTiler → a full loc object (both
+   languages, kind, region code, bbox, and a real polygon when the provider
+   supplies one), or null when the coordinate has no feature at all — open
+   ocean, for instance. Callers turn null into an honest coordinate label via
+   core/coord-location.js rather than guessing a nearby city. */
 export async function reverseGeocodeMaptiler(lat, lon) {
   const url =
     `https://api.maptiler.com/geocoding/${lon},${lat}.json` +
-    `?key=${MAPTILER_KEY}&language=${state.lang}`;
+    `?key=${MAPTILER_KEY}&language=${geocodeLanguages()}`;
   const r = await fetch(url, { signal: AbortSignal.timeout(FETCH_TIMEOUT_MS) });
   if (!r.ok) throw new Error("HTTP " + r.status);
   const d = await r.json();
   const feats = d.features || [];
-  /* prefer a settlement-level feature over a raw address/POI for the card */
-  const f =
-    feats.find((x) =>
-      ["place", "municipality", "locality", "joint_municipality"].includes((x.place_type || [])[0]),
-    ) || feats[0];
-  if (!f) return { name: "", region: "", cc: "", country: "" };
-  const loc = featureToLoc(f);
-  return { name: loc.name.en, region: loc.region.en, cc: loc.cc, country: loc.country.en };
+  const f = feats.find((x) => SETTLEMENT_TYPES.includes((x.place_type || [])[0])) || feats[0];
+  return f ? featureToLoc(f) : null;
 }
 
 /* reverse-geocoding provider (no key, CORS-friendly); swap URL to change provider */
 const REVERSE_GEO_URL = (lat, lon, lang) =>
   `https://api.bigdatacloud.net/data/reverse-geocode-client?latitude=${lat}&longitude=${lon}&localityLanguage=${lang}`;
 
-export async function reverseGeocode(lat, lon) {
-  /* preferred: MapTiler (same key as the map, honours FR/EN) */
-  if (MAPTILER_KEY) {
-    try {
-      return await reverseGeocodeMaptiler(lat, lon);
-    } catch {
-      /* fall through to the keyless provider */
-    }
-  }
+async function reverseGeocodeFallback(lat, lon) {
   const r = await fetch(REVERSE_GEO_URL(lat, lon, state.lang), {
     signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
   });
   if (!r.ok) throw new Error("HTTP " + r.status);
   const d = await r.json();
+  const name = d.city || d.locality || "";
+  const region = d.principalSubdivision || "";
+  const country = d.countryName || "";
+  if (!name && !region && !country) return null;
+  /* one language only from this provider — the same text is used for both,
+     which is exactly the "preserve the local name" fallback */
   return {
-    name: d.city || d.locality || "",
-    region: d.principalSubdivision || "",
+    kind: "city",
     cc: (d.countryCode || "").toUpperCase(),
+    lat,
+    lon,
+    name: { en: name, fr: name },
+    region: { en: region, fr: region },
+    country: { en: country, fr: country },
+    regionCode: d.principalSubdivisionCode || "",
+    bbox: null,
+    geometry: null,
   };
+}
+
+/* Coordinate → place, deduplicated and cached. The key is rounded to ~11 m so
+   repeated clicks in the same spot (and the map click + the geolocation card
+   asking about the same fix) share a single request. A rejected lookup is
+   evicted by createAsyncCache, so a transient failure still retries. */
+const reverseCache = createAsyncCache(REVERSE_GEOCODE_TTL_MS);
+
+function reverseCacheKey(lat, lon) {
+  return `${state.lang}::${lat.toFixed(4)},${lon.toFixed(4)}`;
+}
+
+/**
+ * Reverse geocode to a full loc-shaped object (or null if nothing is there).
+ * Cached; callers guard against stale results with their own request token
+ * rather than an AbortController, so one caller cancelling can never abort a
+ * shared in-flight request another caller is still waiting on.
+ */
+export function reverseGeocodeLocation(lat, lon) {
+  return reverseCache.get(reverseCacheKey(lat, lon), async () => {
+    if (MAPTILER_KEY) {
+      try {
+        return await reverseGeocodeMaptiler(lat, lon);
+      } catch {
+        /* fall through to the keyless provider */
+      }
+    }
+    return reverseGeocodeFallback(lat, lon);
+  });
+}
+
+/* Flat {name, region, cc, country} shape kept for the "my location" card,
+   which only ever needs those four strings in the active language. */
+export async function reverseGeocode(lat, lon) {
+  const loc = await reverseGeocodeLocation(lat, lon);
+  if (!loc) return { name: "", region: "", cc: "", country: "" };
+  const pick = (value) => (value && (value[state.lang] || value.en || value.fr)) || "";
+  return { name: pick(loc.name), region: pick(loc.region), cc: loc.cc, country: pick(loc.country) };
 }

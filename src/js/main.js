@@ -28,6 +28,14 @@ import {
   updateMapLayerFades,
 } from "./features/map.js";
 import { selectLocation } from "./features/location.js";
+import { bindMapClickSelection } from "./features/map-click.js";
+import {
+  initUrlSync,
+  restoreInitialUrlState,
+  urlHasSelection,
+  shareMapView,
+} from "./features/map-url-sync.js";
+import { loadRecents, setRecentsEnabled } from "./features/recent-locations.js";
 import {
   switchView,
   toggleSidebar,
@@ -40,7 +48,7 @@ import {
 import { renderExplore, renderChart, renderHero } from "./ui/render-home.js";
 import { renderFavorites } from "./ui/render-favorites.js";
 import { renderForecastPage } from "./ui/render-forecast.js";
-import { loadPopular } from "./ui/render-map.js";
+import { loadPopular, renderRecentLocations, clearRecentSearches } from "./ui/render-map.js";
 import { bindForecastCarousel } from "./ui/render-forecast.js";
 import { showToast } from "./ui/notifications.js";
 import { confirmAction } from "./ui/confirm-dialog.js";
@@ -172,6 +180,15 @@ $$(".switch[data-notif]").forEach((b) =>
 $$(".priv-tile").forEach((b) =>
   b.addEventListener("click", () => handlePrivacyAction(b.dataset.priv, b)),
 );
+/* Recent searches are opt-in: flipping the switch off stops new recordings
+   immediately, and never touches what is already stored — clearing is its own
+   deliberate, confirmable action next to it. */
+$(".switch[data-recents]")?.addEventListener("click", () => {
+  setRecentsEnabled(!state.saveRecents);
+  updateSettingsUI();
+  renderRecentLocations();
+  showToast(t("prefSaved"));
+});
 
 /* ── Sidebar + views ── */
 $$(".side-item").forEach((b) => b.addEventListener("click", () => switchView(b.dataset.view)));
@@ -223,6 +240,9 @@ bindForecastCarousel();
 /* ── Map page: quick-jump chips (MapLibre uses [lng, lat]) ── */
 bindCountryFilters();
 bindMapLayerControls();
+/* click anywhere on the map → reverse geocode → weather → panel */
+bindMapClickSelection();
+$("#mapShareBtn")?.addEventListener("click", () => shareMapView());
 
 /* ── Resize: realign toggle thumbs, resize maps, redraw charts ── */
 let resizeTimer = null;
@@ -273,8 +293,28 @@ renderFavorites();
 /* Re-resolve stored locations against the current dataset (old saves may lack new fields) */
 const freshen = (loc) => loc && (LOCATIONS.find((l) => l.id === loc.id) || loc);
 state.favorites = state.favorites.map(freshen);
+/* re-sanitized on read, so an older or hand-edited store can never
+   reintroduce a shape the current privacy rules would refuse to write */
+state.recents = loadRecents();
+renderRecentLocations();
+
 const startLoc = freshen(getJSON(KEYS.lastLocation, null));
-selectLocation(startLoc || LOCATIONS.find((l) => l.id === DEFAULT_LOCATION_ID));
+const fallbackLoc = startLoc || LOCATIONS.find((l) => l.id === DEFAULT_LOCATION_ID);
+
+/* URL first: a shared or bookmarked link names the place to open, so loading
+   the previous session's location as well would fetch weather for somewhere
+   the visitor is not being shown. Without a selection in the URL this is just
+   the ordinary startup path. */
+initUrlSync();
+if (urlHasSelection()) {
+  restoreInitialUrlState().then(() => {
+    if (!state.loc) selectLocation(fallbackLoc); /* the URL coordinate failed to resolve */
+  });
+} else {
+  selectLocation(fallbackLoc);
+  restoreInitialUrlState();
+}
+
 $("#geoRetryBtn").addEventListener("click", () => locateMe());
 initGeo();
 loadPopular();
@@ -286,6 +326,7 @@ setInterval(() => {
 
 async function handlePrivacyAction(action, trigger) {
   if (action === "location") showToast(t("locMsg"));
+  else if (action === "recents") await clearRecentSearches(trigger);
   else if (action === "privacy") switchView("about");
   else if (action === "cache") {
     const accepted = await confirmAction({
@@ -313,6 +354,9 @@ async function handlePrivacyAction(action, trigger) {
       },
       favorites: state.favorites,
       lastLocation: state.loc,
+      /* the export mirrors what is actually stored: an opted-out visitor has
+         no recent searches, and the export says so rather than omitting it */
+      recentSearches: state.saveRecents ? state.recents : [],
     };
     const a = document.createElement("a");
     a.href = URL.createObjectURL(

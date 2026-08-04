@@ -4,6 +4,8 @@
 import { state } from "../core/state.js";
 import { t } from "../core/i18n.js";
 import { setJSON, KEYS } from "../core/storage.js";
+import { emit } from "../core/app-bus.js";
+import { recordRecent } from "./recent-locations.js";
 import { fetchWeather, demoWeather } from "../services/weather-api.js";
 import { bumpPhotoToken } from "../services/photo-api.js";
 import { showToast } from "../ui/notifications.js";
@@ -21,33 +23,51 @@ import {
 import { renderAdvisory, clearAdvisory } from "../ui/render-advisory.js";
 import { renderHourly, renderForecastPage } from "../ui/render-forecast.js";
 import { renderMap } from "./map.js";
-import { renderMapInfo } from "../ui/render-map.js";
+import { renderMapInfo, renderRecentLocations } from "../ui/render-map.js";
 import { renderSidePos } from "./geolocation.js";
 
 let lastErrToast = 0;
 
+/* Selections can overlap: a map click while a previous click's weather is
+   still in flight, or two search results picked in quick succession. Only the
+   most recent one is allowed to write weather or repaint, so a slow earlier
+   response can never land on top of a faster later choice — the map would
+   otherwise end up showing one place's name over another place's numbers. */
+let selectionToken = 0;
+
 export async function selectLocation(loc) {
+  const token = ++selectionToken;
+  const isStale = () => token !== selectionToken;
+
   state.loc = loc;
   bumpPhotoToken(); /* invalidate any in-flight photo swap from the previous place */
   setJSON(KEYS.lastLocation, loc);
+  recordRecent(loc); /* no-op unless the user opted in — see recent-locations.js */
   renderHeroSkeleton();
   /* the previous city's hazards must not hang over the one now loading */
   clearAdvisory();
+
+  let wx;
+  let isDemo = false;
   try {
-    state.wx = await fetchWeather(loc);
-    state.isDemo = false;
+    wx = await fetchWeather(loc);
   } catch {
-    state.wx = demoWeather(loc);
-    state.isDemo = true;
-    /* offline: warn once a minute, not on every navigation */
-    if (Date.now() - lastErrToast > 60000) {
-      showToast(t("loadError"));
-      lastErrToast = Date.now();
-    }
+    wx = demoWeather(loc);
+    isDemo = true;
   }
+  if (isStale()) return;
+
+  state.wx = wx;
+  state.isDemo = isDemo;
+  if (isDemo && Date.now() - lastErrToast > 60000) {
+    /* offline: warn once a minute, not on every navigation */
+    showToast(t("loadError"));
+    lastErrToast = Date.now();
+  }
+
   renderAllWeather();
+  emit("location:selected", loc);
   /* air quality resolves separately — update the forecast page when it lands */
-  const wx = state.wx;
   if (wx._aqi)
     wx._aqi.then((aqi) => {
       if (state.wx === wx && aqi != null) {
@@ -72,5 +92,6 @@ export function renderAllWeather() {
   renderForecastPage();
   renderMap();
   renderMapInfo();
+  renderRecentLocations();
   renderSidePos();
 }

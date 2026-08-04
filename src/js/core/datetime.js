@@ -30,3 +30,24 @@ export function fmtDate(dateStr) {
     ? `${d.getDate()} ${t("months")[d.getMonth()].toLowerCase()}`
     : `${t("months")[d.getMonth()]} ${d.getDate()}`;
 }
+
+/* Absolute instant (day + clock) in the visitor's own zone, used by the map
+   timeline to name the real moment the weather overlay is showing. Unlike the
+   helpers above — which format a location's local ISO string — this takes a
+   Date or epoch value, so Intl handles day rollover and month names for it. */
+export function fmtDateTime(value) {
+  const d = value instanceof Date ? value : new Date(value);
+  if (Number.isNaN(d.getTime())) return "";
+  const locale = state.lang === "fr" ? "fr-FR" : "en-US";
+  try {
+    return new Intl.DateTimeFormat(locale, {
+      weekday: "short",
+      day: "numeric",
+      month: "short",
+      hour: "2-digit",
+      minute: "2-digit",
+    }).format(d);
+  } catch {
+    return d.toISOString().slice(0, 16).replace("T", " "); /* unsupported locale/runtime */
+  }
+}
