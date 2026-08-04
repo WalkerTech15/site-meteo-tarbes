@@ -8,7 +8,7 @@ import { syncSegToggle, syncSidebarA11y } from "../ui/navigation.js";
 import { renderChart, renderExplore } from "../ui/render-home.js";
 import { renderFavorites } from "../ui/render-favorites.js";
 import { renderAllWeather } from "./location.js";
-import { refreshMapLanguage } from "./map.js";
+import { refreshMapLanguage, resizeMaps } from "./map.js";
 
 export function setMode(mode) {
   state.mode = mode;
@@ -18,6 +18,11 @@ export function setMode(mode) {
   syncSegToggle($("#modeToggleSide"), "mode", mode);
   updateSettingsUI();
   if (mode === "detailed") renderChart();
+  /* Simple ↔ Detailed changes #homeMap's column width (full-width vs. the
+     home-duo split) synchronously via the body[data-mode] CSS — MapLibre
+     caches its canvas size and never re-measures on its own, so it has to be
+     told explicitly once the new layout has been applied. */
+  requestAnimationFrame(resizeMaps);
 }
 
 export function setUnitTemp(v) {

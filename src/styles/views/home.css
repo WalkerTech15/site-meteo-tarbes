@@ -870,8 +870,15 @@ body[data-mode="simple"] .home-duo {
   padding: 12px;
   border-radius: var(--r-lg);
 }
+/* Scales with viewport width instead of one fixed height: in Simple mode
+   #homeMap is the only column in .home-duo (full width), so a flat 372px
+   read as a thin banner on desktop. clamp() keeps it a proper "world map" on
+   large screens, shrinks smoothly through laptop/tablet widths, and the
+   ≤640px override below restores the original compact mobile height. Applies
+   the same in Detailed mode (same element) — there the map column is
+   narrower, so the extra height only improves its aspect ratio. */
 #homeMap {
-  height: 372px;
+  height: clamp(360px, 30vw, 460px);
   border-radius: var(--r-sm);
   overflow: hidden;
   background: #0b2545;

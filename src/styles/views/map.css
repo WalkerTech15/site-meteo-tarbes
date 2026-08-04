@@ -737,8 +737,12 @@ body[data-theme="dark"] .map-layer-fade-right {
   gap: 12px;
 }
 .map-panel-location {
+  flex: 1;
   min-width: 0;
   gap: 11px;
+}
+.map-panel-location > div {
+  min-width: 0;
 }
 .map-panel-pin {
   display: grid;
@@ -765,9 +769,12 @@ body[data-theme="dark"] .map-layer-fade-right {
   white-space: nowrap;
 }
 .map-panel-location p {
+  overflow: hidden;
   margin: 4px 0 0;
   color: #718096;
   font-size: 12.5px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 .map-panel-actions {
   display: flex;
