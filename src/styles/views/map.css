@@ -664,6 +664,44 @@ body[data-theme="dark"] .maplibregl-ctrl button .maplibregl-ctrl-icon {
   width: 100%;
   height: 100%;
 }
+
+/* Edge fades hint that more layer controls exist off-screen (only on the
+   ≤820px scrolling row — see the media query below). Visibility is toggled
+   in JS from actual scroll geometry via the same computeFadeVisibility()
+   helper the forecast day-carousel uses (core/carousel-fade.js), not
+   guessed from viewport width. `pointer-events: none` keeps them purely
+   decorative: dragging, touch scrolling and clicking a layer button all
+   pass straight through. `border-radius: inherit` keeps the fade from
+   squaring off the switcher's own rounded corners. */
+.map-layer-fade {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 26px;
+  border-radius: inherit;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 0.2s ease;
+  z-index: 1;
+}
+.map-layer-fade.is-visible {
+  opacity: 1;
+}
+.map-layer-fade-left {
+  left: 0;
+  background: linear-gradient(to right, rgba(255, 255, 255, 0.94), transparent);
+}
+.map-layer-fade-right {
+  right: 0;
+  background: linear-gradient(to left, rgba(255, 255, 255, 0.94), transparent);
+}
+body[data-theme="dark"] .map-layer-fade-left {
+  background: linear-gradient(to right, rgba(17, 24, 39, 0.95), transparent);
+}
+body[data-theme="dark"] .map-layer-fade-right {
+  background: linear-gradient(to left, rgba(17, 24, 39, 0.95), transparent);
+}
+
 .map-card .maplibregl-ctrl-top-left {
   top: 72px;
   left: 12px;
@@ -1099,6 +1137,12 @@ body[data-theme="dark"] .map-hour + .map-hour {
     right: 22px;
     left: 22px;
     overflow-x: auto;
+    /* the four controls fit in one native-scrollbar-free row instead of a
+       thick dark bar sitting on top of the map */
+    scrollbar-width: none;
+  }
+  .map-layer-switcher::-webkit-scrollbar {
+    display: none;
   }
   .map-layer {
     flex: 1 0 auto;

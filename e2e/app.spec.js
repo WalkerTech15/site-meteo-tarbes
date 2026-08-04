@@ -1621,3 +1621,362 @@ test.describe("photo proxy failures", () => {
     await expect(page.locator("#heroLandmark .loc-photo.loading")).toHaveCount(0);
   });
 });
+
+test.describe("language menu accessibility", () => {
+  test("77. clicking the language button toggles the menu and its aria-expanded state", async ({
+    app,
+  }) => {
+    const btn = app.locator("#langBtn");
+    const menu = app.locator("#langMenu");
+    await expect(menu).toBeHidden();
+    await expect(btn).toHaveAttribute("aria-expanded", "false");
+
+    await btn.click();
+    await expect(menu).toBeVisible();
+    await expect(btn).toHaveAttribute("aria-expanded", "true");
+
+    await btn.click();
+    await expect(menu).toBeHidden();
+    await expect(btn).toHaveAttribute("aria-expanded", "false");
+  });
+
+  test("78. selecting a language closes the menu, resets aria-expanded, and returns focus", async ({
+    app,
+  }) => {
+    const btn = app.locator("#langBtn");
+    await btn.click();
+    await app.locator('#langMenu button[data-lang="en"]').click();
+
+    await expect(app.locator("#langMenu")).toBeHidden();
+    await expect(btn).toHaveAttribute("aria-expanded", "false");
+    await expect(btn).toBeFocused();
+    await expect(app.locator('#langMenu button[data-lang="en"]')).toHaveAttribute(
+      "aria-checked",
+      "true",
+    );
+    await expect(app.locator('#langMenu button[data-lang="fr"]')).toHaveAttribute(
+      "aria-checked",
+      "false",
+    );
+  });
+
+  test("79. selecting the already-active language still closes the menu", async ({ app }) => {
+    /* app boots in French, so the "fr" item is already active */
+    const btn = app.locator("#langBtn");
+    await btn.click();
+    await app.locator('#langMenu button[data-lang="fr"]').click();
+
+    await expect(app.locator("#langMenu")).toBeHidden();
+    await expect(btn).toHaveAttribute("aria-expanded", "false");
+    await expect(btn).toBeFocused();
+  });
+
+  test("80. clicking outside closes the menu and syncs aria-expanded", async ({ app }) => {
+    await app.locator("#langBtn").click();
+    await expect(app.locator("#langMenu")).toBeVisible();
+
+    await app.locator("#logoLink").click();
+    await expect(app.locator("#langMenu")).toBeHidden();
+    await expect(app.locator("#langBtn")).toHaveAttribute("aria-expanded", "false");
+  });
+
+  test("81. Escape closes the menu, syncs aria-expanded, and restores focus", async ({ app }) => {
+    const btn = app.locator("#langBtn");
+    await btn.click();
+    await expect(app.locator("#langMenu")).toBeVisible();
+
+    await app.keyboard.press("Escape");
+    await expect(app.locator("#langMenu")).toBeHidden();
+    await expect(btn).toHaveAttribute("aria-expanded", "false");
+    await expect(btn).toBeFocused();
+  });
+
+  test("82. the trigger's accessible label names the current interface language, in both languages", async ({
+    app,
+  }) => {
+    const btn = app.locator("#langBtn");
+    await expect(btn).toHaveAttribute("aria-label", "Changer de langue — actuellement Français");
+
+    await btn.click();
+    await app.locator('#langMenu button[data-lang="en"]').click();
+    await expect(btn).toHaveAttribute("aria-label", "Change language — currently English");
+
+    await btn.click();
+    await app.locator('#langMenu button[data-lang="fr"]').click();
+    await expect(btn).toHaveAttribute("aria-label", "Changer de langue — actuellement Français");
+  });
+
+  test("83. switching language while the mobile drawer is open keeps accessible names correct", async ({
+    page,
+  }) => {
+    await page.setViewportSize({ width: 375, height: 812 });
+    await installMocks(page);
+    await page.goto("/");
+    await expect(page.locator("#heroCityName")).not.toBeEmpty();
+
+    await page.locator("#burgerBtn").click();
+    await expect(page.locator("#sidebar")).toHaveAttribute("aria-hidden", "false");
+
+    await page.locator("#langBtn").click();
+    await page.locator('#langMenu button[data-lang="en"]').click();
+
+    await expect(page.locator("#langBtn")).toHaveAttribute(
+      "aria-label",
+      "Change language — currently English",
+    );
+    /* the drawer's own open/closed labelling survived the language switch too */
+    await expect(page.locator("#burgerBtn")).toHaveAttribute("aria-label", "Close menu");
+    await expect(page.locator("#sidebar")).toHaveAttribute("aria-hidden", "false");
+  });
+});
+
+test.describe("forecast subtitle: no duplicated country name", () => {
+  test("84. a city shows its name and country", async ({ app }) => {
+    /* the app boots on Paris (data/locations.js DEFAULT_LOCATION_ID) */
+    await expect(app.locator("#forecastSub")).toHaveText("Prévisions pour Paris, France");
+  });
+
+  test("85. a country appears only once, never doubled", async ({ app }) => {
+    await app.locator('.explore-card[data-loc="france"] .explore-open').click();
+    await expect(app.locator("#forecastSub")).toHaveText("Prévisions pour France");
+    await expect(app.locator("#forecastSub")).not.toContainText("France, France");
+  });
+
+  test("86. language switching preserves the correct hierarchy for a country", async ({ app }) => {
+    await app.locator('.explore-card[data-loc="france"] .explore-open').click();
+    await app.locator("#langBtn").click();
+    await app.locator('#langMenu button[data-lang="en"]').click();
+    await expect(app.locator("#forecastSub")).toHaveText("Forecast for France");
+    await expect(app.locator("#forecastSub")).not.toContainText("France, France");
+  });
+
+  test("87. a dynamically searched (MapTiler/Open-Meteo) city is handled correctly", async ({
+    app,
+  }) => {
+    await app.locator("#searchInput").fill(GEOCODE_LABEL);
+    const option = app.locator("#searchResults .search-item").first();
+    await expect(option).toBeVisible();
+    await option.click();
+    await expect(app.locator("#forecastSub")).toContainText(GEOCODE_LABEL);
+    /* name and country are genuinely different words here — must both show */
+    await expect(app.locator("#forecastSub")).toContainText(",");
+  });
+
+  test("88. the hierarchy also updates after selecting a favorite", async ({ app }) => {
+    await app.locator('.explore-card[data-loc="france"] .explore-open').click();
+    await expect(app.locator("#heroFavBtn")).toBeVisible();
+    await app.locator("#heroFavBtn").click();
+    await expect(app.locator("#heroFavBtn")).toHaveAttribute("aria-pressed", "true");
+
+    /* jump elsewhere, then reselect France from Favorites */
+    await app.locator('.side-item[data-view="favorites"]').click();
+    await app.locator(".favx-open").click();
+    await expect(app.locator("#view-home")).toBeVisible();
+    await expect(app.locator("#forecastSub")).toHaveText("Prévisions pour France");
+    await expect(app.locator("#forecastSub")).not.toContainText("France, France");
+  });
+});
+
+test.describe("single/double advisory layout", () => {
+  const region = (page) => page.locator("#advisoryRegion");
+
+  test("89. one advisory spans the row without leaving empty desktop columns", async ({ page }) => {
+    await installMocks(page, { weatherKind: "heat" });
+    await page.goto("/");
+    await expect(region(page)).toBeVisible();
+    await expect(page.locator(".advisory")).toHaveCount(1);
+
+    const box = await page.locator(".advisory").boundingBox();
+    const listBox = await page.locator(".advisory-list").boundingBox();
+    expect(box.width).toBeGreaterThan(listBox.width * 0.95);
+    expect(Math.abs(box.x - listBox.x)).toBeLessThan(2);
+  });
+
+  test("90. two advisories split the row evenly", async ({ page }) => {
+    await installMocks(page, { weatherKind: "storm" });
+    await page.goto("/");
+    await expect(region(page)).toBeVisible();
+    const cards = page.locator(".advisory");
+    await expect(cards).toHaveCount(2);
+
+    const [a, b] = await Promise.all([cards.nth(0).boundingBox(), cards.nth(1).boundingBox()]);
+    expect(Math.abs(a.width - b.width)).toBeLessThan(2);
+    expect(a.y).toBeCloseTo(b.y, 0); /* same row, not stacked */
+  });
+
+  test("91. three advisories retain the primary/secondary hierarchy", async ({ page }) => {
+    await installMocks(page, { weatherKind: "severe" });
+    await page.goto("/");
+    await expect(region(page)).toBeVisible();
+    const cards = page.locator(".advisory");
+    await expect(cards).toHaveCount(3);
+    await expect(cards.nth(0)).toHaveClass(/is-primary/);
+    await expect(cards.nth(1)).toHaveClass(/is-secondary/);
+    await expect(cards.nth(2)).toHaveClass(/is-secondary/);
+
+    const [primary, secondary] = await Promise.all([
+      cards.nth(0).boundingBox(),
+      cards.nth(1).boundingBox(),
+    ]);
+    expect(primary.width).toBeGreaterThan(secondary.width); /* the 1.4fr/1fr/1fr hierarchy */
+  });
+
+  test("92. the disclaimer spans the complete row regardless of advisory count", async ({
+    page,
+  }) => {
+    for (const kind of ["heat", "storm", "severe"]) {
+      await installMocks(page, { weatherKind: kind });
+      await page.goto("/");
+      await expect(region(page)).toBeVisible();
+      const disclaimer = page.locator(".adv-disclaimer");
+      const list = page.locator(".advisory-list");
+      const [dBox, lBox] = await Promise.all([disclaimer.boundingBox(), list.boundingBox()]);
+      expect(dBox.width).toBeGreaterThan(lBox.width * 0.9);
+    }
+  });
+
+  test("93. no advisory hides the region entirely (unchanged baseline)", async ({ page }) => {
+    await installMocks(page, { weatherKind: "calm" });
+    await page.goto("/");
+    await expect(page.locator("#heroCityName")).not.toBeEmpty();
+    await expect(region(page)).toBeHidden();
+  });
+
+  test("94. mobile keeps the single-column advisory layout regardless of count", async ({
+    page,
+  }) => {
+    await page.setViewportSize({ width: 375, height: 812 });
+    await installMocks(page, { weatherKind: "storm" });
+    await page.goto("/");
+    await expect(region(page)).toBeVisible();
+    const cards = page.locator(".advisory");
+    await expect(cards).toHaveCount(2);
+    const [a, b] = await Promise.all([cards.nth(0).boundingBox(), cards.nth(1).boundingBox()]);
+    expect(b.y).toBeGreaterThan(a.y); /* stacked, not side-by-side */
+    const overflow = await page.evaluate(
+      () => document.documentElement.scrollWidth - document.documentElement.clientWidth,
+    );
+    expect(overflow).toBeLessThanOrEqual(0);
+  });
+});
+
+test.describe("map layer switcher: mobile scrolling", () => {
+  test("95. the inline search stays unchanged above the mobile-search breakpoint", async ({
+    app,
+  }) => {
+    await expect(app.locator("#searchWrap")).toBeVisible();
+    await expect(app.locator("#mobileSearchBtn")).toBeHidden();
+  });
+
+  test("96. the native scrollbar is visually hidden on the layer row", async ({ page }) => {
+    await page.setViewportSize({ width: 375, height: 812 });
+    await installMocks(page);
+    await page.goto("/");
+    await expect(page.locator("#heroCityName")).not.toBeEmpty();
+    await page.locator("#burgerBtn").click();
+    await page.locator('.side-item[data-view="map"]').click();
+
+    const scrollbarWidth = await page
+      .locator(".map-layer-switcher")
+      .evaluate((el) => getComputedStyle(el).scrollbarWidth);
+    expect(scrollbarWidth).toBe("none");
+  });
+
+  test("97. the row remains horizontally scrollable and every layer stays reachable and operable", async ({
+    page,
+  }) => {
+    await page.setViewportSize({ width: 375, height: 812 });
+    await installMocks(page);
+    await page.goto("/");
+    await expect(page.locator("#heroCityName")).not.toBeEmpty();
+    await page.locator("#burgerBtn").click();
+    await page.locator('.side-item[data-view="map"]').click();
+
+    const switcher = page.locator(".map-layer-switcher");
+    await expect(switcher).toHaveCSS("overflow-x", "auto");
+    const overflowAmount = await switcher.evaluate((el) => el.scrollWidth - el.clientWidth);
+    expect(overflowAmount).toBeGreaterThan(0);
+
+    /* the last control ("Vent"/wind) is off-screen until scrolled to, but
+       must still be reachable and keyboard-focusable once it is. Activating
+       a weather overlay depends on live MapTiler weather tiles the e2e
+       mocks don't provide, so reachability — not the resulting map state —
+       is what's asserted here. */
+    const wind = page.locator('.map-layer[data-map-layer="wind"]');
+    await wind.scrollIntoViewIfNeeded();
+    await expect(wind).toBeVisible();
+    await wind.focus();
+    await expect(wind).toBeFocused();
+
+    /* every control, not just the visually-nearest ones, is reachable this way */
+    for (const layer of ["satellite", "temperature", "rain", "wind"]) {
+      const btn = page.locator(`.map-layer[data-map-layer="${layer}"]`);
+      await btn.scrollIntoViewIfNeeded();
+      await expect(btn).toBeVisible();
+    }
+  });
+
+  test("98. edge fades appear/disappear at the start and end of the scroll range", async ({
+    page,
+  }) => {
+    await page.setViewportSize({ width: 375, height: 812 });
+    await installMocks(page);
+    await page.goto("/");
+    await expect(page.locator("#heroCityName")).not.toBeEmpty();
+    await page.locator("#burgerBtn").click();
+    await page.locator('.side-item[data-view="map"]').click();
+
+    const left = page.locator("#mapLayerFadeLeft");
+    const right = page.locator("#mapLayerFadeRight");
+    const switcher = page.locator(".map-layer-switcher");
+
+    await expect(right).toHaveClass(/is-visible/);
+    await expect(left).not.toHaveClass(/is-visible/);
+    expect(await left.evaluate((el) => getComputedStyle(el).pointerEvents)).toBe("none");
+    expect(await right.evaluate((el) => getComputedStyle(el).pointerEvents)).toBe("none");
+
+    await switcher.evaluate((el) => {
+      el.scrollLeft = el.scrollWidth;
+      el.dispatchEvent(new Event("scroll"));
+    });
+    await expect(left).toHaveClass(/is-visible/);
+    await expect(right).not.toHaveClass(/is-visible/);
+  });
+
+  test("99. the layer radiogroup and its French/English labels survive the change", async ({
+    page,
+  }) => {
+    await page.setViewportSize({ width: 375, height: 812 });
+    await installMocks(page);
+    await page.goto("/");
+    await expect(page.locator("#heroCityName")).not.toBeEmpty();
+    await page.locator("#burgerBtn").click();
+    await page.locator('.side-item[data-view="map"]').click();
+
+    await expect(page.locator(".map-layer-switcher")).toHaveAttribute("role", "radiogroup");
+    await expect(page.locator('.map-layer[data-map-layer="temperature"]')).toContainText(
+      "Température",
+    );
+
+    await page.locator("#langBtn").click();
+    await page.locator('#langMenu button[data-lang="en"]').click();
+    await expect(page.locator('.map-layer[data-map-layer="temperature"]')).toContainText(
+      "Temperature",
+    );
+  });
+
+  test("100. no page-level horizontal overflow on the map view at phone width", async ({
+    page,
+  }) => {
+    await page.setViewportSize({ width: 375, height: 812 });
+    await installMocks(page);
+    await page.goto("/");
+    await expect(page.locator("#heroCityName")).not.toBeEmpty();
+    await page.locator("#burgerBtn").click();
+    await page.locator('.side-item[data-view="map"]').click();
+    const overflow = await page.evaluate(
+      () => document.documentElement.scrollWidth - document.documentElement.clientWidth,
+    );
+    expect(overflow).toBeLessThanOrEqual(0);
+  });
+});

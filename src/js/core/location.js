@@ -3,6 +3,7 @@
    lookup tables in data/flags.js. */
 import { state } from "./state.js";
 import { t } from "./i18n.js";
+import { normalize } from "../data/locations.js";
 import {
   countryFlagSrc,
   flagImgTag,
@@ -76,6 +77,21 @@ export function locAccessibleName(loc) {
   if (loc.kind === "country") return t("countryAria").replace("{name}", name);
   const country = locCountry(loc);
   return country && country !== name ? `${name}, ${country}` : name;
+}
+
+/* Plain "place, country" label for headings/subtitles — never repeats the
+   country when the location IS the country, nor when the place's own name
+   and its country name are the same place written differently (curated
+   data and live geocoder results don't always agree on diacritics/case, so
+   the comparison goes through the same normalize() search uses, not a raw
+   string ===). Distinct from locAccessibleName(), which adds a "country"
+   kind suffix for screen readers instead of a bare name. */
+export function locHierarchyLabel(loc) {
+  const name = locName(loc);
+  if (loc.kind === "country") return name;
+  const country = locCountry(loc);
+  if (!country || normalize(country) === normalize(name)) return name;
+  return `${name}, ${country}`;
 }
 
 export function kindLabel(kind) {

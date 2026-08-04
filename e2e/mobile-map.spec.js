@@ -23,7 +23,11 @@ test.describe("map workspace on a phone", () => {
   });
 
   test("the geo-identity chips wrap instead of overflowing", async ({ app }) => {
-    /* search always returns to Home — select first, then open Map to see it. */
+    /* search always returns to Home — select first, then open Map to see it.
+       At this width the inline bar is replaced by #mobileSearchBtn (see
+       mobile-search.spec.js), so it has to be opened before the input is
+       usable. */
+    await app.locator("#mobileSearchBtn").click();
     await app.locator("#searchInput").fill(AUSTIN_LABEL);
     const option = app.locator("#searchResults .search-item").first();
     await expect(option).toBeVisible();

@@ -4,7 +4,7 @@ import { state } from "../core/state.js";
 import { $, $$ } from "../core/dom.js";
 import { t } from "../core/i18n.js";
 import { closeThemeMenu } from "../features/settings.js";
-import { renderMap } from "../features/map.js";
+import { renderMap, updateMapLayerFades } from "../features/map.js";
 import { loadFavWeather } from "../features/favorites.js";
 import { renderChart } from "./render-home.js";
 import { renderForecastPage } from "./render-forecast.js";
@@ -29,8 +29,12 @@ export function switchView(view) {
   if (view === "map" || view === "home") renderMap();
   if (view === "favorites") loadFavWeather();
   /* charts drawn while their view was hidden used a fallback width —
-     redraw at the real container size once the view is visible */
+     redraw at the real container size once the view is visible. The map
+     layer row was measured while #view-map was still hidden too (0 width),
+     so its scroll-fade state needs the same re-check — independent of
+     wx, unlike the two chart redraws below it. */
   requestAnimationFrame(() => {
+    if (view === "map") updateMapLayerFades();
     if (!state.wx) return;
     if (view === "home") renderChart();
     if (view === "forecast") renderForecastPage();

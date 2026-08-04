@@ -7,7 +7,7 @@ import { getJSON, setJSON, clearAll, KEYS } from "./core/storage.js";
 import { injectIconDefs, weatherIcon, MAP_LAYER_ICONS } from "./data/icons.js";
 import { flagHtml } from "./data/flags.js";
 import { LOCATIONS, DEFAULT_LOCATION_ID } from "./data/locations.js";
-import { bindSearchEvents, closeSearchPanel } from "./features/search.js";
+import { bindSearchEvents, closeMobileSearch, focusSearch } from "./features/search.js";
 import {
   setMode,
   setUnitTemp,
@@ -16,11 +16,17 @@ import {
   setLang,
   applyTheme,
   syncThemeNav,
+  syncLangBtnLabel,
   updateSettingsUI,
   closeThemeMenu,
 } from "./features/settings.js";
 import { locateMe, initGeo } from "./features/geolocation.js";
-import { resizeMaps, bindMapLayerControls, bindCountryFilters } from "./features/map.js";
+import {
+  resizeMaps,
+  bindMapLayerControls,
+  bindCountryFilters,
+  updateMapLayerFades,
+} from "./features/map.js";
 import { selectLocation } from "./features/location.js";
 import {
   switchView,
@@ -49,48 +55,56 @@ document.documentElement.lang = state.lang;
 /* ── Search ── */
 bindSearchEvents();
 
+/* ── Language menu — one place owns hidden/aria-expanded/focus so click
+   selection, outside-click, and Escape can never disagree on the state. */
+function closeLanguageMenu({ focusTrigger = false } = {}) {
+  const menu = $("#langMenu");
+  if (menu.hidden) return;
+  menu.hidden = true;
+  $("#langBtn").setAttribute("aria-expanded", "false");
+  if (focusTrigger) $("#langBtn").focus();
+}
+
 /* ── Overlays: click-outside and Escape close whichever is open ── */
 document.addEventListener("click", (e) => {
-  if (!e.target.closest("#searchWrap")) closeSearchPanel();
-  if (!e.target.closest(".lang-wrap")) {
-    $("#langMenu").hidden = true;
-    $("#langBtn").setAttribute("aria-expanded", "false");
-  }
+  /* Search triggers sit outside #searchWrap — exclude them so the same click
+     that opens/focuses search is not also read as "outside" and closed. */
+  if (!e.target.closest("#searchWrap, #mobileSearchBtn, #favAddBtn")) closeMobileSearch();
+  if (!e.target.closest(".lang-wrap")) closeLanguageMenu();
   if (!e.target.closest(".theme-wrap")) closeThemeMenu();
 });
 document.addEventListener("keydown", (e) => {
   if (e.key === "/" && !/input|textarea/i.test(document.activeElement.tagName)) {
     e.preventDefault();
-    $("#searchInput").focus();
+    focusSearch();
   } else if (e.key === "Escape") {
     /* close whichever overlay is open; leave the event untouched for the map */
     if ($("#sidebar").classList.contains("is-open")) {
       closeSidebar();
       $("#burgerBtn").focus();
     }
-    if (!$("#langMenu").hidden) {
-      $("#langMenu").hidden = true;
-      $("#langBtn").setAttribute("aria-expanded", "false");
-      $("#langBtn").focus();
-    }
+    closeLanguageMenu({ focusTrigger: true });
     if (!$("#themeMenu").hidden) {
       closeThemeMenu();
       $("#themeBtn").focus();
     }
-    closeSearchPanel();
+    closeMobileSearch({ focusTrigger: true });
   }
 });
 
-/* ── Language menu ── */
 $("#langBtn").addEventListener("click", () => {
   const menu = $("#langMenu");
-  menu.hidden = !menu.hidden;
-  $("#langBtn").setAttribute("aria-expanded", String(!menu.hidden));
+  if (menu.hidden) {
+    menu.hidden = false;
+    $("#langBtn").setAttribute("aria-expanded", "true");
+  } else {
+    closeLanguageMenu();
+  }
 });
 $$("#langMenu button").forEach((b) =>
   b.addEventListener("click", () => {
     setLang(b.dataset.lang);
-    $("#langMenu").hidden = true;
+    closeLanguageMenu({ focusTrigger: true });
   }),
 );
 
@@ -216,6 +230,9 @@ window.addEventListener(
   "resize",
   () => {
     $$(".seg-toggle").forEach(positionThumb);
+    /* crossing the 820px breakpoint changes whether the layer row can even
+       scroll — the switcher's own scroll listener never fires on its own */
+    updateMapLayerFades();
     /* charts are drawn at their container's size — redraw after resizing */
     clearTimeout(resizeTimer);
     resizeTimer = setTimeout(() => {
@@ -249,6 +266,7 @@ $("#langCode").textContent = state.lang.toUpperCase();
 $$("#langMenu button").forEach((b) =>
   b.setAttribute("aria-checked", b.dataset.lang === state.lang ? "true" : "false"),
 );
+syncLangBtnLabel(); /* applyStaticI18n() above set the static fallback; name the actual language */
 renderExplore();
 renderFavorites();
 

@@ -16,8 +16,10 @@ import { wmo, wxDesc } from "../data/weather-codes.js";
 import { fmtTemp, tempUnit } from "../core/units.js";
 import { flagsHtml, locRegion, locCountry, locName, kindLabel } from "../core/location.js";
 import { COUNTRY_JUMPS } from "../data/country-jumps.js";
+import { computeFadeVisibility } from "../core/carousel-fade.js";
 import { switchView } from "../ui/navigation.js";
 import { showToast } from "../ui/notifications.js";
+import { WEATHER_LAYER_IDS, removeWeatherLayer, applyWeatherLayer } from "./weather-layers.js";
 
 let maplibreglPromise = null;
 function loadMapLibre() {
@@ -27,12 +29,6 @@ function loadMapLibre() {
       return sdk;
     });
   return maplibreglPromise;
-}
-
-let weatherPromise = null;
-function loadWeatherLayers() {
-  if (!weatherPromise) weatherPromise = import("@maptiler/weather");
-  return weatherPromise;
 }
 
 /* zoom per location type; huge countries get a wider view */
@@ -391,13 +387,11 @@ export function renderMap() {
 /* ── MapTiler weather overlay switcher ────────────────────────────────────
    Weather layers are loaded only after the user asks for one, keeping the
    heavier weather module out of the initial homepage bundle. Satellite is the
-   Hybrid basemap itself, so returning to it simply removes the active overlay. */
-const WEATHER_LAYER_IDS = {
-  temperature: "weather-temperature",
-  rain: "weather-rain",
-  wind: "weather-wind",
-};
-
+   Hybrid basemap itself, so returning to it simply removes the active overlay.
+   The map-instance side of this (readiness wait, layer add/remove, stale-
+   request guarding) lives in features/weather-layers.js, free of any
+   window/document-touching import, so it's directly unit-testable; this file
+   keeps only the DOM/button wiring. */
 function setLayerButtonState(active) {
   $$(".map-layer").forEach((button) => {
     const on = button.dataset.mapLayer === active;
@@ -407,54 +401,58 @@ function setLayerButtonState(active) {
   });
 }
 
-function removeWeatherLayer(inst) {
-  if (!inst?.weatherLayer) return;
-  try {
-    if (inst.map.getLayer(inst.weatherLayer.id)) inst.map.removeLayer(inst.weatherLayer.id);
-  } catch {
-    /* the style may have reloaded while the weather module was resolving */
-  }
-  inst.weatherLayer = null;
-}
-
-function makeWeatherLayer(module, type) {
-  const options = { id: WEATHER_LAYER_IDS[type], opacity: type === "wind" ? 0.8 : 0.68 };
-  if (type === "temperature") return new module.TemperatureLayer(options);
-  if (type === "rain") return new module.PrecipitationLayer(options);
-  return new module.WindLayer(options);
-}
+let layerRequestId = 0;
 
 export async function setMapLayer(type) {
   const requested = WEATHER_LAYER_IDS[type] ? type : "satellite";
+  const requestId = ++layerRequestId;
+  const isStale = () => requestId !== layerRequestId;
   const button = $(`.map-layer[data-map-layer="${requested}"]`);
   button?.classList.add("is-loading");
   try {
     await updateMap("worldMap");
     const inst = MAPS.worldMap;
     if (!inst) throw new Error("Map unavailable");
-    if (!inst.map.isStyleLoaded()) {
-      await new Promise((resolve) => inst.map.once("load", resolve));
-    }
-    removeWeatherLayer(inst);
-    if (requested !== "satellite") {
-      const weather = await loadWeatherLayers();
-      const layer = makeWeatherLayer(weather, requested);
-      inst.map.addLayer(layer);
-      inst.weatherLayer = layer;
-      raiseSelectionArea(inst);
-    }
+    await applyWeatherLayer(inst, requested, { isStale, onLayerAdded: raiseSelectionArea });
+    if (isStale()) return;
     setLayerButtonState(requested);
   } catch {
+    if (isStale()) return;
     removeWeatherLayer(MAPS.worldMap);
     setLayerButtonState("satellite");
     showToast(t("mapLayerError"));
+  } finally {
+    /* the winning request's own setLayerButtonState() above already clears
+       "is-loading" from every button; a superseded request clears just its
+       own button immediately instead of leaving a stale spinner running
+       until the newer request eventually finishes */
+    if (isStale()) button?.classList.remove("is-loading");
   }
+}
+
+/* Edge-fade visibility for the ≤820px horizontally-scrolling layer row —
+   same computeFadeVisibility() the forecast day-carousel uses, so there's
+   one shared implementation of "is there more content past this edge?"
+   rather than a second one reinvented here. On desktop the row never
+   overflows, so this is a harmless no-op (both fades stay hidden). */
+export function updateMapLayerFades() {
+  const el = $(".map-layer-switcher");
+  if (!el) return;
+  const { left, right } = computeFadeVisibility({
+    scrollLeft: el.scrollLeft,
+    scrollWidth: el.scrollWidth,
+    clientWidth: el.clientWidth,
+  });
+  $("#mapLayerFadeLeft")?.classList.toggle("is-visible", left);
+  $("#mapLayerFadeRight")?.classList.toggle("is-visible", right);
 }
 
 export function bindMapLayerControls() {
   $$(".map-layer").forEach((button) =>
     button.addEventListener("click", () => setMapLayer(button.dataset.mapLayer)),
   );
+  $(".map-layer-switcher")?.addEventListener("scroll", updateMapLayerFades, { passive: true });
+  updateMapLayerFades();
 }
 
 /* ── "You are here" overlay (Google-Maps-style blue dot + accuracy circle) ──

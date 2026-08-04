@@ -1,6 +1,6 @@
 import { describe, it, expect, afterEach } from "vitest";
 import { state } from "./state.js";
-import { locAccessibleName, kindLabel } from "./location.js";
+import { locAccessibleName, locHierarchyLabel, kindLabel } from "./location.js";
 
 const FRANCE = {
   id: "france",
@@ -17,6 +17,22 @@ const PARIS = {
   name: { en: "Paris", fr: "Paris" },
   region: { en: "Île-de-France", fr: "Île-de-France" },
   country: { en: "France", fr: "France" },
+};
+const SAINT_GAUDENS = {
+  id: "saint-gaudens",
+  kind: "town",
+  cc: "FR",
+  name: { en: "Saint-Gaudens", fr: "Saint-Gaudens" },
+  region: { en: "Occitanie", fr: "Occitanie" },
+  country: { en: "France", fr: "France" },
+};
+const TEXAS = {
+  id: "texas",
+  kind: "state",
+  cc: "US",
+  name: { en: "Texas", fr: "Texas" },
+  region: { en: "", fr: "" },
+  country: { en: "United States", fr: "États-Unis" },
 };
 
 const original = state.lang;
@@ -54,6 +70,69 @@ describe("locAccessibleName", () => {
       country: { en: "Singapore" },
     };
     expect(locAccessibleName(singapore)).toBe("Singapore");
+  });
+});
+
+describe("locHierarchyLabel", () => {
+  it("shows city, country", () => {
+    state.lang = "en";
+    expect(locHierarchyLabel(PARIS)).toBe("Paris, France");
+    state.lang = "fr";
+    expect(locHierarchyLabel(PARIS)).toBe("Paris, France");
+  });
+
+  it("shows town, country", () => {
+    state.lang = "en";
+    expect(locHierarchyLabel(SAINT_GAUDENS)).toBe("Saint-Gaudens, France");
+  });
+
+  it("shows state/province, country without repeating either", () => {
+    state.lang = "en";
+    expect(locHierarchyLabel(TEXAS)).toBe("Texas, United States");
+  });
+
+  it("shows a country only once, never doubled", () => {
+    state.lang = "en";
+    expect(locHierarchyLabel(FRANCE)).toBe("France");
+    expect(locHierarchyLabel(FRANCE)).not.toBe("France, France");
+    state.lang = "fr";
+    expect(locHierarchyLabel(FRANCE)).toBe("France");
+  });
+
+  it("shows only the name when there is no country to add", () => {
+    state.lang = "en";
+    const noCountry = {
+      kind: "city",
+      cc: "",
+      name: { en: "Somewhere" },
+      region: { en: "" },
+      country: { en: "" },
+    };
+    expect(locHierarchyLabel(noCountry)).toBe("Somewhere");
+    expect(locHierarchyLabel(noCountry)).not.toMatch(/,\s*$/);
+  });
+
+  it("de-duplicates name vs. country even when casing/accents differ", () => {
+    state.lang = "en";
+    /* a strict === would miss this: same place, different casing between
+       the curated name and the country string */
+    const shoutedSingapore = {
+      kind: "city",
+      cc: "SG",
+      name: { en: "SINGAPORE" },
+      region: { en: "" },
+      country: { en: "Singapore" },
+    };
+    expect(locHierarchyLabel(shoutedSingapore)).toBe("SINGAPORE");
+
+    const accentedQuebec = {
+      kind: "city",
+      cc: "", // no ISO code — locCountry() falls back to the raw country field below
+      name: { en: "Québec" },
+      region: { en: "" },
+      country: { en: "québec" },
+    };
+    expect(locHierarchyLabel(accentedQuebec)).toBe("Québec");
   });
 });
 

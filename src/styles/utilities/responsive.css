@@ -228,3 +228,14 @@
   width: 0;
   height: 0;
 }
+
+@media (max-width: 520px) {
+  /* .search-wrap (components/forms.css) used to absorb any width shortfall
+     by flex-shrinking toward 0; below this width it's display:none instead
+     and #mobileSearchBtn's own fixed 44px has to fit in the row alongside
+     it. Tightening the gap (not the 44px touch target itself) reclaims just
+     enough width to avoid a 1-2px overflow on the narrowest phones. */
+  .topnav {
+    gap: 8px;
+  }
+}

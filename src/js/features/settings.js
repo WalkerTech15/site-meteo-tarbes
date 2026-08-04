@@ -3,7 +3,7 @@
 import { state } from "../core/state.js";
 import { $, $$ } from "../core/dom.js";
 import { setStr, KEYS } from "../core/storage.js";
-import { applyStaticI18n } from "../core/i18n.js";
+import { t, applyStaticI18n } from "../core/i18n.js";
 import { syncSegToggle, syncSidebarA11y } from "../ui/navigation.js";
 import { renderChart, renderExplore } from "../ui/render-home.js";
 import { renderFavorites } from "../ui/render-favorites.js";
@@ -96,6 +96,16 @@ export function closeThemeMenu() {
   $("#themeBtn").setAttribute("aria-expanded", "false");
 }
 
+/* Native names, not translated — the language menu itself shows "English"/
+   "Français" the same way regardless of the active interface language, so
+   the trigger's accessible label follows the same convention. */
+const LANG_NAMES = { en: "English", fr: "Français" };
+
+export function syncLangBtnLabel() {
+  const name = LANG_NAMES[state.lang] || state.lang;
+  $("#langBtn").setAttribute("aria-label", t("changeLangCurrent").replace("{lang}", name));
+}
+
 export function setLang(lang) {
   state.lang = lang;
   setStr(KEYS.lang, lang);
@@ -108,8 +118,11 @@ export function setLang(lang) {
   applyStaticI18n();
   /* applyStaticI18n() just reset the burger's aria-label to its static
      data-i18n-aria fallback ("openMenu") — reassert the real open/closed
-     wording in case the drawer is currently open. */
+     wording in case the drawer is currently open. Same story for the
+     language button: its static data-i18n-aria fallback doesn't name the
+     current language, so reassert that too. */
   syncSidebarA11y();
+  syncLangBtnLabel();
   /* toggle labels change width with the language — realign the thumb */
   syncSegToggle($("#modeToggle"), "mode", state.mode);
   syncSegToggle($("#modeToggleSide"), "mode", state.mode);

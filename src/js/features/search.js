@@ -45,6 +45,40 @@ function closeSearchPanel() {
   searchIndex = -1;
 }
 
+/* ── Small-phone search (≤520px, see components/forms.css) ──
+   Reuses this exact #searchWrap/#searchInput/#searchResults — opening just
+   repositions the same combobox as a full-width overlay instead of building
+   a second, independent search UI. */
+function isMobileSearchOpen() {
+  return $("#searchWrap").classList.contains("is-mobile-open");
+}
+function openMobileSearch() {
+  $("#searchWrap").classList.add("is-mobile-open");
+  $("#mobileSearchBtn")?.setAttribute("aria-expanded", "true");
+  $("#searchInput").focus();
+}
+
+/* Every action that means "start searching" goes through this function.
+   On small phones the input is hidden until the mobile overlay opens, while
+   larger layouts can focus the always-visible inline input directly. */
+export function focusSearch() {
+  if (window.matchMedia("(max-width: 520px)").matches) openMobileSearch();
+  else $("#searchInput").focus();
+}
+
+export function closeMobileSearch({ focusTrigger = false } = {}) {
+  closeSearchPanel(); /* always: the desktop dropdown can be open with no mobile overlay involved */
+  const wasOpen = isMobileSearchOpen();
+  if (wasOpen) {
+    $("#searchWrap").classList.remove("is-mobile-open");
+    $("#mobileSearchBtn")?.setAttribute("aria-expanded", "false");
+  }
+  /* only steal focus for a close this function actually performed — callers
+     share this Escape path with the sidebar/language/theme menus, and the
+     button being visible at this width doesn't mean IT was what was open */
+  if (focusTrigger && wasOpen) $("#mobileSearchBtn")?.focus();
+}
+
 function renderSearchResults(list) {
   searchResults = list;
   const ul = $("#searchResults");
@@ -84,7 +118,7 @@ function pickSearchResult(i) {
   /* full place name in the input so the chosen result is unambiguous */
   $("#searchInput").value =
     loc.fullName || [locName(loc), locRegion(loc), locCountry(loc)].filter(Boolean).join(", ");
-  closeSearchPanel();
+  closeMobileSearch();
   selectLocation(loc); /* fitBounds/flyTo + marker/popup + weather handled downstream */
   switchView("home");
 }
@@ -149,7 +183,10 @@ function onSearchKey(e) {
     if (searchIndex >= 0) pickSearchResult(searchIndex);
     else if (searchResults.length) pickSearchResult(0);
   } else if (e.key === "Escape") {
-    closeSearchPanel();
+    /* on mobile this moves focus to #mobileSearchBtn; on desktop that
+       button is display:none and can't receive focus, so blur() below
+       still runs and matches the previous desktop-only behaviour */
+    closeMobileSearch({ focusTrigger: true });
     $("#searchInput").blur();
   }
 }
@@ -173,8 +210,9 @@ export function bindSearchEvents() {
   input.addEventListener("focus", () => {
     if (input.value.trim()) onSearchInput();
   });
-  $("#favAddBtn").addEventListener("click", () => input.focus());
+  $("#favAddBtn").addEventListener("click", focusSearch);
+  $("#mobileSearchBtn")?.addEventListener("click", () => {
+    if (isMobileSearchOpen()) closeMobileSearch();
+    else openMobileSearch();
+  });
 }
-
-/* used by main.js's document-level "click outside closes overlays" handler */
-export { closeSearchPanel };

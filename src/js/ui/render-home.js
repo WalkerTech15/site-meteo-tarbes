@@ -22,6 +22,7 @@ import {
   locRegion,
   locCountry,
   locAccessibleName,
+  locHierarchyLabel,
   kindLabel,
   localTimeStr,
   flagsHtml,
@@ -387,8 +388,7 @@ export function forecastCardHtml(d, i) {
 
 export function renderForecast() {
   $("#forecastRow").innerHTML = state.wx.daily.slice(0, 5).map(forecastCardHtml).join("");
-  $("#forecastSub").textContent =
-    `${t("forecastFor")} ${locName(state.loc)}, ${locCountry(state.loc)}`;
+  $("#forecastSub").textContent = `${t("forecastFor")} ${locHierarchyLabel(state.loc)}`;
 }
 
 const CHART_TABS = [

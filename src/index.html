@@ -114,6 +114,33 @@
         </div>
       </div>
 
+      <!-- Small phones only (≤520px): the inline bar above shrinks to ~80px
+           and can't show a typed query, so it's replaced by this button,
+           which opens the SAME #searchWrap as a full-width overlay instead
+           of a second, independent search UI. -->
+      <button
+        class="icon-btn mobile-search-btn"
+        id="mobileSearchBtn"
+        aria-expanded="false"
+        aria-controls="searchWrap"
+        aria-label="Search for a location"
+        data-i18n-aria="mobileSearchBtn"
+      >
+        <svg
+          viewBox="0 0 24 24"
+          width="19"
+          height="19"
+          fill="none"
+          stroke="currentColor"
+          stroke-width="2"
+          stroke-linecap="round"
+          aria-hidden="true"
+        >
+          <circle cx="11" cy="11" r="7" />
+          <path d="m20 20-3.5-3.5" />
+        </svg>
+      </button>
+
       <div class="topnav-actions">
         <!-- Simple / Detailed toggle -->
         <div
@@ -621,6 +648,16 @@
               aria-label="Map layer"
               data-i18n-aria="mapLayer"
             >
+              <span
+                class="map-layer-fade map-layer-fade-left"
+                id="mapLayerFadeLeft"
+                aria-hidden="true"
+              ></span>
+              <span
+                class="map-layer-fade map-layer-fade-right"
+                id="mapLayerFadeRight"
+                aria-hidden="true"
+              ></span>
               <button
                 class="map-layer is-active"
                 type="button"

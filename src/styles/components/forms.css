@@ -141,3 +141,45 @@ body[data-theme="dark"] .search-kbd {
   color: var(--text-2);
   font-size: 14px;
 }
+
+/* Small phones: the inline bar above shrinks to ~80px and can't show a
+   typed query. `.mobile-search-btn` replaces it in the header's flex row;
+   clicking it repositions the SAME #searchWrap (input, results list,
+   keyboard handling — all untouched) as a full-width overlay instead of
+   building a second search UI. Hidden above this width so desktop/tablet
+   keep the unchanged inline search. */
+.mobile-search-btn {
+  display: none;
+}
+@media (max-width: 520px) {
+  .search-wrap {
+    display: none;
+  }
+  .search-wrap.is-mobile-open {
+    display: block;
+    position: fixed;
+    top: var(--topnav-h);
+    left: 0;
+    right: 0;
+    z-index: 105;
+    max-width: none;
+    margin: 0;
+    padding: 10px var(--s-2) 14px;
+    background: var(--bg);
+    border-bottom: 1px solid var(--border);
+    box-shadow: var(--shadow-md);
+  }
+  /* the "/" shortcut hint refers to a physical keyboard key a touch device
+     doesn't have */
+  .search-wrap.is-mobile-open .search-kbd {
+    display: none;
+  }
+  .search-wrap.is-mobile-open .search-panel {
+    position: static;
+    margin-top: 8px;
+    max-width: 100%;
+  }
+  .mobile-search-btn {
+    display: inline-flex;
+  }
+}

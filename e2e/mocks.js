@@ -28,6 +28,9 @@ const WEATHER_KINDS = {
   /* thunderstorm (WMO 95) + 88 km/h gusts → two advisories, storm ranked first */
   storm: { code: 95, feels: 18, gust: 88, visibility: 20000 },
   heat: { code: 0, feels: 43.5, gust: 18, visibility: 20000 },
+  /* thunderstorm + gusts + sub-1000m visibility → all three severity tiers
+     (high/moderate/low) at once, for the three-advisory layout */
+  severe: { code: 95, feels: 18, gust: 88, visibility: 900 },
 };
 
 function weatherPayload(kind = "calm") {

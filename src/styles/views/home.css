@@ -712,6 +712,28 @@ body[data-mode="detailed"] .home-grid {
   }
 }
 
+/* Exactly one advisory: span the complete row as a concise horizontal
+   banner. `:only-of-type` ignores the trailing .adv-disclaimer <p>
+   (different tag), so it only ever matches a lone <article>. */
+.advisory:only-of-type {
+  grid-column: 1 / -1;
+  width: 100%;
+}
+
+/* Exactly two: an even two-column split instead of the three-column
+   (1.4fr/1fr/1fr) grid built for three advisories, which would otherwise
+   leave a dead third column. `:nth-last-of-type` also only counts sibling
+   <article>s, so the disclaimer paragraph doesn't throw the count off.
+   `:has()` only decides the column layout here (no JS-driven styling) and
+   is Baseline-supported in every evergreen browser this codebase already
+   assumes elsewhere (native <dialog>, `inert`, color-mix()). Scoped to
+   min-width so it can never outrank the single-column mobile rule below. */
+@media (min-width: 721px) {
+  .advisory-list:has(.advisory:first-of-type:nth-last-of-type(2)) {
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  }
+}
+
 @media (max-width: 720px) {
   .advisory-list {
     grid-template-columns: minmax(0, 1fr);
