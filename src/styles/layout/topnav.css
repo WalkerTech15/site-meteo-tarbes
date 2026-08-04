@@ -4,11 +4,7 @@
   position: sticky;
   top: 0;
   z-index: 100;
-  display: flex;
-  align-items: center;
-  gap: var(--s-3);
   height: var(--topnav-h);
-  padding: 0 var(--s-4);
   background: rgba(248, 250, 252, 0.82);
   -webkit-backdrop-filter: saturate(1.6) blur(16px);
   backdrop-filter: saturate(1.6) blur(16px);
@@ -16,6 +12,48 @@
 }
 body[data-theme="dark"] .topnav {
   background: rgba(11, 18, 32, 0.85);
+}
+
+/* Three named groups (start/center/end) instead of one flat flex row, so
+   desktop can lay them out on a symmetric grid (below) while narrow/drawer
+   widths keep the simpler, already-tested flex behavior unchanged. */
+.topnav-inner {
+  display: flex;
+  align-items: center;
+  gap: var(--s-3);
+  width: 100%;
+  height: 100%;
+  padding: 0 var(--s-4);
+}
+.topnav-start {
+  display: flex;
+  align-items: center;
+  gap: var(--s-2);
+  flex-shrink: 0;
+}
+.topnav-center {
+  display: flex;
+  align-items: center;
+  flex: 1;
+  min-width: 0;
+}
+
+/* ≥901px (above the drawer breakpoint): a true 3-column grid so the search
+   bar is centered against the FULL bar width, not just the leftover space
+   between two differently-sized side groups (that asymmetry — logo ~180px
+   vs. mode+theme+lang ~300px — is what made the search bar look off-center).
+   Both outer tracks share the identical minmax(), so they always resolve to
+   the same pixel width as each other regardless of their real content size,
+   which is what keeps the center track (and the search bar inside it)
+   genuinely centered at every width. 280px comfortably fits the wider
+   (actions) group so its content never gets clipped by its own track. */
+@media (min-width: 901px) {
+  .topnav-inner {
+    display: grid;
+    grid-template-columns: minmax(280px, 1fr) minmax(200px, 660px) minmax(280px, 1fr);
+    max-width: 1440px;
+    margin-inline: auto;
+  }
 }
 
 .logo {
@@ -51,8 +89,56 @@ body[data-theme="dark"] .topnav {
 .topnav-actions {
   display: flex;
   align-items: center;
-  gap: var(--s-2);
+  justify-content: flex-end;
+  gap: 12px;
   flex-shrink: 0;
+}
+
+/* Match the search field's height/radius/border language (components/forms.css
+   .search-bar) so the theme and language buttons read as the same control
+   family, not a separate, smaller-looking pair. Scoped to the navbar's own
+   action group — `.icon-btn` is reused unchanged everywhere else (sidebar,
+   cards, dialogs), so this must not leak there. */
+.topnav-actions .icon-btn {
+  height: 44px;
+  min-width: 44px;
+  border-radius: 16px;
+  border-color: var(--border);
+}
+
+/* The language button's flag emoji + bold "FR"/"EN" code read as visually
+   heavier than the theme button's single thin monochrome icon at the same
+   default (--text-2) muted color — give the theme icon full-strength text
+   color so the two controls carry equal visual weight at rest, not just on
+   hover. */
+.topnav-actions .theme-btn {
+  color: var(--text);
+}
+
+.topnav-actions .theme-btn #themeBtnIcon {
+  display: grid;
+  place-items: center;
+  width: 20px;
+  height: 20px;
+  line-height: 0;
+}
+
+.topnav-actions .theme-btn #themeBtnIcon svg {
+  display: block;
+}
+
+/* Keep both display-mode controls compact and rectangular instead of using
+   the default pill treatment. */
+#modeToggle,
+#modeToggleSide {
+  border-radius: 12px;
+}
+
+#modeToggle button,
+#modeToggle .seg-thumb,
+#modeToggleSide button,
+#modeToggleSide .seg-thumb {
+  border-radius: 8px;
 }
 
 .theme-wrap {

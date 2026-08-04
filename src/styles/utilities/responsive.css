@@ -46,7 +46,7 @@
     scroll-snap-align: start;
   }
   .seg-toggle button {
-    padding: 7px 12px;
+    padding: 0 12px;
   }
   .footer-grid {
     grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
@@ -76,7 +76,7 @@
 }
 
 @media (max-width: 900px) {
-  .topnav {
+  .topnav-inner {
     padding: 0 var(--s-2);
     gap: var(--s-2);
   }
@@ -235,7 +235,7 @@
      and #mobileSearchBtn's own fixed 44px has to fit in the row alongside
      it. Tightening the gap (not the 44px touch target itself) reclaims just
      enough width to avoid a 1-2px overflow on the narrowest phones. */
-  .topnav {
+  .topnav-inner {
     gap: 8px;
   }
 }

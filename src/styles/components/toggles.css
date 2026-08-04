@@ -4,11 +4,16 @@
 .seg-toggle {
   position: relative;
   display: inline-flex;
-  align-items: center;
+  /* stretch (not center): the buttons fill the full 44px height themselves
+     (see .seg-toggle button below) instead of being centered at their own
+     smaller natural size, so the whole control lines up with the search
+     field / theme / language buttons beside it. */
+  align-items: stretch;
+  height: 44px;
   padding: 4px;
   border-radius: 999px;
   background: rgba(15, 23, 42, 0.055);
-  border: 1px solid rgba(15, 23, 42, 0.04);
+  border: 1px solid var(--border);
 }
 body[data-theme="dark"] .seg-toggle {
   background: rgba(148, 163, 184, 0.12);
@@ -16,16 +21,24 @@ body[data-theme="dark"] .seg-toggle {
 .seg-toggle button {
   position: relative;
   z-index: 1;
-  padding: 7px 16px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0 16px;
   border-radius: 999px;
   font-size: 13.5px;
-  font-weight: 600;
+  font-weight: 500;
   color: var(--text-2);
-  transition: color 0.25s;
+  transition:
+    color 0.25s,
+    font-weight 0.25s;
   white-space: nowrap;
 }
+/* Selected state reads through weight + the sliding .seg-thumb's own
+   background/border below — never colour alone. */
 .seg-toggle button[aria-checked="true"] {
   color: var(--text);
+  font-weight: 700;
 }
 .seg-thumb {
   position: absolute;
@@ -36,16 +49,15 @@ body[data-theme="dark"] .seg-toggle {
   width: 60px;
   border-radius: 999px;
   background: var(--card);
-  box-shadow:
-    0 1px 3px rgba(15, 23, 42, 0.12),
-    0 4px 12px rgba(15, 23, 42, 0.06);
+  border: 1px solid var(--border);
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.08);
   transition:
     transform 0.35s var(--ease),
     width 0.35s var(--ease);
 }
 body[data-theme="dark"] .seg-thumb {
   background: #24314d;
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.4);
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.25);
 }
 
 .seg-icons {

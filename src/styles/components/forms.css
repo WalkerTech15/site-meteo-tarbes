@@ -7,11 +7,19 @@
   max-width: 560px;
   margin-inline: auto;
 }
+/* Slightly roomier on large desktops, where the navbar has ample spare
+   width either side — still centered (margin-inline: auto above) and still
+   yields to .topnav-actions (flex-shrink: 0) before ever colliding with it. */
+@media (min-width: 1440px) {
+  .search-wrap {
+    max-width: 640px;
+  }
+}
 .search-bar {
   display: flex;
   align-items: center;
   gap: 12px;
-  height: 48px;
+  height: 44px;
   padding: 0 var(--s-2);
   background: var(--card);
   border: 1px solid var(--border);
