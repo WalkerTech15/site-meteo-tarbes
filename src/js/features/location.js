@@ -39,6 +39,17 @@ export async function selectLocation(loc) {
   const token = ++selectionToken;
   const isStale = () => token !== selectionToken;
 
+  /* Synchronous and first: state.loc changes on the next line, and nothing
+     must be able to observe that new location — via a pan, a view switch, or
+     any other bus event — while still carrying share consent granted for
+     whatever was selected before. fetchWeather() below can take a while, and
+     location:selected does not fire until it resolves, so a revoke that
+     waited for that event would leave a window where a stale `true` consent
+     could publish a location the user never chose to share. Emitting here,
+     ahead of the only await in this function, closes that window: nothing
+     else runs between this line and the state.loc write just below it. */
+  emit("location:selecting", loc);
+
   state.loc = loc;
   bumpPhotoToken(); /* invalidate any in-flight photo swap from the previous place */
   setJSON(KEYS.lastLocation, loc);

@@ -248,11 +248,157 @@ test.describe("shareable map state", () => {
     await clickMapCentre(page);
     await expect(panelName(page)).toHaveText("Tarbes");
 
+    await page.locator("#mapShareBtn").scrollIntoViewIfNeeded();
     await page.locator("#mapShareBtn").click();
     await expect(page.locator("#toast")).toBeVisible();
     const copied = await page.evaluate(() => navigator.clipboard.readText());
     expect(copied).toContain("#/map");
     expect(copied).toContain("sel=");
     expect(copied).toBe(page.url());
+  });
+
+  /* Real navigator.geolocation.getCurrentPosition() is unusable for "two
+     different device fixes in one session": Chromium caches its result per
+     document for maximumAge (the app hardcodes 60000ms), keyed by wall-clock
+     time since the page's last actual read — not by when
+     context.setGeolocation() last changed the override, and a permission
+     revoke/re-grant does not clear it either. The only way to force a fresh
+     read is a new document (page.reload()), but that would also reset the
+     in-memory shareConsent flag this test exists to exercise, defeating the
+     point of testing consent WITHIN one session.
+     So: replace the geolocation API itself with a script-controlled stand-in,
+     installed before the app boots. window.__setGeoFix() below swaps the
+     coordinate it reports instantly, with no cache and no permission
+     ceremony, while everything else about the app runs unmodified. */
+  async function installFakeGeolocation(page, initial) {
+    await page.addInitScript((start) => {
+      let current = start;
+      window.__setGeoFix = (fix) => {
+        current = fix;
+      };
+      const respond = (success) =>
+        Promise.resolve().then(() =>
+          success({
+            coords: { latitude: current.lat, longitude: current.lon, accuracy: 20 },
+            timestamp: Date.now(),
+          }),
+        );
+      Object.defineProperty(navigator, "geolocation", {
+        configurable: true,
+        value: {
+          getCurrentPosition: (success) => respond(success),
+          watchPosition: () => 0,
+          clearWatch: () => {},
+        },
+      });
+      Object.defineProperty(navigator, "permissions", {
+        configurable: true,
+        value: { query: () => Promise.resolve({ state: "granted" }) },
+      });
+    }, initial);
+  }
+
+  test("sharing one device fix does not carry consent to a later one", async ({
+    page,
+    context,
+  }) => {
+    const FIRST = { lat: 48.8566, lon: 2.3522 };
+    const SECOND = { lat: 45.764, lon: 4.8357 };
+
+    await context.grantPermissions(["clipboard-read", "clipboard-write"]);
+    await installFakeGeolocation(page, FIRST);
+    await open(page);
+    /* permission reads "granted" → the app silently refreshes the sidebar
+       card on boot (recenter: false, does not touch the map selection) */
+    await expect(page.locator("#sidePosName")).not.toBeEmpty();
+
+    /* #geoRetryBtn always calls locateMe() with its default recenter: true,
+       so — unlike #sidePosBtn, whose handler depends on the card's current
+       state — it deterministically selects this fix onto the map without a
+       view switch, both here and for the second fix below. */
+    await page.locator("#geoRetryBtn").click();
+    await expect(panelName(page)).toHaveText(new RegExp(`${FIRST.lat.toFixed(2)}`), {
+      timeout: SETTLE,
+    });
+    expect(params(page).get("sel")).toBeNull(); /* not shared yet */
+
+    /* explicit share publishes exactly this fix */
+    await page.locator("#mapShareBtn").scrollIntoViewIfNeeded();
+    await page.locator("#mapShareBtn").click();
+    await expect(page.locator("#toast")).toBeVisible();
+    expect(params(page).get("sel")).toBe(`${FIRST.lat},${FIRST.lon}`);
+
+    /* a second, different device fix arrives with no new Share press */
+    await page.evaluate((fix) => window.__setGeoFix(fix), SECOND);
+    await page.locator("#geoRetryBtn").click();
+    await expect(panelName(page)).toHaveText(new RegExp(`${SECOND.lat.toFixed(2)}`), {
+      timeout: SETTLE,
+    });
+
+    /* it must NOT appear in the URL by itself — still the first fix, or none */
+    expect(params(page).get("sel")).not.toBe(`${SECOND.lat},${SECOND.lon}`);
+    expect(page.url()).not.toContain(String(SECOND.lat));
+
+    /* pressing Share again is what publishes the new fix */
+    await page.locator("#mapShareBtn").scrollIntoViewIfNeeded();
+    await page.locator("#mapShareBtn").click();
+    await expect.poll(() => params(page).get("sel")).toBe(`${SECOND.lat},${SECOND.lon}`);
+  });
+
+  test("a device fix pending while its weather loads does not leak on a pan mid-load", async ({
+    page,
+    context,
+  }) => {
+    const FIRST = { lat: 48.8566, lon: 2.3522 };
+    const SECOND = { lat: 45.764, lon: 4.8357 };
+
+    await context.grantPermissions(["clipboard-read", "clipboard-write"]);
+    await installFakeGeolocation(page, FIRST);
+    await open(page);
+    await expect(page.locator("#sidePosName")).not.toBeEmpty();
+
+    await page.locator("#geoRetryBtn").click();
+    await expect(panelName(page)).toHaveText(new RegExp(`${FIRST.lat.toFixed(2)}`), {
+      timeout: SETTLE,
+    });
+    await page.locator("#mapShareBtn").scrollIntoViewIfNeeded();
+    await page.locator("#mapShareBtn").click();
+    await expect(page.locator("#toast")).toBeVisible();
+    expect(params(page).get("sel")).toBe(`${FIRST.lat},${FIRST.lon}`);
+
+    /* delay the SECOND fix's weather response so there is a real window
+       between state.loc changing and location:selected firing — the exact
+       gap the production race lived in. Registered after installMocks(), so
+       Playwright tries it first; route.fallback() (not route.continue(),
+       which would skip straight to a real, unmocked network request) hands
+       the request on to installMocks()'s own handler once the delay passes,
+       so the response is still the same mocked payload, just slower. */
+    await page.route("**://api.open-meteo.com/**", async (route) => {
+      await new Promise((r) => setTimeout(r, 800));
+      await route.fallback();
+    });
+
+    await page.evaluate((fix) => window.__setGeoFix(fix), SECOND);
+    await page.locator("#geoRetryBtn").click();
+
+    /* pan the map while B's weather is still in flight */
+    const box = await page.locator("#worldMap").boundingBox();
+    await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
+    await page.mouse.down();
+    await page.mouse.move(box.x + box.width / 2 + 40, box.y + box.height / 2, { steps: 4 });
+    await page.mouse.up();
+
+    /* still mid-load: B must not have been published by the pan */
+    expect(params(page).get("sel")).not.toBe(`${SECOND.lat},${SECOND.lon}`);
+
+    await expect(panelName(page)).toHaveText(new RegExp(`${SECOND.lat.toFixed(2)}`), {
+      timeout: SETTLE,
+    });
+    /* settled: still private */
+    expect(params(page).get("sel")).not.toBe(`${SECOND.lat},${SECOND.lon}`);
+
+    await page.locator("#mapShareBtn").scrollIntoViewIfNeeded();
+    await page.locator("#mapShareBtn").click();
+    await expect.poll(() => params(page).get("sel")).toBe(`${SECOND.lat},${SECOND.lon}`);
   });
 });

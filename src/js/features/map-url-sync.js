@@ -13,6 +13,15 @@
  *   can still share it, but only by pressing Share, which is what sets
  *   `shareConsent`.
  *
+ *   Consent is revoked on "location:selecting", NOT "location:selected".
+ *   features/location.js sets state.loc synchronously but only emits
+ *   "location:selected" once that location's weather has finished loading —
+ *   and a pan, view switch or layer change firing during that wait would
+ *   otherwise snapshot the new (already-current) state.loc under whatever
+ *   consent value a PREVIOUS, different location left behind. "selecting"
+ *   fires synchronously, before that gap opens, so no other handler can ever
+ *   observe the new state.loc next to a stale consent.
+ *
  * No API key, session id or other private value is ever encoded: the URL
  * carries a view name, two coordinates, a zoom, a layer id, an hour offset
  * and a boolean (see core/url-state.js). */
@@ -164,12 +173,18 @@ export async function shareMapView() {
 
 export function initUrlSync() {
   on("view:changed", () => sync());
-  on("location:selected", () => {
+  on("location:selecting", () => {
     /* a new place is a new decision — consent to publish the previous
-       (possibly device-derived) coordinate does not carry over */
-    if (!isDeviceLocation(state.loc)) shareConsent = false;
-    sync();
+       coordinate never carries over, even when the new selection is ALSO a
+       device fix. Fires synchronously, before state.loc's weather has even
+       started loading — see the module comment above for why that timing
+       matters. Deliberately does not call sync(): state.loc has not
+       necessarily changed shape yet from any writer's point of view, and the
+       next event that legitimately needs a write (map:moved, location:
+       selected, ...) will call sync() itself with this flag already correct. */
+    shareConsent = false;
   });
+  on("location:selected", () => sync());
   on("map:layer", () => sync());
   on("map:panel", () => sync());
   on("map:moved", (payload) => {
