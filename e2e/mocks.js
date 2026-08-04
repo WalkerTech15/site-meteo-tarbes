@@ -201,6 +201,13 @@ export const CLICK_CITY = { lon: 0.0782, lat: 43.2333, label: TARBES_LABEL };
 export const CLICK_REGION_POLY = { lon: 1.75, lat: 43.9, label: "Occitanie" };
 export const CLICK_REGION_BBOX = { lon: -99.9, lat: 31.4, label: "Texas" };
 export const CLICK_OCEAN = { lon: -41.5, lat: 33.2 };
+/* A Canadian COUNTY inside a province — MapTiler's place_type "county" (also
+   "subregion" / "municipal_district") is bucketed onto the same internal
+   kind ("region") as a province searched directly (see MT_KIND in
+   services/geocoding-api.js). Real-world case this reproduces: Camrose
+   County, Alberta, at ~52.8652°N -112.4788°E. */
+export const CLICK_COUNTY = { lon: -112.4788, lat: 52.8652, label: "Camrose" };
+export const CLICK_COUNTRY = { lon: 19.1451, lat: 51.9194, label: "Pologne" };
 
 const near = (value, target) => Math.abs(value - target) < 0.4;
 
@@ -266,6 +273,53 @@ function texasRegionFeature() {
   };
 }
 
+/* Camrose county: place_type "county", with a "region" context entry
+   (Alberta, ISO short_code CA-AB) — the exact shape featureToLoc() turns
+   into { kind: "region", name: Camrose, region: Alberta, regionCode: CA-AB,
+   country: Canada }, reproducing the bug this fixture is named for. */
+function camroseCountyFeature() {
+  const { lon, lat } = CLICK_COUNTY;
+  return {
+    id: "county.e2e-camrose",
+    text: "Camrose",
+    text_en: "Camrose",
+    text_fr: "Camrose",
+    place_name: "Camrose, Alberta, Canada",
+    place_type: ["county"],
+    center: [lon, lat],
+    context: [
+      {
+        id: "region.12",
+        text: "Alberta",
+        text_en: "Alberta",
+        text_fr: "Alberta",
+        short_code: "CA-AB",
+      },
+      {
+        id: "country.12",
+        text: "Canada",
+        text_en: "Canada",
+        text_fr: "Canada",
+        country_code: "ca",
+      },
+    ],
+  };
+}
+
+function polandCountryFeature() {
+  const { lon, lat } = CLICK_COUNTRY;
+  return {
+    id: "country.e2e-poland",
+    text: "Poland",
+    text_en: "Poland",
+    text_fr: "Pologne",
+    place_name: "Poland",
+    place_type: ["country"],
+    center: [lon, lat],
+    properties: { short_code: "pl" },
+  };
+}
+
 function genericReverseFeature(lon, lat) {
   const name = `Zone ${lat.toFixed(2)},${lon.toFixed(2)}`;
   return {
@@ -299,6 +353,12 @@ export function reverseGeocodePayloadFor(lon, lat) {
   }
   if (near(lon, CLICK_CITY.lon) && near(lat, CLICK_CITY.lat)) {
     return { features: [tarbesFeature()] };
+  }
+  if (near(lon, CLICK_COUNTY.lon) && near(lat, CLICK_COUNTY.lat)) {
+    return { features: [camroseCountyFeature()] };
+  }
+  if (near(lon, CLICK_COUNTRY.lon) && near(lat, CLICK_COUNTRY.lat)) {
+    return { features: [polandCountryFeature()] };
   }
   return { features: [genericReverseFeature(lon, lat)] };
 }

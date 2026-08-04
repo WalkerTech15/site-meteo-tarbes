@@ -5,6 +5,7 @@
    dependency on app state (see core/location.js for the language-aware
    resolution built on top of this). */
 import { normalize } from "./locations.js";
+import { COUNTRY_FLAG_CODES } from "./country-flag-codes.js";
 
 const _UJ = `
   <rect width="24" height="18" fill="#012169"/>
@@ -83,10 +84,7 @@ export function regionFlagHtml(rc, cls = "") {
    region — the caller passes geocoder metadata (see core/location.js's
    regionKeyFor). All 50 US states + 13 CA provinces/territories. */
 const FLAG_BASE = `${import.meta.env.BASE_URL}assets/flags`;
-const COUNTRY_FLAG_FILES = {
-  US: FLAG_BASE + "/countries/us.svg",
-  CA: FLAG_BASE + "/countries/ca.svg",
-};
+const COUNTRY_CODE_ALIASES = { UK: "GB" };
 const US_STATE_FLAGS = {
   alabama: FLAG_BASE + "/us-states/alabama.svg",
   alaska: FLAG_BASE + "/us-states/alaska.svg",
@@ -358,7 +356,10 @@ export function regionFlagSrc(key) {
   return (key && (US_STATE_FLAGS[key] || CANADA_REGION_FLAGS[key])) || null;
 }
 export function countryFlagSrc(cc) {
-  return COUNTRY_FLAG_FILES[(cc || "").toUpperCase()] || null;
+  const rawCode = String(cc || "").toUpperCase();
+  const code = COUNTRY_CODE_ALIASES[rawCode] || rawCode;
+  const fileCode = code.toLowerCase();
+  return COUNTRY_FLAG_CODES.has(fileCode) ? `${FLAG_BASE}/countries/${fileCode}.svg` : null;
 }
 
 /* Reusable flag <img> renderer: natural aspect ratio (object-fit contain, height

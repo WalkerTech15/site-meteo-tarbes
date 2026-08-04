@@ -13,6 +13,8 @@ import {
   CLICK_OCEAN,
   CLICK_REGION_POLY,
   CLICK_REGION_BBOX,
+  CLICK_COUNTY,
+  CLICK_COUNTRY,
 } from "./mocks.js";
 
 /* These specs drive REAL MapLibre + @maptiler/weather layers: every test
@@ -179,6 +181,44 @@ test.describe("clicking the map selects a location", () => {
     await expect(panelName(page)).toHaveText("Tarbes");
     await page.waitForTimeout(900);
     expect(page.url()).toContain("z=11");
+  });
+
+  /* Regression test for a real bug: MapTiler's "county" place_type (also
+     "subregion" / "municipal_district") is bucketed onto the SAME internal
+     kind ("region") as a province searched directly, so the panel used to
+     assume a county selection WAS the subdivision and suppressed its parent
+     province entirely — Camrose showed only the Canadian flag, never
+     Alberta's. See core/geo-identity.js and core/geo-identity.test.js for
+     the unit-level fix and coverage; this proves it end to end. */
+  test("a Canadian county selection shows its parent province's flag (Camrose → Alberta)", async ({
+    page,
+  }) => {
+    await installMocks(page);
+    await openMapAt(page, CLICK_COUNTY, { zoom: 7 });
+    await clickMapCentre(page);
+
+    await expect(panelName(page)).toHaveText("Camrose");
+    const panel = page.locator("#mapWeatherPanel");
+    /* country (Canada) + region (Alberta) chips, not just the country */
+    await expect(panel.locator(".geo-chip")).toHaveCount(2);
+    await expect(panel.locator(".geo-chip")).toContainText(["Canada", "Alberta"]);
+    /* the Alberta chip carries the real province flag asset, not the
+       neutral fallback icon a county used to get */
+    await expect(panel.locator(".geo-chip-icon")).toHaveCount(0);
+    const albertaFlag = panel.locator(".geo-chip .geo-chip-flag").last();
+    await expect(albertaFlag).toBeVisible();
+    await expect(albertaFlag).toHaveAttribute("src", /alberta\.svg/);
+  });
+
+  test("a direct country selection shows its own flag (Poland)", async ({ page }) => {
+    await installMocks(page);
+    await openMapAt(page, CLICK_COUNTRY, { zoom: 5 });
+    await clickMapCentre(page);
+
+    await expect(panelName(page)).toHaveText("Pologne");
+    const titleFlag = page.locator("#mapWeatherPanel h2 .location-flag-wrap img");
+    await expect(titleFlag).toBeVisible();
+    await expect(titleFlag).toHaveAttribute("src", /countries\/pl\.svg/);
   });
 
   /* The provider is asked for `language=fr,en`, so a feature carries both

@@ -1,1 +1,9 @@
-<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" width="1235" height="650" viewBox="0 0 36.1 19"><defs><g id="b"><use xlink:href="#a" x=".9" y=".8"/><use xlink:href="#a" x="2.7" y=".8"/><use xlink:href="#a" x="4.5" y=".8"/><use xlink:href="#a" x="6.3" y=".8"/><use xlink:href="#a" x="8.1" y=".8"/><use xlink:href="#a" x="9.9" y=".8"/><use xlink:href="#a" x="11.7" y=".8"/><use xlink:href="#a" x="13.5" y=".8"/></g><g id="c"><use xlink:href="#b"/><use xlink:href="#b" y="1.7"/><use xlink:href="#b" y="3.4"/><use xlink:href="#b" y="5.1"/><use xlink:href="#b" y="6.8"/><use xlink:href="#b" y="8.5"/></g><path id="a" fill="#fff" d="M0-1 .6.8-1-.3h2L-.6.8z" transform="scale(.58515)"/></defs><path fill="#bf0a30" d="M0 0h36.1v19H0z"/><path stroke="#FFF" stroke-width="1.5" d="M0 2.2h36.1M0 5.2h36.1M0 8h36.1M0 11h36.1M0 13.9h36.1M0 16.9h36.1"/><path fill="#00205B" d="M0 0h14.4v10.2H0z"/><use xlink:href="#c"/></svg>
+<svg xmlns="http://www.w3.org/2000/svg" id="flag-icons-us" viewBox="0 0 640 480">
+  <path fill="#bd3d44" d="M0 0h640v480H0"/>
+  <path stroke="#fff" stroke-width="37" d="M0 55.3h640M0 129h640M0 203h640M0 277h640M0 351h640M0 425h640"/>
+  <path fill="#192f5d" d="M0 0h364.8v258.5H0"/>
+  <marker id="us-a" markerHeight="30" markerWidth="30">
+    <path fill="#fff" d="m14 0 9 27L0 10h28L5 27z"/>
+  </marker>
+  <path fill="none" marker-mid="url(#us-a)" d="m0 0 16 11h61 61 61 61 60L47 37h61 61 60 61L16 63h61 61 61 61 60L47 89h61 61 60 61L16 115h61 61 61 61 60L47 141h61 61 60 61L16 166h61 61 61 61 60L47 192h61 61 60 61L16 218h61 61 61 61 60z"/>
+</svg>

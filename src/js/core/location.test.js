@@ -1,6 +1,12 @@
 import { describe, it, expect, afterEach } from "vitest";
 import { state } from "./state.js";
-import { locAccessibleName, locHierarchyLabel, kindLabel } from "./location.js";
+import {
+  locAccessibleName,
+  locHierarchyLabel,
+  kindLabel,
+  flagsHtml,
+  regionKeyFor,
+} from "./location.js";
 
 const FRANCE = {
   id: "france",
@@ -142,5 +148,53 @@ describe("kindLabel", () => {
     expect(kindLabel("country")).toBe("Country");
     state.lang = "fr";
     expect(kindLabel("country")).toBe("Pays");
+  });
+});
+
+/* A directly-selected Canadian province (kind: "region" — see MT_KIND in
+   services/geocoding-api.js) has no parent context, so core/geo-identity.js's
+   identity panel deliberately shows no separate region chip for it (same
+   rule already covers a directly-selected US state). flagsHtml() is the
+   OTHER place a location's flags render — the header/hero/search/favorites
+   flag pair — and it must still show Alberta's own flag there, exactly
+   once, via regionKeyFor()'s self-fallback (step 4: no parent → the
+   location itself IS the province). */
+describe("flagsHtml / regionKeyFor for a directly-selected Canadian province", () => {
+  const ALBERTA_PROVINCE = {
+    kind: "region",
+    cc: "CA",
+    regionCode: "CA-AB",
+    name: { en: "Alberta", fr: "Alberta" },
+    region: { en: "", fr: "" },
+    country: { en: "Canada", fr: "Canada" },
+  };
+
+  it("resolves Alberta as its own region key, not a parent's", () => {
+    state.lang = "en";
+    expect(regionKeyFor(ALBERTA_PROVINCE)).toBe("alberta");
+  });
+
+  it("renders the country flag plus Alberta's own flag exactly once, each", () => {
+    state.lang = "en";
+    const html = flagsHtml(ALBERTA_PROVINCE);
+    expect(html.match(/location-flag-wrap/g)).toHaveLength(2); /* country + province, no more */
+    expect(html.match(/alberta\.svg/g)).toHaveLength(1);
+    expect(html.match(/ca\.svg/g)).toHaveLength(1);
+  });
+
+  it("does the same for a Canadian county (Camrose → Alberta)", () => {
+    state.lang = "en";
+    const camrose = {
+      kind: "region",
+      cc: "CA",
+      regionCode: "CA-AB",
+      name: { en: "Camrose", fr: "Camrose" },
+      region: { en: "Alberta", fr: "Alberta" },
+      country: { en: "Canada", fr: "Canada" },
+    };
+    /* the county's OWN flag pair uses its parent's name/flag, never its own */
+    expect(regionKeyFor(camrose)).toBe("alberta");
+    const html = flagsHtml(camrose);
+    expect(html.match(/alberta\.svg/g)).toHaveLength(1);
   });
 });

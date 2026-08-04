@@ -56,6 +56,54 @@ const TEXAS_STATE = {
   country: { en: "United States", fr: "États-Unis" },
 };
 
+/* Shaped exactly as services/geocoding-api.js#featureToLoc() converts a real
+   MapTiler "county" result: MT_KIND buckets place_type "county" (also
+   "subregion" / "municipal_district") onto kind: "region", the SAME internal
+   kind a directly-searched top-level region gets. The distinguishing signal
+   is loc.region: Camrose's carries its parent province from the feature's
+   own "region" context entry, which a directly-searched Alberta would not
+   have (see the bug report this fixture reproduces). */
+const CAMROSE_COUNTY = {
+  kind: "region",
+  cc: "CA",
+  regionCode: "CA-AB",
+  name: { en: "Camrose", fr: "Camrose" },
+  region: { en: "Alberta", fr: "Alberta" },
+  country: { en: "Canada", fr: "Canada" },
+};
+
+/* A Québec regional county municipality — same shape as Camrose, but the
+   parent province's name differs by language ("Quebec" EN / "Québec" FR),
+   so this specifically exercises locRegion()'s language resolution. */
+const HAUT_SAINT_FRANCOIS = {
+  kind: "region",
+  cc: "CA",
+  regionCode: "CA-QC",
+  name: { en: "Le Haut-Saint-François", fr: "Le Haut-Saint-François" },
+  region: { en: "Quebec", fr: "Quebec" }, // MapTiler returns the anglicized form in both
+  country: { en: "Canada", fr: "Canada" },
+};
+
+/* Alberta searched directly: MapTiler's context array carries ANCESTORS
+   only, so a top-level region result has no self-referencing "region"
+   context entry and loc.region comes back empty — never "Alberta" again. */
+const ALBERTA_PROVINCE = {
+  kind: "region",
+  cc: "CA",
+  regionCode: "CA-AB",
+  name: { en: "Alberta", fr: "Alberta" },
+  region: { en: "", fr: "" },
+  country: { en: "Canada", fr: "Canada" },
+};
+
+const CANADA_COUNTRY = {
+  kind: "country",
+  cc: "CA",
+  name: { en: "Canada", fr: "Canada" },
+  region: { en: "", fr: "" },
+  country: { en: "Canada", fr: "Canada" },
+};
+
 describe("resolveGeoIdentity", () => {
   it("resolves a US-state flag from a MapTiler short_code", () => {
     state.lang = "en";
@@ -146,6 +194,54 @@ describe("resolveGeoIdentity", () => {
     expect(id.country).toBeNull();
     expect(id.region).toBeNull();
     expect(id.hierarchy).toBeNull();
+  });
+
+  /* Regression coverage for the Camrose bug: a MapTiler county/subregion/
+     municipal-district result is bucketed onto the SAME internal kind
+     ("region") as a top-level province searched directly. A location must
+     not be assumed to BE the subdivision just because kind === "region". */
+  describe("Canadian county/subregion results (kind: region with a real parent)", () => {
+    it("shows the parent province's flag and name for a county (Camrose → Alberta)", () => {
+      state.lang = "en";
+      const id = resolveGeoIdentity(CAMROSE_COUNTY);
+      expect(id.name).toBe("Camrose");
+      expect(id.country).toEqual({ name: "Canada", cc: "CA" });
+      expect(id.region.name).toBe("Alberta");
+      expect(id.region.flag).toEqual({ type: "img", src: expect.stringContaining("alberta.svg") });
+      expect(id.hierarchy).toBe("Alberta, Canada");
+    });
+
+    it("resolves the parent province's name in both English and French", () => {
+      state.lang = "en";
+      expect(resolveGeoIdentity(HAUT_SAINT_FRANCOIS).region.name).toBe("Quebec");
+      state.lang = "fr";
+      /* locRegion() corrects the anglicized "Quebec" MapTiler returns to "Québec" */
+      const id = resolveGeoIdentity(HAUT_SAINT_FRANCOIS);
+      expect(id.region.name).toBe("Québec");
+      expect(id.region.flag).toEqual({ type: "img", src: expect.stringContaining("quebec.svg") });
+      expect(id.hierarchy).toBe("Québec, Canada");
+    });
+
+    it("does not misidentify a directly-selected province as having a parent", () => {
+      state.lang = "en";
+      const id = resolveGeoIdentity(ALBERTA_PROVINCE);
+      expect(id.name).toBe("Alberta");
+      expect(id.country).toEqual({ name: "Canada", cc: "CA" });
+      /* no parent context on a top-level region → no second "Alberta" chip,
+         no bare hierarchy line — same rule already proven for US states
+         (see "does not show an awkward repeated region for a state/province
+         result" above), now confirmed for a CA "region"-kind result too */
+      expect(id.region).toBeNull();
+      expect(id.hierarchy).toBeNull();
+    });
+
+    it("invents no province flag for a Canada country result", () => {
+      state.lang = "en";
+      const id = resolveGeoIdentity(CANADA_COUNTRY);
+      expect(id.country).toBeNull(); /* "Canada" would just repeat the name */
+      expect(id.region).toBeNull();
+      expect(id.hierarchy).toBeNull();
+    });
   });
 });
 

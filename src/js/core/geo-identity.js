@@ -26,11 +26,19 @@ import {
 } from "../data/flags.js";
 import { GEO_ICONS } from "../data/icons.js";
 
-/* country/state/province/administrative-region kinds ARE the subdivision —
-   showing a "region" chip under one of these would just repeat its own name
-   (or, for curated states/provinces, a loose descriptive blurb that isn't a
-   real flaggable tier). Only concrete places sit under a region. */
-const SUBDIVISION_KINDS = new Set(["country", "state", "province", "region"]);
+/* country/state/province kinds ARE the subdivision — showing a "region" chip
+   under one of these would just repeat its own name (or, for curated states/
+   provinces, a loose descriptive blurb that isn't a real flaggable tier).
+   Only concrete places sit under a region.
+   "region" is deliberately NOT in this set. MapTiler's place_type → kind
+   mapping (services/geocoding-api.js MT_KIND) collapses several distinct
+   tiers onto kind: "region" — a genuine top-level admin region (Alberta,
+   Occitanie) searched directly, but ALSO a county/subregion/municipal
+   district WITHIN one (Camrose county → Alberta). Those two cases are told
+   apart below by whether the result actually carries a distinct parent
+   (loc.region), not by this kind label alone: a directly-selected region has
+   no parent context and so no loc.region, while Camrose's does. */
+const SUBDIVISION_KINDS = new Set(["country", "state", "province"]);
 
 /* Resolve a CONFIDENT region flag for the identity box's region chip: the
    real US-state / CA-province SVG assets first, then — for France only —

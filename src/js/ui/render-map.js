@@ -80,7 +80,7 @@ function weatherPanelHtml(loc, wx) {
     <div class="map-panel-head">
       <div class="map-panel-location">
         <span class="map-panel-pin" aria-hidden="true">●</span>
-        <div><h2>${esc(locName(loc))}</h2><p>${esc(kindLabel(loc.kind))}</p></div>
+        <div><h2>${loc.kind === "country" ? `${flagsHtml(loc, "small")} ` : ""}${esc(locName(loc))}</h2><p>${esc(kindLabel(loc.kind))}</p></div>
       </div>
       <div class="map-panel-actions">
         <button class="map-panel-favorite ${favorite ? "is-active" : ""}" id="mapFavoriteBtn"
