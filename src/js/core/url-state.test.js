@@ -88,6 +88,23 @@ describe("parseAppUrl", () => {
     expect(() => parseAppUrl("#///??&&==")).not.toThrow();
     expect(parseAppUrl("#///??&&==").view).toBe("home");
   });
+
+  /* The map is permanently flat and north-up (see features/map.js) and this
+     parser has never had pitch/bearing keys — but an "old" shared link could
+     still carry them (a hand-edited URL, or one saved from a hypothetical
+     earlier build that did tilt). Neither key is in the allow-list read
+     above, so URLSearchParams simply drops them: nothing downstream ever
+     sees a pitch/bearing value, and the map opens exactly as flat as any
+     other link. */
+  it("ignores stray pitch/bearing query params — old tilted links still open flat", () => {
+    const withTilt = parseAppUrl(
+      "#/map?c=48.9,2.4&z=9.5&pitch=60&bearing=120&layer=rain&t=3&panel=1",
+    );
+    const withoutTilt = parseAppUrl("#/map?c=48.9,2.4&z=9.5&layer=rain&t=3&panel=1");
+    expect(withTilt).toEqual(withoutTilt);
+    expect(withTilt).not.toHaveProperty("pitch");
+    expect(withTilt).not.toHaveProperty("bearing");
+  });
 });
 
 describe("buildAppUrl", () => {

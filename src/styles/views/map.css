@@ -408,6 +408,42 @@ body[data-theme="dark"] .map-filters .chip.is-active {
   overflow: hidden;
   box-shadow: var(--shadow-sm);
 }
+
+/* Reset-view control (features/map.js ResetViewControl) — a plain button
+   with its own inline SVG rather than MapLibre's background-image icon
+   convention, so it can just use `currentColor` for theming instead of the
+   dark-theme invert-filter hack below (which only applies to the library's
+   own .maplibregl-ctrl-icon spans). */
+.map-reset-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #333;
+}
+body[data-theme="dark"] .map-reset-btn {
+  color: #ccc;
+}
+/* @maptiler/sdk's own bundled CSS (loaded at runtime, after this stylesheet)
+   carries a `.mapboxgl-ctrl-group button, .maplibregl-ctrl-group button {
+   width/height: 33px}` rule at the same specificity as utilities/
+   accessibility.css's 44×44 touch-target rule (`.maplibregl-ctrl-group
+   button`, 1 class + 1 element) — same specificity means whichever loads
+   later on the page wins, and the SDK's always does, for the zoom in/out
+   buttons AND the reset-view button alike. Each gets named here (one class
+   more specific than either losing rule: 2 classes + 1 element), so this
+   wins outright regardless of load order — no !important needed. The icon
+   itself, grouping, border, hover/focus states, radius and shadow are all
+   untouched; only the button's own hit-area grows. Unconditional (not
+   gated to touch/narrow widths, unlike most of this app's other 44×44
+   rules) because the target here is 44×44 on desktop too, and keeping it
+   constant is what keeps these three controls visually matched at every
+   width — see map-orientation.spec.js / mobile-map-orientation.spec.js. */
+.maplibregl-ctrl-group button.maplibregl-ctrl-zoom-in,
+.maplibregl-ctrl-group button.maplibregl-ctrl-zoom-out,
+.maplibregl-ctrl-group button.map-reset-btn {
+  width: 44px;
+  height: 44px;
+}
 .map-popup .mp-name {
   font-size: 14.5px;
   display: flex;

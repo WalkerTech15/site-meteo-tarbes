@@ -60,26 +60,42 @@ export function __resetPhotoCacheForTests() {
   IN_FLIGHT.clear();
 }
 
-/* Places that photograph like a townscape; everything else (countries, states,
-   provinces, regions) reads better as scenery. */
-const CITYSCAPE_KINDS = new Set(["city", "town", "village", "address", "poi"]);
+/* Small enough that a wide "cityscape" shot would mostly show empty
+   countryside — closer, street-level imagery reads truer. A specific address
+   or point of interest is similarly granular, so they share the bucket. */
+const SMALL_PLACE_KINDS = new Set(["town", "village", "address", "poi"]);
+/* A state/province/region IS the subject (not a parent of it) — same
+   template as a country, just qualified by the country it's in. */
+const REGION_KINDS = new Set(["region", "state", "province"]);
 
 /* A bare city name is ambiguous to an image search — "Paris" returns Paris,
    Texas as readily as Paris, France, and "Tarbes" returns nothing recognisable.
-   Qualify it with the canonical region and country from the geocoder, plus the
-   kind of imagery wanted, e.g.
-     "Tarbes Occitanie France city skyline landmark"
-     "Japan Asia Japan landscape travel"  */
+   Qualify it with the canonical region and country from the geocoder.
+   Deliberately never says (or names) a landmark: the old "city skyline
+   landmark" suffix biased Pexels toward the same handful of famous
+   monuments — the Statue of Liberty for New York, the Eiffel Tower for
+   Paris — instead of a photo representative of the place itself. That holds
+   even for a curated entry whose loc.landmark IS a real, named monument
+   (never invented from the city name): that field stays reserved for the
+   image-fallback chain in resolveLocationImage/hydrateLocPhoto, and is never
+   mixed into the search text. Examples:
+     "Tarbes Occitanie France cityscape"
+     "Saint-Rémy-de-Provence Provence-Alpes-Côte d'Azur France streets architecture"
+     "California United States landscape travel"
+     "Japan landscape travel"  */
 export function pexelsQuery(loc) {
   if (!loc) return "";
   const name = (loc.name && (loc.name.en || loc.name.fr)) || "";
   if (!name) return "";
   const region = (loc.region && loc.region.en) || "";
   const country = (loc.country && loc.country.en) || locCountry(loc) || "";
-  const suffix = CITYSCAPE_KINDS.has(loc.kind) ? "city skyline landmark" : "landscape travel";
-  /* a country's country is itself — don't say it twice */
-  const parts = loc.kind === "country" ? [name, region] : [name, region, country];
-  return [...parts, suffix].filter(Boolean).join(" ");
+
+  if (loc.kind === "country") return [name, "landscape travel"].join(" ");
+  if (REGION_KINDS.has(loc.kind))
+    return [name, country, "landscape travel"].filter(Boolean).join(" ");
+
+  const suffix = SMALL_PLACE_KINDS.has(loc.kind) ? "streets architecture" : "cityscape";
+  return [name, region, country, suffix].filter(Boolean).join(" ");
 }
 
 /* Asks the SAME-ORIGIN proxy for a photo — never Pexels directly, because that

@@ -95,7 +95,43 @@ const CONTROL_LABELS = [
   [".maplibregl-ctrl-attrib-button", "mapToggleAttribution"],
   [".maplibregl-popup-close-button", "mapClosePopup"],
   [".maplibregl-marker", "mapMarker"],
+  [".map-reset-btn", "mapResetView"],
 ];
+
+/* Custom MapLibre IControl: re-flattens the camera to north-up (bearing 0)
+   and pitch 0, without touching center, zoom, the selected location or the
+   active weather layer. The map can no longer be tilted/rotated by the user
+   at all (see the disabled dragRotate/touchPitch/rotation handlers in
+   createMapInstance below), so this is mostly a safety net — for camera
+   state a shared/bookmarked URL might carry, and as an explicit, discoverable
+   "make it flat again" affordance. Built as a real <button> inside MapLibre's
+   own `.maplibregl-ctrl-group` so it inherits the library's control styling
+   (size, shadow, hover, focus ring) for free — see styles/views/map.css for
+   the small bit of icon-specific styling it still needs. */
+class ResetViewControl {
+  onAdd(map) {
+    this._map = map;
+    const container = document.createElement("div");
+    container.className = "maplibregl-ctrl maplibregl-ctrl-group";
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = "map-reset-btn";
+    button.setAttribute("aria-label", t("mapResetView"));
+    button.title = t("mapResetView");
+    button.innerHTML =
+      '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 2v4M12 18v4M2 12h4M18 12h4"/><circle cx="12" cy="12" r="2.4" fill="currentColor" stroke="none"/></svg>';
+    button.addEventListener("click", () => {
+      map.easeTo({ pitch: 0, bearing: 0, duration: 300 });
+    });
+    container.appendChild(button);
+    this._container = container;
+    return container;
+  }
+  onRemove() {
+    this._container?.parentNode?.removeChild(this._container);
+    this._map = undefined;
+  }
+}
 
 function applyMapControlLabels(map) {
   let root;
@@ -326,13 +362,28 @@ async function createMapInstance(id, el, cfg) {
     /* slightly zoomed out so the first flyTo is a real flight — a no-op
          flight would skip the popup offset and the moveend event */
     zoom: zoomFor(loc) - 0.4,
+    /* Permanently flat and north-up: a 3D tilted globe (space background,
+       curved horizon) makes the weather overlays and boundaries hard to
+       read, and there's no interaction left that can re-tilt it — see the
+       disabled handlers just below. */
+    pitch: 0,
+    bearing: 0,
+    dragRotate: false /* right-click/Ctrl-drag to rotate+pitch — fully off */,
+    pitchWithRotate: false,
+    touchPitch: false /* two-finger vertical drag to pitch — fully off */,
     renderWorldCopies: false,
     minZoom: 1 /* mercator already clamps latitude at ±85° — no pole panning */,
     navigationControl: false,
     attributionControl: { compact: true },
     locale: mapLocale(),
   });
+  /* Both of these are "disable ONLY the rotate/pitch part" calls — pan
+     (arrow keys / one-finger drag) and zoom (+/- / pinch) stay fully
+     interactive. There's no equivalent constructor option for that split. */
+  map.keyboard.disableRotation();
+  map.touchZoomRotate.disableRotation();
   map.addControl(new maplibregl.NavigationControl({ showCompass: false }), "top-left");
+  map.addControl(new ResetViewControl(), "top-left");
   map.on("load", () => {
     el.classList.remove("is-loading");
     applyMapLanguage(map);
@@ -462,8 +513,16 @@ async function updateMap(id) {
 
     if (keepCamera) {
       /* nothing to do: the marker is already where the user clicked */
-    } else if (cam) inst.map.flyTo({ center: cam.center, zoom: cam.zoom, duration: 1100 });
-    else inst.map.flyTo({ center: [loc.lon, loc.lat], zoom: zoomFor(loc), duration: 1100 });
+    } else if (cam)
+      inst.map.flyTo({ center: cam.center, zoom: cam.zoom, bearing: 0, pitch: 0, duration: 1100 });
+    else
+      inst.map.flyTo({
+        center: [loc.lon, loc.lat],
+        zoom: zoomFor(loc),
+        bearing: 0,
+        pitch: 0,
+        duration: 1100,
+      });
     if (cfg.autoPopup) {
       /* moveend never fires when the map is already at the target — timer fallback */
       const open = () => {
@@ -745,14 +804,18 @@ export function jumpTo(center, zoom, { duration = 1200 } = {}) {
     pendingCamera = { center, zoom, duration };
     return;
   }
-  MAPS.worldMap.map.flyTo({ center, zoom, duration });
+  /* bearing/pitch are always explicit here: this is also the camera-restore
+     path for a shared/bookmarked URL (see map-url-sync.js), and a link saved
+     before this map became permanently flat must still open flat rather than
+     replaying a stale tilt/rotation. */
+  MAPS.worldMap.map.flyTo({ center, zoom, bearing: 0, pitch: 0, duration });
 }
 
 function applyPendingCamera(id) {
   if (id !== "worldMap" || !pendingCamera || !MAPS.worldMap) return;
   const { center, zoom, duration } = pendingCamera;
   pendingCamera = null;
-  MAPS.worldMap.map.flyTo({ center, zoom, duration });
+  MAPS.worldMap.map.flyTo({ center, zoom, bearing: 0, pitch: 0, duration });
 }
 
 /* Country-jump chips above the map card ("Monde"/France/États-Unis/Canada).
@@ -780,4 +843,47 @@ export function resizeMaps() {
       /* map not fully initialized yet — ignore */
     }
   });
+}
+
+/* Bearing/pitch are rendered into the WebGL canvas itself — unlike center,
+   zoom or the selected layer, nothing about them is ever reflected in the
+   DOM or the URL, so there is no way for a Playwright test to observe (or, to
+   set up a "what if it were tilted?" case for the reset button) without some
+   accessor. `import.meta.env.DEV` is Vite's own build-time flag: this whole
+   block is dead code eliminated from `npm run build`'s output (verified by
+   scripts/verify-no-secrets.mjs scanning dist/), so it only ever exists
+   under `vite dev`/`vite preview`, which is what Playwright drives. */
+if (import.meta.env.DEV && typeof window !== "undefined") {
+  window.__mapOrientationForTests = {
+    get: (id = "worldMap") => {
+      const inst = MAPS[id];
+      if (!inst) return null;
+      return {
+        bearing: inst.map.getBearing(),
+        pitch: inst.map.getPitch(),
+        dragRotateEnabled: inst.map.dragRotate.isEnabled(),
+        touchPitchEnabled: inst.map.touchPitch.isEnabled(),
+        /* MapLibre has no public getter for "is JUST the rotate half of this
+           handler disabled" (only the enable/disable pair below) — reading
+           the handler's own internal flag is fine here since this whole
+           block never reaches production (see the DEV guard above). */
+        touchRotateDisabled: inst.map.touchZoomRotate._rotationDisabled === true,
+        keyboardRotateDisabled: inst.map.keyboard._rotationDisabled === true,
+        /* the handlers this fix deliberately leaves untouched — pan and
+           zoom must stay on, on both desktop and touch */
+        dragPanEnabled: inst.map.dragPan.isEnabled(),
+        scrollZoomEnabled: inst.map.scrollZoom.isEnabled(),
+        touchZoomRotateEnabled: inst.map.touchZoomRotate.isEnabled(),
+      };
+    },
+    /* test setup only, to exercise the reset control — the app itself never
+       calls setBearing/setPitch anywhere */
+    set: (id = "worldMap", bearing, pitch) => {
+      const inst = MAPS[id];
+      if (!inst) return false;
+      inst.map.setBearing(bearing);
+      inst.map.setPitch(pitch);
+      return true;
+    },
+  };
 }

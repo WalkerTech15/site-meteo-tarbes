@@ -1305,12 +1305,16 @@ test.describe("explore carousel photos", () => {
       await expect(card(page, id).locator("img.loc-photo-img")).toHaveCount(1);
     }
 
-    expect(queries).toContain("Paris Île-de-France France city skyline landmark");
-    expect(queries).toContain("Tokyo Kantō Japan city skyline landmark");
-    /* countries ask for scenery instead */
-    expect(queries).toContain("Japan East Asia landscape travel");
+    expect(queries).toContain("Paris Île-de-France France cityscape");
+    expect(queries).toContain("Tokyo Kantō Japan cityscape");
+    /* countries ask for scenery instead, and just the country — no continent */
+    expect(queries).toContain("Japan landscape travel");
+    /* no query ever names, or even says the word, "landmark" — that biased
+       results toward the same handful of famous monuments (the Eiffel Tower
+       for Paris, etc.) instead of a representative photo of the place */
+    for (const q of queries) expect(q.toLowerCase()).not.toContain("landmark");
     /* no query is ever just a place name */
-    for (const q of queries) expect(q.split(" ").length).toBeGreaterThan(2);
+    for (const q of queries) expect(q.split(" ").length).toBeGreaterThan(1);
     /* and no card asks twice */
     expect(new Set(queries).size).toBe(queries.length);
   });

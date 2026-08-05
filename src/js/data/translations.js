@@ -35,6 +35,7 @@ export const I18N = {
     mapToggleAttribution: "Toggle attribution",
     mapMarker: "Map marker",
     mapClosePopup: "Close popup",
+    mapResetView: "Reset map view",
     /* a country card would otherwise read "France, France" */
     countryAria: "{name}, country",
 
@@ -487,6 +488,7 @@ export const I18N = {
     mapToggleAttribution: "Afficher ou masquer les attributions",
     mapMarker: "Repère sur la carte",
     mapClosePopup: "Fermer la fenêtre",
+    mapResetView: "Réinitialiser la vue de la carte",
     countryAria: "{name}, pays",
 
     navHome: "Accueil",
