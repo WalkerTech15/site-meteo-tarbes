@@ -7,7 +7,12 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
-import { fetchPexelsPhoto, pexelsQuery, __resetPhotoCacheForTests } from "./photo-api.js";
+import {
+  fetchPexelsPhoto,
+  fetchPexelsPhotoById,
+  pexelsQuery,
+  __resetPhotoCacheForTests,
+} from "./photo-api.js";
 import { state } from "../core/state.js";
 
 const PROXY_PATH = "api/pexels";
@@ -188,6 +193,111 @@ describe("fetchPexelsPhoto — proxy contract", () => {
   });
 });
 
+/* Curated locations (src/js/data/locations.js) carry a manually reviewed
+   Pexels photo ID so the hero/card image is guaranteed to show the actual
+   landmark — a landmark NAME alone is never trusted as a guarantee, only a
+   specific reviewed ID is. Same proxy, same response contract, different
+   query-string param ("id" instead of "query"). */
+describe("fetchPexelsPhotoById — curated exact-photo contract", () => {
+  it("requests the same-origin proxy with an id= param, never a query= search", async () => {
+    const calls = stubFetch(() =>
+      jsonResponse(200, {
+        photo: {
+          src: {
+            medium: "https://images.pexels.com/m.jpg",
+            large: "https://images.pexels.com/l.jpg",
+          },
+          photographer: "Rafal Maciejski",
+          link: "https://www.pexels.com/photo/hollywood-sign-on-hill-5688653/",
+          alt: "Hollywood Sign on a hillside",
+        },
+      }),
+    );
+
+    const photo = await fetchPexelsPhotoById(5688653);
+
+    expect(calls).toHaveLength(1);
+    expect(calls[0].url).toContain(PROXY_PATH);
+    expect(calls[0].url).toContain("id=5688653");
+    expect(calls[0].url).not.toContain("query=");
+    expect(photo).toEqual({
+      src: "https://images.pexels.com/l.jpg",
+      sizes: {
+        medium: "https://images.pexels.com/m.jpg",
+        large: "https://images.pexels.com/l.jpg",
+      },
+      photographer: "Rafal Maciejski",
+      link: "https://www.pexels.com/photo/hollywood-sign-on-hill-5688653/",
+      alt: "Hollywood Sign on a hillside",
+    });
+  });
+
+  it("returns null without calling the proxy for a falsy id", async () => {
+    const calls = stubFetch(() => jsonResponse(200, { photo: null }));
+    await expect(fetchPexelsPhotoById(undefined)).resolves.toBeNull();
+    await expect(fetchPexelsPhotoById(0)).resolves.toBeNull();
+    expect(calls).toHaveLength(0);
+  });
+
+  it("resolves to null, without throwing, for every failure the proxy can report for an ID lookup", async () => {
+    const failures = [
+      [400, { error: "invalid_id" }],
+      [404, { error: "not_found" }], // the reviewed photo was removed/renamed upstream
+      [429, { error: "rate_limited" }],
+      [502, { error: "upstream_error" }],
+      [503, { error: "unavailable" }],
+    ];
+    for (const [status, body] of failures) {
+      __resetPhotoCacheForTests();
+      stubFetch(() => jsonResponse(status, body));
+      await expect(fetchPexelsPhotoById(5688653)).resolves.toBeNull();
+    }
+  });
+
+  it("caches by a namespaced key so an ID can never collide with a text query", async () => {
+    /* A query happening to be the digits "5688653" must not read/write the
+       same cache slot as the curated photo ID 5688653. */
+    const calls = stubFetch((url) =>
+      jsonResponse(200, {
+        photo: {
+          src: {
+            large: url.includes("id=")
+              ? "https://images.pexels.com/by-id.jpg"
+              : "https://images.pexels.com/by-query.jpg",
+          },
+          photographer: "X",
+          link: "",
+        },
+      }),
+    );
+
+    const byId = await fetchPexelsPhotoById(5688653);
+    const byQuery = await fetchPexelsPhoto("5688653");
+
+    expect(calls).toHaveLength(2); // no accidental cache hit across the two
+    expect(byId.src).toBe("https://images.pexels.com/by-id.jpg");
+    expect(byQuery.src).toBe("https://images.pexels.com/by-query.jpg");
+  });
+
+  it("dedupes concurrent requests for the same id into one", async () => {
+    let resolveIt;
+    const gate = new Promise((r) => (resolveIt = r));
+    const calls = stubFetch(async () => {
+      await gate;
+      return jsonResponse(200, {
+        photo: { src: { large: "https://images.pexels.com/l.jpg" }, photographer: "A", link: "" },
+      });
+    });
+
+    const all = Promise.all([fetchPexelsPhotoById(356844), fetchPexelsPhotoById(356844)]);
+    resolveIt();
+    const [a, b] = await all;
+
+    expect(calls).toHaveLength(1);
+    expect(a).toBe(b);
+  });
+});
+
 /* An image search on a bare city name is ambiguous — "Paris" is as likely to
    return Paris, Texas, and "Tarbes" returns nothing recognisable at all. */
 describe("pexelsQuery — precise, unambiguous, worldwide queries", () => {
@@ -353,7 +463,8 @@ describe(".htaccess — Hostinger rewrite from the browser route to the PHP file
   });
 
   it("guards the rule with mod_rewrite so a host without it doesn't 500", () => {
-    const guarded = /<IfModule mod_rewrite\.c>[\s\S]*?RewriteRule\s+\^api\/pexels\$[\s\S]*?<\/IfModule>/;
+    const guarded =
+      /<IfModule mod_rewrite\.c>[\s\S]*?RewriteRule\s+\^api\/pexels\$[\s\S]*?<\/IfModule>/;
     expect(htaccess).toMatch(guarded);
   });
 

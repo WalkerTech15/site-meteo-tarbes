@@ -47,6 +47,16 @@ export default [
     },
   },
   {
+    /* Vercel serverless functions (api/pexels.js) run in a Node runtime, not
+       the browser. */
+    files: ["api/**/*.js"],
+    languageOptions: {
+      globals: {
+        ...globals.node,
+      },
+    },
+  },
+  {
     ignores: ["dist/**", "node_modules/**", "public/**", "test-results/**", "playwright-report/**"],
   },
 ];

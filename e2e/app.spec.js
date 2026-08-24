@@ -1276,47 +1276,63 @@ test.describe("forecast advisory banner", () => {
 /* The explore carousel shows a real photograph per city, hydrated lazily after
    the cards are already on screen. */
 test.describe("explore carousel photos", () => {
-  const proxyQueries = (page) => {
+  /* Every /api/pexels request, split into its "id" (curated landmark, exact
+     photo) and "query" (generic text search) forms — a request only ever
+     carries one of the two. */
+  const proxyRequests = (page) => {
     const seen = [];
     page.on("request", (r) => {
       const url = new URL(r.url());
-      if (url.pathname.endsWith("/api/pexels")) seen.push(url.searchParams.get("query"));
+      if (url.pathname.endsWith("/api/pexels")) {
+        seen.push({ id: url.searchParams.get("id"), query: url.searchParams.get("query") });
+      }
     });
     return seen;
   };
   const card = (page, id) => page.locator(`.explore-card[data-loc="${id}"]`);
 
-  test("14. each card asks for its own precise query, never a bare city name", async ({ page }) => {
-    const queries = proxyQueries(page);
+  test("14. curated landmarks fetch their exact reviewed photo by ID; uncurated countries still ask a precise search query", async ({
+    page,
+  }) => {
+    const requests = proxyRequests(page);
     await installMocks(page);
     await page.goto("/");
     await expect(page.locator("#heroCityName")).not.toBeEmpty();
 
-    /* nothing loads until the carousel is near the viewport */
-    expect(queries.some((q) => q.includes("Tokyo"))).toBe(false);
+    /* nothing loads until the carousel is near the viewport (Tokyo Tower's ID) */
+    expect(requests.some((r) => r.id === "12245414")).toBe(false);
 
     await page.locator("#exploreCarousel").scrollIntoViewIfNeeded();
     await expect(card(page, "losangeles").locator("img.loc-photo-img")).toHaveCount(1);
     /* the carousel scrolls sideways: cards past its right edge still wait */
-    expect(queries.some((q) => q.includes("Japan"))).toBe(false);
+    expect(requests.some((r) => r.query && r.query.includes("Japan"))).toBe(false);
 
     for (const id of ["tokyo", "japan"]) {
       await card(page, id).scrollIntoViewIfNeeded();
       await expect(card(page, id).locator("img.loc-photo-img")).toHaveCount(1);
     }
 
-    expect(queries).toContain("Paris Île-de-France France cityscape");
-    expect(queries).toContain("Tokyo Kantō Japan cityscape");
-    /* countries ask for scenery instead, and just the country — no continent */
-    expect(queries).toContain("Japan landscape travel");
+    /* curated landmarks (src/js/data/locations.js) carry a manually reviewed
+       Pexels photo ID and are fetched by exact ID — never a text search that
+       could rank an unrelated image first */
+    expect(requests.some((r) => r.id === "5688653")).toBe(true); // Los Angeles — Hollywood Sign
+    expect(requests.some((r) => r.id === "12245414")).toBe(true); // Tokyo — Tokyo Tower
+    expect(requests.some((r) => r.id === "532826")).toBe(true); // Paris (default hero) — Eiffel Tower
+
+    /* countries carry no curated landmark, so they still fall back to the
+       qualified text search, scenery only, no continent */
+    expect(requests.some((r) => r.query === "Japan landscape travel")).toBe(true);
+
+    const queries = requests.map((r) => r.query).filter(Boolean);
     /* no query ever names, or even says the word, "landmark" — that biased
        results toward the same handful of famous monuments (the Eiffel Tower
        for Paris, etc.) instead of a representative photo of the place */
     for (const q of queries) expect(q.toLowerCase()).not.toContain("landmark");
     /* no query is ever just a place name */
     for (const q of queries) expect(q.split(" ").length).toBeGreaterThan(1);
-    /* and no card asks twice */
-    expect(new Set(queries).size).toBe(queries.length);
+    /* and no card asks twice, whether by id or by query */
+    const keys = requests.map((r) => r.id ?? r.query);
+    expect(new Set(keys).size).toBe(keys.length);
   });
 
   test("15. the photo replaces the emoji, with a credit", async ({ page }) => {
@@ -1383,7 +1399,7 @@ test.describe("explore carousel photos", () => {
   /* The carousel is a fixed list; it must not start following the search box,
      and the hero must keep tracking the location the user actually chose. */
   test("19. the hero photo follows the searched city, the carousel does not", async ({ page }) => {
-    const queries = proxyQueries(page);
+    const requests = proxyRequests(page);
     await installMocks(page);
     await page.goto("/");
     await expect(page.locator("#heroCityName")).not.toBeEmpty();
@@ -1392,8 +1408,14 @@ test.describe("explore carousel photos", () => {
     await page.locator("#searchResults .search-item").first().click();
     await expect(page.locator("#heroCityName")).toContainText(GEOCODE_LABEL);
 
+    /* a searched, geocoded city carries no curated landmark, so it still uses
+       the qualified text search — never the ID lookup */
     await expect
-      .poll(() => queries.some((q) => q.startsWith(`${GEOCODE_LABEL} `) && q.includes("Iceland")))
+      .poll(() =>
+        requests.some(
+          (r) => r.query && r.query.startsWith(`${GEOCODE_LABEL} `) && r.query.includes("Iceland"),
+        ),
+      )
       .toBe(true);
     /* the explore list is unchanged — still the same ten curated places */
     await expect(page.locator("#exploreCarousel .explore-card")).toHaveCount(10);
@@ -1411,8 +1433,60 @@ test.describe("explore carousel photos", () => {
     await page.locator("#exploreCarousel").scrollIntoViewIfNeeded();
     await expect(page.locator("#exploreCarousel img.loc-photo-img").first()).toHaveCount(1);
 
-    expect(requested.some((u) => u.includes("/api/pexels?query="))).toBe(true);
+    /* the same-origin proxy, by ID (curated landmark) or by query (uncurated) */
+    expect(requested.some((u) => u.includes("/api/pexels?"))).toBe(true);
     expect(requested.some((u) => u.includes("api.pexels.com"))).toBe(false);
+  });
+});
+
+/* Two curated landmarks (Paris, TX's Eiffel Tower replica and Paris, ON's
+   Grand River) have no manually reviewed Pexels photo — see locations.js.
+   noPhotoSearch keeps them from ever falling back to a generic text search,
+   which could otherwise rank an unrelated photo for a landmark name this
+   specific. They must stay on the emoji/gradient fallback with no proxy call
+   at all, not even a search. */
+test.describe("curated landmarks with no reviewed photo (noPhotoSearch)", () => {
+  const pickBySearch = async (page, text) => {
+    await page.locator("#searchInput").fill(text);
+    await page.locator("#searchResults .search-item").first().click();
+  };
+
+  test("Paris, Texas never calls the Pexels proxy and keeps its emoji fallback", async ({
+    page,
+  }) => {
+    await installMocks(page);
+    await page.goto("/");
+    await expect(page.locator("#heroCityName")).not.toBeEmpty();
+
+    const requested = [];
+    page.on("request", (r) => requested.push(r.url()));
+
+    await pickBySearch(page, "Paris, Texas");
+    await expect(page.locator("#heroCityName")).toContainText("Paris");
+    await expect(page.locator("#heroLandmark .loc-photo.loading")).toHaveCount(0);
+    await expect(page.locator("#heroLandmark .has-photo")).toHaveCount(0);
+    await expect(page.locator("#heroInner .loc-credit")).toHaveCount(0);
+
+    expect(requested.some((u) => u.includes("/api/pexels?"))).toBe(false);
+  });
+
+  test("Paris, Ontario never calls the Pexels proxy and keeps its emoji fallback", async ({
+    page,
+  }) => {
+    await installMocks(page);
+    await page.goto("/");
+    await expect(page.locator("#heroCityName")).not.toBeEmpty();
+
+    const requested = [];
+    page.on("request", (r) => requested.push(r.url()));
+
+    await pickBySearch(page, "Paris, Ontario");
+    await expect(page.locator("#heroCityName")).toContainText("Paris");
+    await expect(page.locator("#heroLandmark .loc-photo.loading")).toHaveCount(0);
+    await expect(page.locator("#heroLandmark .has-photo")).toHaveCount(0);
+    await expect(page.locator("#heroInner .loc-credit")).toHaveCount(0);
+
+    expect(requested.some((u) => u.includes("/api/pexels?"))).toBe(false);
   });
 });
 
@@ -1569,8 +1643,9 @@ test.describe("photo attribution", () => {
     await page.goto("/");
     await expect(page.locator("#heroInner .loc-credit")).toBeVisible();
 
-    /* the proxy was called... */
-    expect(requested.some((u) => u.includes("/api/pexels?query="))).toBe(true);
+    /* the proxy was called — the default hero location (Paris) is curated, so
+       this is the exact-ID lookup, not a text search */
+    expect(requested.some((u) => u.includes("/api/pexels?id=532826"))).toBe(true);
     /* ...and the browser never went to Pexels itself, which is what would
        require shipping the API key to client code */
     expect(requested.some((u) => u.includes("api.pexels.com"))).toBe(false);
@@ -1585,6 +1660,9 @@ test.describe("photo proxy failures", () => {
     ["Pexels rate limit", 429, { error: "rate_limited" }],
     ["upstream failure", 502, { error: "upstream_error" }],
     ["invalid query", 400, { error: "invalid_query" }],
+    /* curated-landmark ID lookup only: the reviewed photo was removed/renamed
+       upstream on Pexels' side */
+    ["curated photo not found", 404, { error: "not_found" }],
   ];
 
   for (const [label, status, body] of failures) {

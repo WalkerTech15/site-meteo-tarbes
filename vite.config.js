@@ -19,6 +19,9 @@ const ENDPOINT = "/api/pexels";
 const QUERY_MIN_LENGTH = 2;
 const QUERY_MAX_LENGTH = 120;
 const UPSTREAM_TIMEOUT_MS = 8000;
+/* Pexels photo IDs are positive integers. Bounding the digit count keeps an
+   absurdly long string from ever reaching the upstream URL. */
+const ID_PATTERN = /^[1-9][0-9]{0,15}$/;
 
 function sendJson(res, status, payload) {
   res.statusCode = status;
@@ -71,6 +74,34 @@ function pexelsDevProxy(apiKey) {
     if (req.method !== "GET") {
       res.setHeader("Allow", "GET");
       return sendJson(res, 405, { error: "method_not_allowed" });
+    }
+
+    /* Curated locations (src/js/data/locations.js) carry a manually reviewed
+       Pexels photo ID so the hero/card image is guaranteed to show the actual
+       landmark rather than whatever a text search ranks first — see
+       api/pexels.js, which this dev proxy mirrors. */
+    const idParam = url.searchParams.get("id");
+    if (idParam !== null) {
+      if (!ID_PATTERN.test(idParam)) return sendJson(res, 400, { error: "invalid_id" });
+      if (!apiKey) return sendJson(res, 503, { error: "unavailable" });
+
+      try {
+        const r = await fetch(`https://api.pexels.com/v1/photos/${idParam}`, {
+          headers: { Authorization: apiKey, Accept: "application/json" },
+          signal: AbortSignal.timeout(UPSTREAM_TIMEOUT_MS),
+        });
+        if (r.status === 404) return sendJson(res, 404, { error: "not_found" });
+        if (r.status === 429) {
+          res.setHeader("Retry-After", "60");
+          return sendJson(res, 429, { error: "rate_limited" });
+        }
+        if (!r.ok) return sendJson(res, 502, { error: "upstream_error" });
+
+        const photo = await r.json();
+        return sendJson(res, 200, { photo: toPayload(photo) });
+      } catch {
+        return sendJson(res, 502, { error: "upstream_error" });
+      }
     }
 
     const query = cleanQuery(url.searchParams.get("query"));

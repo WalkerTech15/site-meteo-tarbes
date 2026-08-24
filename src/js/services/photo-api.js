@@ -102,31 +102,46 @@ export function pexelsQuery(loc) {
    would require shipping the Pexels key to the browser. The proxy holds the key
    server-side and answers with a narrow, already-validated shape:
      200 {"photo": {...}} | {"photo": null}
-     400 invalid_query · 429 rate_limited · 502 upstream_error · 503 unavailable
+     400 invalid_query/invalid_id · 404 not_found (by-ID lookup only)
+     429 rate_limited · 502 upstream_error · 503 unavailable
    Every non-200 (and every malformed 200) is treated identically: no photo, so
    the caller keeps its gradient/emoji fallback. Failures are negative-cached so
    a rate-limited or unconfigured deployment isn't hammered for the session. */
 export function fetchPexelsPhoto(query) {
   if (!query) return Promise.resolve(null);
-  if (PHOTO_CACHE.has(query)) return Promise.resolve(PHOTO_CACHE.get(query));
+  return dedupedFetch(query, `${PEXELS_PROXY_URL}?query=${encodeURIComponent(query)}`);
+}
+
+/* Curated locations (src/js/data/locations.js) carry a manually reviewed
+   Pexels photo ID — a landmark name alone is not a guarantee of accuracy, so
+   only a specific, reviewed ID is trusted to fetch the exact photo. Cache key
+   is "id:<id>", which can never collide with a query string (queries always
+   contain the qualifying region/country/suffix words added by pexelsQuery). */
+export function fetchPexelsPhotoById(id) {
+  if (!id) return Promise.resolve(null);
+  return dedupedFetch(`id:${id}`, `${PEXELS_PROXY_URL}?id=${encodeURIComponent(id)}`);
+}
+
+function dedupedFetch(cacheKey, url) {
+  if (PHOTO_CACHE.has(cacheKey)) return Promise.resolve(PHOTO_CACHE.get(cacheKey));
   /* The cache is only written once the response lands, so without this a row of
      cards hydrating together would each fire the same request. */
-  const pending = IN_FLIGHT.get(query);
+  const pending = IN_FLIGHT.get(cacheKey);
   if (pending) return pending;
-  const run = requestPhoto(query).finally(() => IN_FLIGHT.delete(query));
-  IN_FLIGHT.set(query, run);
+  const run = requestPhoto(cacheKey, url).finally(() => IN_FLIGHT.delete(cacheKey));
+  IN_FLIGHT.set(cacheKey, run);
   return run;
 }
 
-async function requestPhoto(query) {
+async function requestPhoto(cacheKey, url) {
   try {
-    const url = `${PEXELS_PROXY_URL}?query=${encodeURIComponent(query)}`;
     const r = await fetch(url, {
       headers: { Accept: "application/json" },
       signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
     });
-    /* No branch per status code on purpose: 400/429/502/503 all mean the same
-       thing to the UI, and the response body is never surfaced to the user. */
+    /* No branch per status code on purpose: 400/404/429/502/503 all mean the
+       same thing to the UI, and the response body is never surfaced to the
+       user. (404 only applies to the by-ID lookup: an unknown/removed photo.) */
     if (!r.ok) throw new Error("proxy " + r.status);
     const d = await r.json();
     const p = d && d.photo;
@@ -144,10 +159,10 @@ async function requestPhoto(query) {
           alt: p.alt || "",
         }
       : null;
-    PHOTO_CACHE.set(query, out);
+    PHOTO_CACHE.set(cacheKey, out);
     return out;
   } catch {
-    PHOTO_CACHE.set(query, null); // negative cache — don't hammer a failing query
+    PHOTO_CACHE.set(cacheKey, null); // negative cache — don't hammer a failing query
     return null;
   }
 }
@@ -246,9 +261,18 @@ export async function hydrateLocPhoto(el, loc, opts = {}) {
   };
   if (loc.landmark && loc.landmark.img) return swap(loc.landmark.img, null);
   if (loc.img) return swap(loc.img, null);
+  /* A curated landmark with no manually reviewed photo (see locations.js —
+     a landmark NAME alone is never treated as a guarantee) stays on the
+     emoji/gradient fallback rather than risk an inaccurate generic search
+     result. Only locations with no curated landmark at all — i.e. genuinely
+     unknown, user-entered places — reach the generic qualified-text search. */
+  if (loc.landmark && loc.landmark.noPhotoSearch) return done();
   let photo;
   try {
-    photo = await fetchPexelsPhoto(pexelsQuery(loc));
+    photo =
+      loc.landmark && loc.landmark.pexelsId
+        ? await fetchPexelsPhotoById(loc.landmark.pexelsId)
+        : await fetchPexelsPhoto(pexelsQuery(loc));
   } catch {
     return done();
   }
