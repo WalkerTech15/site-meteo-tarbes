@@ -58,9 +58,13 @@ src/
     │                        notifications (toast), charts
     └── main.js              bootstrap — wires every feature's events and
                               kicks off the initial render
+api/pexels.js               Vercel serverless function — the Pexels proxy for
+                              a Vercel deployment; holds no key itself, reads
+                              PEXELS_API_KEY from the platform's env vars
 public/                     copied verbatim into dist/ by Vite
-├── api/pexels.php          server-side Pexels proxy — holds no key itself,
-│                            reads one from outside the web root
+├── api/pexels.php          server-side Pexels proxy for a Hostinger/Apache
+│                            deployment — holds no key itself, reads one from
+│                            outside the web root
 ├── .htaccess               Apache security headers + caching
 └── assets/flags/           SVG flag assets, served as-is (never imported
                               as JS — referenced by URL at runtime)
@@ -186,23 +190,32 @@ simply a published credential — anyone can extract it and spend your rate
 limit. The key is therefore never given to the browser. Instead:
 
 ```
-browser  ──GET /api/pexels.php?query=Paris%20France%20landmark──►  same-origin proxy
-                                                                        │
-                                        Authorization: <key>  ──────────┘
-                                                     ▼
-                                             api.pexels.com
+browser  ──GET /api/pexels?query=Paris%20France%20landmark──►  same-origin proxy
+                                                                     │
+                                     Authorization: <key>  ──────────┘
+                                                  ▼
+                                          api.pexels.com
 ```
 
-- **Production** — `public/api/pexels.php` runs on the Apache/PHP host and
-  reads the key from a file **outside `public_html`**. See
-  [Deploying to Hostinger](#deploying-to-hostinger).
-- **Development** — a Vite middleware in `vite.config.js` serves the same
-  `/api/pexels.php` path from Node, reading `PEXELS_API_KEY` from
-  `.env.local`. Because the variable is unprefixed, Vite never places it in
-  `import.meta.env`, so it cannot reach client code.
+The browser always calls the same-origin `/api/pexels` (no `.php` — see
+`PEXELS_PROXY_URL` in `src/js/core/config.js`). Which server actually answers
+that request depends on where you deploy:
 
-Both implementations answer the same contract, so the frontend has one code
-path:
+| Deployment          | Handler               | Where the key lives                                   |
+| -------------------- | ---------------------- | ------------------------------------------------------- |
+| **Vercel** (current) | `api/pexels.js`, a serverless function | `PEXELS_API_KEY` set in the Vercel project's environment variables |
+| **Hostinger/Apache** (still supported) | `public/api/pexels.php` | a file **outside `public_html`** — see [Deploying to Hostinger](#deploying-to-hostinger) |
+| **Development**      | a Vite middleware in `vite.config.js` | `PEXELS_API_KEY` from `.env.local` |
+
+All three answer the identical contract below, so the frontend has one code
+path regardless of target. Because the variable is unprefixed, Vite never
+places it in `import.meta.env`, so it cannot reach client code in any case.
+
+> **Hostinger note:** the Apache deployment's PHP file is physically named
+> `pexels.php`, but the frontend requests the extensionless `/api/pexels`
+> everywhere. `public/.htaccess` carries a `mod_rewrite` rule mapping one to
+> the other internally, so no browser-visible redirect or `.php` extension
+> is ever seen. See [Deploying to Hostinger](#deploying-to-hostinger).
 
 | Status | Body                             | Meaning                                             |
 | ------ | -------------------------------- | --------------------------------------------------- |
@@ -240,6 +253,24 @@ get cached, archived, and crawled.
 Rotating is cheap and the only way to undo the exposure. Removing the key from
 the current bundle does not retroactively un-publish the old one.
 
+## Deploying to Vercel
+
+This is the currently deployed target. `api/pexels.js` is a Vercel
+serverless function, auto-detected from the repo root — no extra config file
+is required.
+
+1. Import the repo into Vercel.
+2. In the project's **Settings → Environment Variables**, add
+   `PEXELS_API_KEY` (no `VITE_` prefix) with your real key. Leaving it unset
+   is fine — the function answers 503 and the app falls back to
+   gradient/emoji visuals.
+3. Deploy. The build command (`npm run build`) and output directory
+   (`dist`) are picked up automatically from `vite.config.js`.
+
+The browser calls the same-origin `/api/pexels`, which Vercel routes to
+`api/pexels.js` by its file-based convention — no rewrite rule needed, unlike
+the Hostinger path below.
+
 ## Deploying to Hostinger
 
 The production secret lives in a file that the web server cannot serve, one
@@ -256,6 +287,14 @@ level **above** `public_html`:
 
 Anything under `public_html` is reachable over HTTP; `private/` is not. That
 separation — not obscurity — is what protects the key.
+
+> **Route note:** the browser always requests the extensionless `/api/pexels`
+> (see [PEXELS_API_KEY — server-side only](#pexels_api_key--server-side-only)),
+> but the file on this host is `api/pexels.php`. `public/.htaccess` carries an
+> internal `mod_rewrite` rule (`RewriteRule ^api/pexels$ api/pexels.php [L]`)
+> that maps one to the other without redirecting the browser or exposing the
+> `.php` extension — requires `mod_rewrite` to be enabled, which it is by
+> default on Hostinger.
 
 **One-time setup**
 
@@ -305,9 +344,9 @@ steps 1–4. Note that none of these commands ever prints the key: the response
 body contains only photo URLs and attribution.
 
 In the browser, open DevTools → Network and confirm requests go to
-`/api/pexels.php` on your own domain and that **no request to
-`api.pexels.com`** appears. Searching the built JS for `PEXELS` should return
-nothing but the attribution text.
+`/api/pexels` on your own domain (routed to `api/pexels.php` by the rewrite
+rule above) and that **no request to `api.pexels.com`** appears. Searching
+the built JS for `PEXELS` should return nothing but the attribution text.
 
 ## GitHub Pages deployment
 
@@ -326,15 +365,17 @@ Pages branch/target. No further path configuration is needed.
 
 The project also ships `public/.htaccess`, copied verbatim into `dist/` —
 useful if you deploy to a plain Apache host instead of/alongside GitHub
-Pages (this is how the app is deployed today). It sets security headers and
-long-lived caching for hashed assets; delete it if you don't need it.
+Pages. It sets security headers and long-lived caching for hashed assets;
+delete it if you don't need it.
 
-> **GitHub Pages has no PHP.** `api/pexels.php` will be served as a plain file
-> rather than executed, so the photo proxy returns something the app can't
-> parse and it falls back to gradient/emoji visuals — which is the intended
-> degraded behaviour, not a bug. Everything else (weather, map, forecast,
-> favourites, i18n) works normally. Real photos require a PHP host such as the
-> Hostinger deployment described above.
+> **GitHub Pages has no PHP and no serverless functions.** `api/pexels.js`
+> (Vercel) never runs there, and `api/pexels.php` will be served as a plain
+> file rather than executed, so the photo proxy returns something the app
+> can't parse and it falls back to gradient/emoji visuals — which is the
+> intended degraded behaviour, not a bug. Everything else (weather, map,
+> forecast, favourites, i18n) works normally. Real photos require the
+> [Vercel](#deploying-to-vercel) or [Hostinger](#deploying-to-hostinger)
+> deployment described above.
 
 ## Testing
 
@@ -379,7 +420,7 @@ and `playwright.config.js`:
   newly-added live call fails the suite loudly instead of making it flaky.
 - **The same-origin photo proxy is mocked too.** It is same-origin, so the
   cross-origin catch-all would not have caught it and the real dev middleware
-  (which holds a real key) would have answered. `**/api/pexels.php*` is
+  (which holds a real key) would have answered. `**/api/pexels*` is
   intercepted explicitly, and a direct browser call to `api.pexels.com` is
   aborted with a warning if one ever reappears.
 - **Real keys never reach the test browser or the test server.** Playwright

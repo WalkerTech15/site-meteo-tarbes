@@ -161,9 +161,10 @@ selectLocation(loc)
         │
         └──► hydrateLocPhoto()
                   │
-                  └──► GET /api/pexels.php?query=…      SAME ORIGIN — no key in the browser
+                  └──► GET /api/pexels?query=…      SAME ORIGIN — no key in the browser
                              │
-                             │  (PHP in production, Vite middleware in dev)
+                             │  (Vercel function in production, PHP for the
+                             │   Hostinger deploy path, Vite middleware in dev)
                              │  reads the key from outside the web root
                              ▼
                         api.pexels.com                  Authorization header, server-side only
@@ -293,9 +294,10 @@ The two keys need different answers because the two services offer different pro
 
 **[Code] MapTiler stays in the browser**, because a map library genuinely needs it client-side and MapTiler keys can be locked to an allowed-origins list (localhost for development, the production domain for the live site). A restricted key is worthless to anyone who copies it.
 
-**[Code] Pexels was moved to the server.** The browser now calls a same-origin endpoint, `/api/pexels.php?query=…`, which attaches the key server-side and returns only what the UI needs — image URLs, the photographer's name, the Pexels link, and alt text:
+**[Code] Pexels was moved to the server.** The browser now calls a same-origin endpoint, `/api/pexels?query=…`, which attaches the key server-side and returns only what the UI needs — image URLs, the photographer's name, the Pexels link, and alt text:
 
-- **Production:** `public/api/pexels.php` reads the key from a file **outside `public_html`** (`/home/<user>/private/weathersphere-secrets.php`). Nothing under the web root contains it.
+- **Production (Vercel):** `api/pexels.js`, a serverless function, reads `PEXELS_API_KEY` from the platform's environment variables.
+- **Production (Hostinger/Apache alternate):** `public/api/pexels.php` reads the key from a file **outside `public_html`** (`/home/<user>/private/weathersphere-secrets.php`). Nothing under the web root contains it.
 - **Development:** a Vite middleware serves the same path from Node, reading the unprefixed `PEXELS_API_KEY`.
 
 The proxy accepts GET only, validates and length-bounds the single `query` parameter, rejects control characters, fixes the upstream parameters server-side, sends the key in an `Authorization` header (never a query string, which would land in access logs), applies connect/total timeouts, sets no permissive CORS header, and answers a generic 503 if the secret is unavailable. `npm run verify:secrets` scans the built bundle and fails the build if a credential or a direct `api.pexels.com` call reappears.
@@ -356,8 +358,8 @@ Two layers, deliberately separated.
 
 1. No service worker → **not** an offline app.
 2. Notifications are preferences only.
-3. **Photos now need a PHP host.** The Pexels key is server-side, so a purely static deployment (GitHub Pages) can't run the proxy and falls back to gradients. That is a deliberate trade: portability given up for a credential that is no longer published.
-4. **The proxy is open by design.** It keeps the key private, but anyone can call `/api/pexels.php` and consume your quota. Per-IP rate limiting blunts this; only authentication would close it, and a public weather site has no basis for that.
+3. **Photos now need a server that can run the proxy** (Vercel serverless function or a PHP host). The Pexels key is server-side, so a purely static deployment (GitHub Pages) can't run the proxy and falls back to gradients. That is a deliberate trade: portability given up for a credential that is no longer published.
+4. **The proxy is open by design.** It keeps the key private, but anyone can call `/api/pexels` and consume your quota. Per-IP rate limiting blunts this; only authentication would close it, and a public weather site has no basis for that.
 5. **The rate limiter is best-effort.** It uses per-IP files in the system temp directory and deliberately fails _open_ — if the directory is unwritable on shared hosting, requests pass rather than the site breaking. It also does not survive a load-balanced multi-server setup.
 6. The MapTiler key is still browser-visible. That is correct for a map library, but it is only safe if the allowed-origins list is actually configured — an unrestricted key is as exposed as the old Pexels one was.
 7. Air quality is the European index only.
@@ -480,13 +482,13 @@ Rehearse this. **[Code]** — every step works.
 >
 > MapTiler has to be in the browser, because the map library runs there. That's acceptable because MapTiler keys can be locked to an allowed-origins list — localhost and my domain — so a copied key returns 403 anywhere else.
 >
-> Pexels can't be restricted that way, so my Pexels key was effectively published. I moved it server-side: the browser now calls my own `/api/pexels.php`, which attaches the key and returns only the image URLs, the photographer, the link, and the alt text. On the server the key lives in a file above `public_html`, so it isn't reachable over HTTP at all. And because the old key had been shipped, I rotated it — removing a key from the current bundle doesn't un-publish the old one.
+> Pexels can't be restricted that way, so my Pexels key was effectively published. I moved it server-side: the browser now calls my own `/api/pexels`, which attaches the key and returns only the image URLs, the photographer, the link, and the alt text. In production (Vercel) that's a serverless function reading the key from the platform's environment variables; on the alternate Hostinger deploy it's a PHP script reading a file above `public_html`, so it isn't reachable over HTTP at all either way. And because the old key had been shipped, I rotated it — removing a key from the current bundle doesn't un-publish the old one.
 >
 > What that does **not** fix: my proxy is a public endpoint, so someone could still call it and use my quota. I rate-limit per IP; genuinely closing it would need authentication, which a public weather site can't justify.
 
 **3b. "How do you know the key isn't still in there?"**
 
-> `npm run verify:secrets` runs after every build and scans `dist/` for the old variable name, the server-side variable name, any direct call to `api.pexels.com`, credential-shaped strings, and — if a key is set in the environment — that exact value. It fails the build on a hit, and it prints the file and which rule matched but never the value itself, so the check can't leak what it's protecting. There's also a unit test asserting the client sends no `Authorization` header, and an end-to-end test asserting the browser requests `/api/pexels.php` and never `api.pexels.com`.
+> `npm run verify:secrets` runs after every build and scans `dist/` for the old variable name, the server-side variable name, any direct call to `api.pexels.com`, credential-shaped strings, and — if a key is set in the environment — that exact value. It fails the build on a hit, and it prints the file and which rule matched but never the value itself, so the check can't leak what it's protecting. There's also a unit test asserting the client sends no `Authorization` header, and an end-to-end test asserting the browser requests `/api/pexels` and never `api.pexels.com`.
 
 **4. "How accurate is the weather?"**
 

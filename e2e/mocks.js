@@ -377,7 +377,7 @@ export const PEXELS_ALT = "A city skyline at dusk";
    handler fires and the fade/has-photo path is genuinely exercised. */
 const PIXEL = "data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7";
 
-/* The browser now talks to the SAME-ORIGIN proxy (/api/pexels.php), never to
+/* The browser now talks to the SAME-ORIGIN proxy (/api/pexels), never to
    Pexels — the key lives on the server. So this is the proxy's response shape,
    not Pexels': {"photo": {...}} | {"photo": null}. */
 export function photoProxyPayload() {
@@ -552,7 +552,7 @@ export async function installMocks(page, overrides = {}) {
      let it through to the real dev middleware — and that middleware holds a
      real key. Intercept it explicitly: no test may ever reach Pexels.
      `photoProxy` lets a test choose the status/body to simulate 429/502/503. */
-  await page.route("**/api/pexels.php*", (route) => {
+  await page.route("**/api/pexels*", (route) => {
     if (typeof photoProxy === "function") return photoProxy(route);
     return route.fulfill(json(photoProxyPayload()));
   });

@@ -6,6 +6,17 @@ Options -Indexes
 # Serve index.html for the root
 DirectoryIndex index.html
 
+# The frontend requests the extensionless /api/pexels on every deployment
+# target (see src/js/core/config.js PEXELS_PROXY_URL) so the same build works
+# unmodified on Vercel, where api/pexels.js answers that route natively.
+# Apache has no such file, only api/pexels.php, so rewrite internally —
+# the browser URL and the query string are both preserved; this is not a
+# redirect and the .php extension is never exposed.
+<IfModule mod_rewrite.c>
+  RewriteEngine On
+  RewriteRule ^api/pexels$ api/pexels.php [L]
+</IfModule>
+
 # Do not serve local secret files if they are ever uploaded by mistake.
 # The real production secret belongs OUTSIDE public_html (see README
 # "Deploying to Hostinger"); these rules are the safety net for the case where

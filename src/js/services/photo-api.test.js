@@ -5,10 +5,12 @@
  * photo" for every failure mode the proxy can report. `fetch` is stubbed, so
  * nothing here touches the network. */
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
+import { readFileSync } from "node:fs";
+import { fileURLToPath } from "node:url";
 import { fetchPexelsPhoto, pexelsQuery, __resetPhotoCacheForTests } from "./photo-api.js";
 import { state } from "../core/state.js";
 
-const PROXY_PATH = "api/pexels.php";
+const PROXY_PATH = "api/pexels";
 
 /* One counter-shaped stub so each test can assert what was requested. */
 function stubFetch(impl) {
@@ -333,5 +335,31 @@ describe("pexelsQuery — precise, unambiguous, worldwide queries", () => {
     for (const loc of [TARBES, TOKYO, JAPAN, NEW_YORK, LOS_ANGELES, PARIS, SMALL_TOWN, REGION]) {
       expect(pexelsQuery(loc).toLowerCase()).not.toContain("landmark");
     }
+  });
+});
+
+/* Static-config check, not a runtime one: no Apache runs in CI, so this can't
+   exercise mod_rewrite itself. It guards the contract instead — the frontend
+   hardcodes PROXY_PATH ("api/pexels") for every deploy target, so the
+   Hostinger/Apache file (public/api/pexels.php) is unreachable at that URL
+   unless .htaccess rewrites one to the other. Whoever next edits either side
+   of that rewrite gets a failing test instead of a silent 404 in production. */
+describe(".htaccess — Hostinger rewrite from the browser route to the PHP file", () => {
+  const htaccessPath = fileURLToPath(new URL("../../../public/.htaccess", import.meta.url));
+  const htaccess = readFileSync(htaccessPath, "utf8");
+
+  it("rewrites the extensionless browser route to the PHP file", () => {
+    expect(htaccess).toMatch(/RewriteRule\s+\^api\/pexels\$\s+api\/pexels\.php\s+\[L\]/);
+  });
+
+  it("guards the rule with mod_rewrite so a host without it doesn't 500", () => {
+    const guarded = /<IfModule mod_rewrite\.c>[\s\S]*?RewriteRule\s+\^api\/pexels\$[\s\S]*?<\/IfModule>/;
+    expect(htaccess).toMatch(guarded);
+  });
+
+  it("scopes the rule to exactly api/pexels — no broader catch-all", () => {
+    const rewriteLines = htaccess.split("\n").filter((l) => /^\s*RewriteRule/.test(l));
+    expect(rewriteLines).toHaveLength(1);
+    expect(rewriteLines[0]).toContain("^api/pexels$");
   });
 });

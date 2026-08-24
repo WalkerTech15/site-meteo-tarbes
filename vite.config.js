@@ -1,10 +1,13 @@
 import { defineConfig, loadEnv } from "vite";
 
-/* Development stand-in for public/api/pexels.php.
+/* Development stand-in for the production Pexels proxy.
  *
- * The production proxy is PHP (Hostinger/Apache); `vite dev` has no PHP, so the
- * same endpoint is served here by Node. Both speak the identical contract, so
- * the frontend has exactly one code path.
+ * Production is api/pexels.js (a Vercel serverless function) on the current
+ * deploy target, or public/api/pexels.php on the alternate Hostinger/Apache
+ * path (reached via the rewrite rule in public/.htaccess, since Apache has
+ * no serverless functions). `vite dev` has neither, so the same endpoint is
+ * served here by Node. All three speak the identical contract, so the
+ * frontend has exactly one code path.
  *
  * The key is read from PEXELS_API_KEY — deliberately WITHOUT the VITE_ prefix,
  * which is the only thing that keeps it out of the client bundle. Vite injects
@@ -12,7 +15,7 @@ import { defineConfig, loadEnv } from "vite";
  * process, which is where this middleware runs. The value is never written into
  * a response body, a define(), or any file under src/.
  */
-const ENDPOINT = "/api/pexels.php";
+const ENDPOINT = "/api/pexels";
 const QUERY_MIN_LENGTH = 2;
 const QUERY_MAX_LENGTH = 120;
 const UPSTREAM_TIMEOUT_MS = 8000;
@@ -118,9 +121,10 @@ function pexelsDevProxy(apiKey) {
     configureServer(server) {
       server.middlewares.use(handler);
     },
-    /* `vite preview` serves dist/, where api/pexels.php exists but cannot run
-       without PHP — wire the same middleware in so previewing a production
-       build still shows photos. */
+    /* `vite preview` serves dist/, which carries only the static
+       public/api/pexels.php file (no PHP or Vercel runtime to execute it
+       here) — wire the same middleware in so previewing a production build
+       still shows photos. */
     configurePreviewServer(server) {
       server.middlewares.use(handler);
     },

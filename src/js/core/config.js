@@ -9,9 +9,10 @@
      shipping it safe; an unrestricted key would be abusable from any site.
    - Pexels: NOT here, on purpose. Pexels offers no origin restriction, so a
      Pexels key in the bundle is a published credential. It now lives on the
-     server and is reached through the same-origin proxy below
-     (public/api/pexels.php in production, a Vite middleware in dev).
-     See README.md "API keys & security". */
+     server and is reached through the same-origin proxy below — api/pexels.js
+     (Vercel serverless function) on the current deploy target, or
+     public/api/pexels.php on the alternate Hostinger/Apache path, or a Vite
+     middleware in dev. See README.md "API keys & security". */
 export const MAPTILER_KEY = import.meta.env.VITE_MAPTILER_KEY || "";
 
 export const MAP_STYLE = `https://api.maptiler.com/maps/hybrid-v4/style.json?key=${MAPTILER_KEY}`;

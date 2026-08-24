@@ -1280,7 +1280,7 @@ test.describe("explore carousel photos", () => {
     const seen = [];
     page.on("request", (r) => {
       const url = new URL(r.url());
-      if (url.pathname.endsWith("/api/pexels.php")) seen.push(url.searchParams.get("query"));
+      if (url.pathname.endsWith("/api/pexels")) seen.push(url.searchParams.get("query"));
     });
     return seen;
   };
@@ -1411,7 +1411,7 @@ test.describe("explore carousel photos", () => {
     await page.locator("#exploreCarousel").scrollIntoViewIfNeeded();
     await expect(page.locator("#exploreCarousel img.loc-photo-img").first()).toHaveCount(1);
 
-    expect(requested.some((u) => u.includes("/api/pexels.php?query="))).toBe(true);
+    expect(requested.some((u) => u.includes("/api/pexels?query="))).toBe(true);
     expect(requested.some((u) => u.includes("api.pexels.com"))).toBe(false);
   });
 });
@@ -1570,7 +1570,7 @@ test.describe("photo attribution", () => {
     await expect(page.locator("#heroInner .loc-credit")).toBeVisible();
 
     /* the proxy was called... */
-    expect(requested.some((u) => u.includes("/api/pexels.php?query="))).toBe(true);
+    expect(requested.some((u) => u.includes("/api/pexels?query="))).toBe(true);
     /* ...and the browser never went to Pexels itself, which is what would
        require shipping the API key to client code */
     expect(requested.some((u) => u.includes("api.pexels.com"))).toBe(false);
