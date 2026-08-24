@@ -18,7 +18,7 @@ export const MAP_STYLE = `https://api.maptiler.com/maps/hybrid-v4/style.json?key
 
 /* Same-origin photo proxy. BASE_URL-relative rather than a leading slash so the
    build keeps working from a subdirectory as well as from a domain root. */
-export const PEXELS_PROXY_URL = `${import.meta.env.BASE_URL}api/pexels.php`;
+export const PEXELS_PROXY_URL = `${import.meta.env.BASE_URL}api/pexels`;
 
 /* Request timeouts */
 export const FETCH_TIMEOUT_MS = 8000;
