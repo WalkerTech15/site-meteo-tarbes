@@ -3,13 +3,18 @@
 
 .flag {
   display: inline-block;
-  /* aspect-ratio: auto → use the element's OWN intrinsic ratio (real flag
-     <img> ≈ 1.9:1, the hand-drawn placeholder <svg viewBox="0 0 24 18"> 4:3)
-     instead of forcing every flag into a fixed 4:3 box, which stretched real
-     images (e.g. the US 50-star flag) out of proportion. */
-  width: 21px;
+  /* HEIGHT-based sizing, width auto, aspect-ratio: auto → every flag keeps
+     its OWN intrinsic ratio (real country flag <img> = 4:3 incl. the US
+     50-star flag; the hand-drawn placeholder <svg viewBox="0 0 24 18"> is
+     also 4:3; a US state / CA province asset can be far from 4:3, e.g.
+     Hawaii 2:1) while sizing consistently across contexts — the same model
+     as the .location-flag-wrap system below. A fixed WIDTH (the old rule
+     here) does the opposite: it forces height = width / ratio, so a wider
+     flag renders shorter than a narrower one at the "same" size — which is
+     exactly the squashed-US-flag-next-to-a-state-flag bug this fixes. */
+  height: 16px;
+  width: auto;
   aspect-ratio: auto;
-  height: auto;
   object-fit: contain;
   border-radius: 3px;
   clip-path: inset(0 round 3px); /* rounds the drawn flag without SVG clipPath ids */
@@ -30,41 +35,33 @@
   vertical-align: 1px;
 }
 .hero-loc-kicker .flag {
-  width: 20px;
+  height: 15px;
   vertical-align: -4px;
 }
 .hero-region .flag {
-  width: 18px;
+  height: 14px;
   vertical-align: -3px;
 }
 .si-visual .flag {
-  width: 30px;
+  height: 23px;
   border-radius: 4px;
 }
 .explore-emoji .flag {
-  width: 120px;
+  height: 90px;
   border-radius: 12px;
   box-shadow: 0 8px 24px rgba(2, 6, 23, 0.3);
 }
 .explore-country .flag {
-  width: 17px;
-  vertical-align: -3px;
-}
-.fav-emoji .flag {
-  width: 84px;
-  border-radius: 10px;
-}
-.fav-kind .flag {
-  width: 16px;
+  height: 13px;
   vertical-align: -3px;
 }
 .hero-landmark .flag {
-  width: 260px;
+  height: 195px;
   border-radius: 24px;
 }
 .menu .flag,
 .seg-toggle .flag {
-  width: 19px;
+  height: 14px;
   vertical-align: -3px;
 }
 

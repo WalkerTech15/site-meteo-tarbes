@@ -633,11 +633,11 @@ test.describe("country filter chips", () => {
     expect(iconBoxes).toHaveLength(4);
     expect(new Set(iconBoxes).size).toBe(1); /* globe + FR + US + CA: identical box */
 
-    /* the flag images themselves are cropped to that box (object-fit: cover),
-       never stretched out of their native aspect ratio */
+    /* the flag images size by height (width auto) and contain within that box —
+       never cropped (object-fit: cover) or stretched out of their native ratio */
     await expect(app.locator('.chip[data-jump="usa"] .chip-icon .flag')).toHaveCSS(
       "object-fit",
-      "cover",
+      "contain",
     );
   });
 
@@ -705,6 +705,127 @@ test.describe("country filter chips", () => {
        the same flat surface */
     expect(activeBg).not.toBe(inactiveBg);
     expect(inactiveBg).not.toBe("rgb(255, 255, 255)");
+  });
+});
+
+/* Every flag image sizes by a fixed HEIGHT with automatic width and
+   object-fit: contain — never a fixed width (which squashes a wide flag's
+   rendered height relative to a differently-shaped one) and never
+   object-fit: cover/fill (which crops or stretches). This checks the
+   invariant directly against rendered pixels + each asset's own intrinsic
+   (natural) ratio, for country-only flags and country+state/province pairs
+   alike. */
+test.describe("flag sizing consistency (country vs state/province)", () => {
+  /* Reads the CSS box via getComputedStyle rather than
+     getBoundingClientRect(): a couple of these contexts (e.g. .explore-emoji)
+     sit under an ancestor `transform: rotate(...)`, and a rotated element's
+     bounding rect is its larger axis-aligned envelope, not its true
+     unrotated box — computed style isn't affected by that. */
+  async function flagMetrics(locator) {
+    return locator.evaluate((el) => {
+      const cs = getComputedStyle(el);
+      return {
+        width: parseFloat(cs.width),
+        height: parseFloat(cs.height),
+        objectFit: cs.objectFit,
+        naturalWidth: el.naturalWidth || null,
+        naturalHeight: el.naturalHeight || null,
+      };
+    });
+  }
+
+  function assertUndistorted(m) {
+    expect(m.objectFit).toBe("contain");
+    /* the rendered box matches the asset's OWN ratio within rounding —
+       proves it was never stretched (object-fit: fill) nor cropped
+       (object-fit: cover) to fit some other shape */
+    const naturalRatio = m.naturalWidth / m.naturalHeight;
+    const renderedRatio = m.width / m.height;
+    expect(Math.abs(renderedRatio - naturalRatio)).toBeLessThan(0.05);
+  }
+
+  test("Texas: the US country flag and the Texas state flag share one height, keep their own natural width, never stretched or cropped", async ({
+    app,
+  }) => {
+    await app.locator('.explore-card[data-loc="texas"] .explore-open').click();
+    const wraps = app.locator(".hero-region .location-flag-wrap img");
+    await expect(wraps).toHaveCount(2);
+    await expect.poll(() => wraps.first().evaluate((el) => el.complete)).toBe(true);
+
+    const [country, state] = await Promise.all([
+      flagMetrics(wraps.nth(0)),
+      flagMetrics(wraps.nth(1)),
+    ]);
+    expect(Math.round(country.height)).toBe(Math.round(state.height)); /* one fixed height */
+    expect(Math.round(country.width)).not.toBe(Math.round(state.width)); /* own natural width */
+    assertUndistorted(country);
+    assertUndistorted(state);
+  });
+
+  test("California: same country-flag/state-flag height + natural-width contract as Texas", async ({
+    app,
+  }) => {
+    await app.locator('.explore-card[data-loc="losangeles"] .explore-open').click();
+    const wraps = app.locator(".hero-region .location-flag-wrap img");
+    await expect(wraps).toHaveCount(2);
+    await expect.poll(() => wraps.first().evaluate((el) => el.complete)).toBe(true);
+
+    const [country, state] = await Promise.all([
+      flagMetrics(wraps.nth(0)),
+      flagMetrics(wraps.nth(1)),
+    ]);
+    expect(Math.round(country.height)).toBe(Math.round(state.height));
+    assertUndistorted(country);
+    assertUndistorted(state);
+  });
+
+  test("New York's popular-place card no longer force-stretches its flag pair to a 4:3 box (object-fit: fill regression)", async ({
+    app,
+  }) => {
+    await app.locator('.side-item[data-view="map"]').click();
+    const wraps = app.locator('.map-popular-place[data-loc="newyork"] .location-flag-wrap img');
+    await expect(wraps).toHaveCount(2);
+    await expect.poll(() => wraps.first().evaluate((el) => el.complete)).toBe(true);
+
+    const [country, state] = await Promise.all([
+      flagMetrics(wraps.nth(0)),
+      flagMetrics(wraps.nth(1)),
+    ]);
+    expect(Math.round(country.height)).toBe(Math.round(state.height));
+    assertUndistorted(country);
+    assertUndistorted(state);
+  });
+
+  test("France and Japan's country-only flags render at the same fixed height in the Explore carousel, contained not cropped", async ({
+    app,
+  }) => {
+    const france = app.locator('.explore-card[data-loc="france"] .explore-emoji .flag');
+    const japan = app.locator('.explore-card[data-loc="japan"] .explore-emoji .flag');
+    await expect(france).toBeVisible();
+    await expect(japan).toBeVisible();
+    await expect.poll(() => france.evaluate((el) => el.complete)).toBe(true);
+    await expect.poll(() => japan.evaluate((el) => el.complete)).toBe(true);
+
+    const [fr, jp] = await Promise.all([flagMetrics(france), flagMetrics(japan)]);
+    expect(Math.round(fr.height)).toBe(Math.round(jp.height));
+    assertUndistorted(fr);
+    assertUndistorted(jp);
+  });
+
+  test("the USA country-filter chip flag is contained, not cropped, and matches the France/Canada chip flags' height", async ({
+    app,
+  }) => {
+    await app.locator('.side-item[data-view="map"]').click();
+    const usa = app.locator('.chip[data-jump="usa"] .chip-icon .flag');
+    const france = app.locator('.chip[data-jump="france"] .chip-icon .flag');
+    await expect(usa).toBeVisible();
+    await expect.poll(() => usa.evaluate((el) => el.complete)).toBe(true);
+    await expect.poll(() => france.evaluate((el) => el.complete)).toBe(true);
+
+    const [us, fr] = await Promise.all([flagMetrics(usa), flagMetrics(france)]);
+    expect(Math.round(us.height)).toBe(Math.round(fr.height));
+    assertUndistorted(us);
+    assertUndistorted(fr);
   });
 });
 

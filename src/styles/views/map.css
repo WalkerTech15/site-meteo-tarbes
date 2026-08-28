@@ -56,11 +56,13 @@
 .chip.is-active:active {
   background: var(--primary-600);
 }
-/* One fixed icon box for every chip, matching the French flag's own 4:3
-   ratio. This deliberately normalizes the wider US and Canadian flag assets
-   so all three country shortcuts — and the Monde globe — read as the same
-   visible size, vertically centred with the label next to them. object-fit:
-   cover crops any flag to this box without stretching or distorting it. */
+/* One fixed icon box for every chip. The flag inside sizes by HEIGHT only
+   (width auto, object-fit: contain) — same model as .location-flag-wrap —
+   so it keeps its own natural ratio instead of being cropped to the box.
+   All local country flag assets share the same 4:3 ratio as this box, so in
+   practice FR/US/CA fill it edge-to-edge and read as one consistent size
+   next to the Monde globe; a differently-shaped flag would simply letterbox
+   inside the box rather than get cropped or stretched. */
 .chip-icon {
   display: flex;
   flex-shrink: 0;
@@ -78,9 +80,14 @@
 .chip-icon img,
 .chip-icon .flag {
   display: block;
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
+  /* Explicit px, not height: 100% — the flag <img> sits inside an
+     intervening <span data-flag> with no height of its own (main.js fills
+     it after the fact), so a percentage height has no definite containing
+     block to resolve against and collapses to 0. matches .chip-icon's own
+     height exactly. */
+  height: 16.5px;
+  width: auto;
+  object-fit: contain;
 }
 
 /* Country shortcuts use the compact rounded-rectangle treatment from the
@@ -193,7 +200,7 @@ body[data-theme="dark"] .map-filters .chip.is-active {
   font-size: 34px;
 }
 .info-visual .flag {
-  width: 46px;
+  height: 35px;
 }
 .info-name {
   display: flex;
@@ -202,7 +209,7 @@ body[data-theme="dark"] .map-filters .chip.is-active {
   font-size: 15px;
 }
 .info-name .flag {
-  width: 18px;
+  height: 14px;
 }
 .info-sub {
   font-size: 13px;
@@ -290,7 +297,7 @@ body[data-theme="dark"] .map-filters .chip.is-active {
   border-top: 1px solid var(--border);
 }
 .pop-row .flag {
-  width: 20px;
+  height: 15px;
 }
 .pop-names {
   display: flex;
@@ -451,7 +458,7 @@ body[data-theme="dark"] .map-reset-btn {
   gap: 6px;
 }
 .map-popup .mp-name .flag {
-  width: 18px;
+  height: 14px;
 }
 .map-popup .mp-sub {
   font-size: 13px;
@@ -1302,11 +1309,6 @@ body[data-theme="dark"] .map-nearby-stats span {
 }
 .map-popular-place .location-flag-wrap {
   height: 15px;
-}
-.map-popular-place .flag {
-  width: 20px;
-  height: 15px;
-  object-fit: fill;
 }
 .map-popular-place b {
   overflow: hidden;

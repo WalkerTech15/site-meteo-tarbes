@@ -76,7 +76,7 @@
   transform: rotate(0) scale(1.06);
 }
 .favx-emoji .flag {
-  width: 110px;
+  height: 82px;
   border-radius: 12px;
 }
 .favx-top {
@@ -85,7 +85,7 @@
   gap: 9px;
 }
 .favx-top .flag {
-  width: 22px;
+  height: 17px;
 }
 .favx-names {
   display: flex;
@@ -268,7 +268,7 @@
   overflow: hidden;
 }
 .ft-visual .flag {
-  width: 26px;
+  height: 20px;
 }
 .ft-credit {
   margin: 3px 0 0 58px;

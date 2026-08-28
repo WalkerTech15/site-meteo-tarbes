@@ -79,7 +79,7 @@
   background: var(--primary-soft);
 }
 .set-tile .flag {
-  width: 22px;
+  height: 17px;
 }
 .set-tile.tall {
   align-items: flex-start;
