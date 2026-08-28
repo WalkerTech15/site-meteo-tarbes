@@ -14,7 +14,6 @@ export function setMode(mode) {
   state.mode = mode;
   setStr(KEYS.mode, mode);
   document.body.dataset.mode = mode;
-  syncSegToggle($("#modeToggle"), "mode", mode);
   syncSegToggle($("#modeToggleSide"), "mode", mode);
   updateSettingsUI();
   if (mode === "detailed") renderChart();
@@ -130,7 +129,6 @@ export function setLang(lang) {
   syncSidebarA11y();
   syncLangBtnLabel();
   /* toggle labels change width with the language — realign the thumb */
-  syncSegToggle($("#modeToggle"), "mode", state.mode);
   syncSegToggle($("#modeToggleSide"), "mode", state.mode);
   renderExplore();
   renderFavorites();

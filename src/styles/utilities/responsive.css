@@ -105,13 +105,7 @@
   .sidebar-scrim:not([hidden]) {
     display: block;
   }
-  .side-mode {
-    display: inline-flex;
-  }
   .search-kbd {
-    display: none;
-  }
-  #modeToggle {
     display: none;
   }
   .main {

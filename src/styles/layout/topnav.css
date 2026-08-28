@@ -41,12 +41,14 @@ body[data-theme="dark"] .topnav {
 /* ≥901px (above the drawer breakpoint): a true 3-column grid so the search
    bar is centered against the FULL bar width, not just the leftover space
    between two differently-sized side groups (that asymmetry — logo ~180px
-   vs. mode+theme+lang ~300px — is what made the search bar look off-center).
-   Both outer tracks share the identical minmax(), so they always resolve to
-   the same pixel width as each other regardless of their real content size,
+   vs. theme+lang ~110px — is what made the search bar look off-center). Both
+   outer tracks share the identical minmax(), so they always resolve to the
+   same pixel width as each other regardless of their real content size,
    which is what keeps the center track (and the search bar inside it)
-   genuinely centered at every width. 280px comfortably fits the wider
-   (actions) group so its content never gets clipped by its own track. */
+   genuinely centered at every width. 280px comfortably fits the wider of the
+   two groups so its content never gets clipped by its own track — with the
+   display-mode toggle moved out to the sidebar (its only home now, instead
+   of being duplicated here), the actions group is theme + language only. */
 @media (min-width: 901px) {
   .topnav-inner {
     display: grid;
@@ -127,15 +129,12 @@ body[data-theme="dark"] .topnav {
   display: block;
 }
 
-/* Keep both display-mode controls compact and rectangular instead of using
+/* Keep the display-mode control compact and rectangular instead of using
    the default pill treatment. */
-#modeToggle,
 #modeToggleSide {
   border-radius: 12px;
 }
 
-#modeToggle button,
-#modeToggle .seg-thumb,
 #modeToggleSide button,
 #modeToggleSide .seg-thumb {
   border-radius: 8px;

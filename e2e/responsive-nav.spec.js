@@ -208,8 +208,8 @@ test.describe("existing header/sidebar controls still work at both breakpoints",
       await page.locator('#themeMenu button[data-theme="dark"]').click();
       await expect(page.locator("body")).toHaveAttribute("data-theme", "dark");
 
-      const modeToggle = viewport.width <= 900 ? "#modeToggleSide" : "#modeToggle";
-      await page.locator(`${modeToggle} button[data-mode="detailed"]`).click();
+      /* the display-mode toggle now lives only in the sidebar, at every width */
+      await page.locator('#modeToggleSide button[data-mode="detailed"]').click();
       await expect(page.locator("body")).toHaveAttribute("data-mode", "detailed");
     });
   }

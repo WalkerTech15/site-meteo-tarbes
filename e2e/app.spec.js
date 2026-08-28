@@ -83,7 +83,7 @@ test.describe("preferences", () => {
     await expect(app.locator("body")).toHaveAttribute("data-mode", "simple");
     await expect(app.locator("#metricsGrid")).toBeVisible();
 
-    await app.locator('#modeToggle button[data-mode="detailed"]').click();
+    await app.locator('#modeToggleSide button[data-mode="detailed"]').click();
     await expect(app.locator("body")).toHaveAttribute("data-mode", "detailed");
     await expect(app.locator("#metricsGridDetailed")).toBeVisible();
     await expect(app.locator('#modeToggleSide button[data-mode="detailed"]')).toHaveAttribute(
@@ -91,7 +91,7 @@ test.describe("preferences", () => {
       "true",
     );
 
-    await app.locator('#modeToggle button[data-mode="simple"]').click();
+    await app.locator('#modeToggleSide button[data-mode="simple"]').click();
     await expect(app.locator("body")).toHaveAttribute("data-mode", "simple");
     await expect(app.locator('#modeToggleSide button[data-mode="simple"]')).toHaveAttribute(
       "aria-checked",
@@ -120,9 +120,6 @@ test.describe("settings page", () => {
   test("62. every display-mode control uses the same Simple-then-Détaillé order", async ({
     app,
   }) => {
-    const headerOrder = await app
-      .locator("#modeToggle button")
-      .evaluateAll((els) => els.map((el) => el.dataset.mode));
     const sideOrder = await app
       .locator("#modeToggleSide button")
       .evaluateAll((els) => els.map((el) => el.dataset.mode));
@@ -131,7 +128,6 @@ test.describe("settings page", () => {
       .locator("#modeTiles .set-tile")
       .evaluateAll((els) => els.map((el) => el.dataset.mode));
 
-    expect(headerOrder).toEqual(["simple", "detailed"]);
     expect(sideOrder).toEqual(["simple", "detailed"]);
     expect(settingsOrder).toEqual(["simple", "detailed"]);
   });
@@ -143,10 +139,6 @@ test.describe("settings page", () => {
     await app.locator('#modeTiles .set-tile[data-mode="detailed"]').click();
 
     await expect(app.locator("body")).toHaveAttribute("data-mode", "detailed");
-    await expect(app.locator('#modeToggle button[data-mode="detailed"]')).toHaveAttribute(
-      "aria-checked",
-      "true",
-    );
     await expect(app.locator('#modeToggleSide button[data-mode="detailed"]')).toHaveAttribute(
       "aria-checked",
       "true",
@@ -160,8 +152,8 @@ test.describe("settings page", () => {
       "false",
     );
 
-    /* the reverse direction: header controls the settings tiles too */
-    await app.locator('#modeToggle button[data-mode="simple"]').click();
+    /* the reverse direction: the sidebar control drives the settings tiles too */
+    await app.locator('#modeToggleSide button[data-mode="simple"]').click();
     await expect(app.locator('#modeTiles .set-tile[data-mode="simple"]')).toHaveAttribute(
       "aria-checked",
       "true",
@@ -174,7 +166,7 @@ test.describe("settings page", () => {
     await app.reload();
     await expect(app.locator("#heroCityName")).not.toBeEmpty();
     await expect(app.locator("body")).toHaveAttribute("data-mode", "detailed");
-    await expect(app.locator('#modeToggle button[data-mode="detailed"]')).toHaveAttribute(
+    await expect(app.locator('#modeToggleSide button[data-mode="detailed"]')).toHaveAttribute(
       "aria-checked",
       "true",
     );
@@ -1367,7 +1359,7 @@ test.describe("forecast advisory banner", () => {
 
     const box = async () => (await region(page).boundingBox()) || { y: 0, height: 0 };
     for (const mode of ["detailed", "simple"]) {
-      await page.locator(`#modeToggle button[data-mode="${mode}"]`).click();
+      await page.locator(`#modeToggleSide button[data-mode="${mode}"]`).click();
       await expect(page.locator("body")).toHaveAttribute("data-mode", mode);
       await expect(region(page)).toBeVisible();
       const advisory = await box();
@@ -1932,6 +1924,36 @@ test.describe("language menu accessibility", () => {
     /* the drawer's own open/closed labelling survived the language switch too */
     await expect(page.locator("#burgerBtn")).toHaveAttribute("aria-label", "Close menu");
     await expect(page.locator("#sidebar")).toHaveAttribute("aria-hidden", "false");
+  });
+
+  test("lists Français first, English second, with French selected by default", async ({
+    app,
+  }) => {
+    const buttons = app.locator("#langMenu button");
+    const order = await buttons.evaluateAll((els) => els.map((el) => el.dataset.lang));
+    expect(order).toEqual(["fr", "en"]);
+
+    const labels = await buttons.evaluateAll((els) =>
+      els.map((el) => el.textContent.trim().replace(/\s+/g, " ")),
+    );
+    expect(labels).toEqual(["Français", "English"]);
+
+    /* flags, roles and aria-checked are preserved on the reordered items */
+    await expect(app.locator('#langMenu button[data-lang="fr"]')).toHaveAttribute("role", "menuitemradio");
+    await expect(app.locator('#langMenu button[data-lang="en"]')).toHaveAttribute("role", "menuitemradio");
+    await expect(app.locator('#langMenu button[data-lang="fr"] [data-flag]')).toHaveCount(1);
+    await expect(app.locator('#langMenu button[data-lang="en"] [data-flag]')).toHaveCount(1);
+
+    /* app boots in French (state.js default) — Français is the checked item */
+    await expect(app.locator('#langMenu button[data-lang="fr"]')).toHaveAttribute(
+      "aria-checked",
+      "true",
+    );
+    await expect(app.locator('#langMenu button[data-lang="en"]')).toHaveAttribute(
+      "aria-checked",
+      "false",
+    );
+    await expect(app.locator("html")).toHaveAttribute("lang", "fr");
   });
 });
 

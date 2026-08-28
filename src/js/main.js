@@ -161,7 +161,6 @@ $("#themeMenu").addEventListener("keydown", (e) => {
 });
 
 /* ── Toggles ── */
-bindSegToggle($("#modeToggle"), "mode", setMode);
 bindSegToggle($("#modeToggleSide"), "mode", setMode);
 
 /* ── Settings page controls ── */
@@ -297,7 +296,6 @@ $$("[data-layer-icon]").forEach((el) => {
 applyTheme();
 syncThemeNav();
 applyStaticI18n();
-syncSegToggle($("#modeToggle"), "mode", state.mode);
 syncSegToggle($("#modeToggleSide"), "mode", state.mode);
 updateSettingsUI();
 $("#langCode").textContent = state.lang.toUpperCase();

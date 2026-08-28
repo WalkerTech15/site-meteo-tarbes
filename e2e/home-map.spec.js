@@ -78,7 +78,7 @@ test.describe("home map: Detailed mode", () => {
     page,
   }) => {
     await freshAt(page, { width: 1440, height: 900 });
-    await page.locator('#modeToggle button[data-mode="detailed"]').click();
+    await page.locator('#modeToggleSide button[data-mode="detailed"]').click();
     await page.waitForTimeout(300);
 
     await expect(page.locator("#homeMap canvas")).toBeVisible();
@@ -93,7 +93,7 @@ test.describe("home map: Detailed mode", () => {
     await freshAt(page, { width: 1440, height: 900 });
     const simpleWidth = (await page.locator("#homeMap").boundingBox()).width;
 
-    await page.locator('#modeToggle button[data-mode="detailed"]').click();
+    await page.locator('#modeToggleSide button[data-mode="detailed"]').click();
     await page.waitForTimeout(300);
     const detailedWidth = (await page.locator("#homeMap").boundingBox()).width;
 
@@ -110,14 +110,14 @@ test.describe("home map: MapLibre re-measures after layout changes", () => {
     const containerWidthSimple = (await page.locator("#homeMap").boundingBox()).width;
     expect(Math.abs(simpleCanvasWidth - containerWidthSimple)).toBeLessThan(2);
 
-    await page.locator('#modeToggle button[data-mode="detailed"]').click();
+    await page.locator('#modeToggleSide button[data-mode="detailed"]').click();
     await page.waitForTimeout(300);
     const detailedCanvasWidth = (await canvas.boundingBox()).width;
     const containerWidthDetailed = (await page.locator("#homeMap").boundingBox()).width;
     expect(Math.abs(detailedCanvasWidth - containerWidthDetailed)).toBeLessThan(2);
     expect(detailedCanvasWidth).toBeLessThan(simpleCanvasWidth);
 
-    await page.locator('#modeToggle button[data-mode="simple"]').click();
+    await page.locator('#modeToggleSide button[data-mode="simple"]').click();
     await page.waitForTimeout(300);
     const backToSimpleCanvasWidth = (await canvas.boundingBox()).width;
     expect(Math.abs(backToSimpleCanvasWidth - simpleCanvasWidth)).toBeLessThan(2);

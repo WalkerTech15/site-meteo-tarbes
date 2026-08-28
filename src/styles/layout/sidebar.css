@@ -99,10 +99,10 @@ body[data-theme="dark"] .ico-settings {
   flex-direction: column;
   gap: var(--s-2);
 }
-/* Simple/Detailed stays reachable on mobile via the drawer (topnav toggle is hidden there) */
-.side-mode {
-  display: none;
-}
+/* The sidebar is the display-mode control's only home now (it used to be
+   duplicated in the top navbar too) — always visible here, both in the
+   permanent desktop sidebar and the mobile drawer, so `.seg-toggle`'s own
+   `display: inline-flex` applies unmodified at every width. */
 .side-mode button {
   flex: 1;
 }
