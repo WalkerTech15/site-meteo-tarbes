@@ -133,6 +133,26 @@ test.describe("crossing the 900px breakpoint by resizing", () => {
     await expect(page.locator("#sidebar")).toHaveAttribute("inert", "");
     await expect(page.locator("#burgerBtn")).toHaveAttribute("aria-expanded", "false");
   });
+
+  /* Regression, deterministic counterpart to the test above. That one only
+     catches the bug when the machine is loaded enough for the breakpoint
+     `change` event to be delivered late — after a second resize has already
+     put the viewport back in drawer mode. This reproduces the state such a
+     late event leaves behind (a stale `is-open` present as drawer mode is
+     entered) directly, with no timing dependency: the drawer must still come
+     up closed. Before the fix in ui/navigation.js, entering drawer mode never
+     cleared `is-open`, so this reported aria-hidden="false". */
+  test("a stale is-open cannot survive entering drawer mode", async ({ page }) => {
+    await freshAt(page, { width: 1280, height: 800 });
+    await page.evaluate(() => document.querySelector("#sidebar").classList.add("is-open"));
+
+    await page.setViewportSize({ width: 375, height: 812 });
+
+    await expect(page.locator("#sidebar")).toHaveAttribute("aria-hidden", "true");
+    await expect(page.locator("#sidebar")).toHaveAttribute("inert", "");
+    await expect(page.locator("#sidebar")).not.toHaveClass(/is-open/);
+    await expect(page.locator("#burgerBtn")).toHaveAttribute("aria-expanded", "false");
+  });
 });
 
 test.describe("accessible name toggles with state and language", () => {

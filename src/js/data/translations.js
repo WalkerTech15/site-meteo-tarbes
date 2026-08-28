@@ -257,6 +257,15 @@ export const I18N = {
     recentSettingX: "Keep the last five places you selected on this device.",
     recentClearT: "Clear recent searches",
     recentClearX: "Remove the stored list of recently selected places.",
+
+    /* nearby places (map detail panel) */
+    nearbyTitle: "Nearby places",
+    nearbyLoading: "Finding nearby places…",
+    nearbyEmpty: "No nearby places found.",
+    nearbyError: "Nearby places are unavailable right now.",
+    nearLandmark: "Near {landmark}",
+    sheetHandleLabel: "Drag or use arrow keys to resize this panel",
+
     legendCountries: "Countries",
     legendStates: "States (US)",
     legendProvinces: "Provinces (CA)",
@@ -710,6 +719,15 @@ export const I18N = {
     recentSettingX: "Conserver sur cet appareil les cinq derniers lieux sélectionnés.",
     recentClearT: "Effacer les recherches récentes",
     recentClearX: "Supprimer la liste enregistrée des lieux récemment sélectionnés.",
+
+    /* lieux à proximité (panneau de détails de la carte) */
+    nearbyTitle: "Lieux à proximité",
+    nearbyLoading: "Recherche de lieux à proximité…",
+    nearbyEmpty: "Aucun lieu à proximité trouvé.",
+    nearbyError: "Les lieux à proximité sont indisponibles pour le moment.",
+    nearLandmark: "Près de {landmark}",
+    sheetHandleLabel: "Faites glisser ou utilisez les flèches pour redimensionner ce panneau",
+
     legendCountries: "Pays",
     legendStates: "États (US)",
     legendProvinces: "Provinces (CA)",

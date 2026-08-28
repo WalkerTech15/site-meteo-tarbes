@@ -33,32 +33,40 @@ const WEATHER_KINDS = {
   severe: { code: 95, feels: 18, gust: 88, visibility: 900 },
 };
 
-function weatherPayload(kind = "calm") {
+/* `place` distinguishes one entry of a BATCHED (comma-joined coordinates)
+   request from another — favorites, the popular-cities row, and nearby
+   places all fetch several locations in one call, and a test needs each
+   place's numbers to actually differ to prove they were mapped by index
+   correctly rather than all showing place 0's weather. 0 (the default)
+   reproduces the exact single-location payload every existing test already
+   asserts on, unchanged. */
+function weatherPayload(kind = "calm", place = 0) {
   const w = WEATHER_KINDS[kind] || WEATHER_KINDS.calm;
+  const dTemp = place * 2;
   return {
     timezone: "Europe/Paris",
     current: {
       time: `${DAY}T00:00`,
-      temperature_2m: WEATHER_TEMP_C,
+      temperature_2m: WEATHER_TEMP_C + dTemp,
       relative_humidity_2m: 55,
-      apparent_temperature: w.feels,
+      apparent_temperature: w.feels + dTemp,
       is_day: 1,
       weather_code: w.code,
-      wind_speed_10m: 12.5,
+      wind_speed_10m: 12.5 + place,
       wind_gusts_10m: w.gust,
       wind_direction_10m: 220,
       surface_pressure: 1014,
     },
     hourly: {
       time: HOURS.map(hourIso),
-      temperature_2m: HOURS.map((i) => 18 + (i % 8)),
-      apparent_temperature: HOURS.map(() => w.feels),
+      temperature_2m: HOURS.map((i) => 18 + (i % 8) + dTemp),
+      apparent_temperature: HOURS.map(() => w.feels + dTemp),
       relative_humidity_2m: HOURS.map(() => 55),
-      wind_speed_10m: HOURS.map((i) => 10 + (i % 5)),
+      wind_speed_10m: HOURS.map((i) => 10 + (i % 5) + place),
       wind_gusts_10m: HOURS.map(() => w.gust),
       surface_pressure: HOURS.map(() => 1014),
       dew_point_2m: HOURS.map(() => 11),
-      precipitation_probability: HOURS.map((i) => (i % 10) * 5),
+      precipitation_probability: HOURS.map((i) => Math.min(100, (i % 10) * 5 + place * 3)),
       visibility: HOURS.map(() => w.visibility),
       uv_index: HOURS.map(() => 4),
       weather_code: HOURS.map(() => w.code),
@@ -462,7 +470,7 @@ const WEATHER_TILE_PNG = Buffer.from(
   "base64",
 );
 
-const json = (body) => ({
+export const json = (body) => ({
   status: 200,
   contentType: "application/json",
   body: JSON.stringify(body),
@@ -506,6 +514,17 @@ export async function installMocks(page, overrides = {}) {
       });
     const kind =
       typeof weatherKind === "function" ? weatherKind(request.url()) || "calm" : weatherKind;
+    /* A comma-joined `latitude` means a BATCHED request (favorites, the
+       popular-cities row, nearby places) — Open-Meteo answers those with an
+       array, one entry per coordinate, not the single flat object a
+       one-location request gets. */
+    const latParam = new URL(request.url()).searchParams.get("latitude") || "";
+    const placeCount = latParam.split(",").length;
+    if (placeCount > 1) {
+      return route.fulfill(
+        json(Array.from({ length: placeCount }, (_, i) => weatherPayload(kind, i))),
+      );
+    }
     return route.fulfill(json(weatherPayload(kind)));
   });
   await page.route("**://air-quality-api.open-meteo.com/**", (route) =>

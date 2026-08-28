@@ -22,6 +22,7 @@ vi.mock("../ui/render-map.js", () => ({
   hideMapPanel: vi.fn(),
   renderMapInfo: vi.fn(),
   renderRecentLocations: vi.fn(),
+  resetMapSheet: vi.fn(),
 }));
 vi.mock("./map.js", () => ({
   getMapCamera: () => null,

@@ -23,7 +23,7 @@ import {
 import { renderAdvisory, clearAdvisory } from "../ui/render-advisory.js";
 import { renderHourly, renderForecastPage } from "../ui/render-forecast.js";
 import { renderMap } from "./map.js";
-import { renderMapInfo, renderRecentLocations } from "../ui/render-map.js";
+import { renderMapInfo, renderRecentLocations, resetMapSheet } from "../ui/render-map.js";
 import { renderSidePos } from "./geolocation.js";
 
 let lastErrToast = 0;
@@ -52,6 +52,7 @@ export async function selectLocation(loc) {
 
   state.loc = loc;
   bumpPhotoToken(); /* invalidate any in-flight photo swap from the previous place */
+  resetMapSheet(); /* a genuinely new selection re-peeks at "half", not wherever the last one was left */
   setJSON(KEYS.lastLocation, loc);
   recordRecent(loc); /* no-op unless the user opted in — see recent-locations.js */
   renderHeroSkeleton();

@@ -8,11 +8,13 @@ import { emit } from "../core/app-bus.js";
 import { LOCATIONS } from "../data/locations.js";
 import { weatherIcon } from "../data/icons.js";
 import { wmo, wxDesc } from "../data/weather-codes.js";
-import { fmtTemp, tempUnit, fmtWind, windUnit } from "../core/units.js";
+import { fmtTemp, tempUnit, fmtWind, windUnit, fmtDistance, distanceUnit } from "../core/units.js";
 import { locName, locRegion, locCountry, kindLabel, flagsHtml } from "../core/location.js";
 import { coordLabel } from "../core/coord-location.js";
 import { geoIdentityHtml } from "../core/geo-identity.js";
 import { demoWeather } from "../services/weather-api.js";
+import { hydrateLocPhoto, locPhotoHtml } from "../services/photo-api.js";
+import { loadNearbyPlaces, isNearbyEligible } from "../services/nearby-api.js";
 import { selectLocation } from "../features/location.js";
 import { isFav, toggleFavorite } from "../features/favorites.js";
 import {
@@ -21,6 +23,7 @@ import {
   restoreRecents,
   recentToLocation,
 } from "../features/recent-locations.js";
+import { bindMapSheet, DEFAULT_SHEET_STATE } from "../features/map-sheet.js";
 import { switchView } from "./navigation.js";
 import { confirmAction } from "./confirm-dialog.js";
 import { showToast } from "./notifications.js";
@@ -73,40 +76,187 @@ function hourlyHtml(wx) {
     .join("");
 }
 
+/* ── Subtitle ──────────────────────────────────────────────────────────────
+   One concise line, never both: a curated landmark is more useful and less
+   generic than repeating the kind label geoIdentityHtml's chips already
+   imply, so it takes priority when present. Deliberately short — this is a
+   subtitle, not the tourist-blurb the task explicitly ruled out. */
+function panelSubtitle(loc) {
+  const landmark = loc.landmark;
+  if (landmark && (landmark.en || landmark.fr)) {
+    const name = landmark[state.lang] || landmark.en || landmark.fr;
+    return t("nearLandmark").replace("{landmark}", name);
+  }
+  return kindLabel(loc.kind);
+}
+
+/* ── Nearby places ─────────────────────────────────────────────────────────
+   Rendered in two passes: weatherPanelHtml() draws the section synchronously
+   (from whatever is already cached for this exact location, or a "loading"
+   placeholder), and loadAndRenderNearbyPlaces() fills #mapPanelNearbyBody in
+   once the async lookup resolves — the same pattern already used for the AQI
+   fill-in in features/location.js, so a slow lookup never blocks the rest of
+   the panel or the map. */
+let nearbyResult = { locId: null, status: "loading", places: [] };
+let nearbyToken = 0;
+
+function nearbyPlaceHtml(place) {
+  const { loc, distanceKm, weather } = place;
+  const distance = `${fmtDistance(distanceKm)} ${distanceUnit()}`;
+  if (!weather) {
+    return `<button class="map-nearby-place" type="button" data-nearby="${esc(loc.id)}"
+        aria-label="${esc(`${locName(loc)}, ${distance}`)}">
+        <span class="map-nearby-text"><b>${esc(locName(loc))}</b><span>${esc(distance)}</span></span>
+      </button>`;
+  }
+  const label = [
+    locName(loc),
+    distance,
+    `${fmtTemp(weather.temp)}${tempUnit()}`,
+    `${Math.round(weather.rainProb)}% ${t("rainChance")}`,
+    `${fmtWind(weather.windSpeed)} ${windUnit()}`,
+  ].join(", ");
+  return `<button class="map-nearby-place" type="button" data-nearby="${esc(loc.id)}"
+      aria-label="${esc(label)}">
+      ${weatherIcon(wmo(weather.code).icon, weather.isDay)}
+      <span class="map-nearby-text"><b>${esc(locName(loc))}</b><span>${esc(distance)}</span></span>
+      <span class="map-nearby-stats">
+        <b>${fmtTemp(weather.temp)}${tempUnit()}</b>
+        <span>${Math.round(weather.rainProb)}% · ${fmtWind(weather.windSpeed)} ${windUnit()}</span>
+      </span>
+    </button>`;
+}
+
+function nearbyBodyHtml(status, places) {
+  if (status === "loading") {
+    return `<p class="map-nearby-note" data-state="loading">
+      <span class="map-panel-spinner" aria-hidden="true"></span>${esc(t("nearbyLoading"))}</p>`;
+  }
+  if (status === "empty") {
+    return `<p class="map-nearby-note" data-state="empty">${esc(t("nearbyEmpty"))}</p>`;
+  }
+  if (status === "error") {
+    return `<p class="map-nearby-note" data-state="error">${esc(t("nearbyError"))}</p>`;
+  }
+  return `<div class="map-nearby-list">${places.map(nearbyPlaceHtml).join("")}</div>`;
+}
+
+function nearbySectionHtml(loc) {
+  if (!isNearbyEligible(loc)) return "";
+  const cached = nearbyResult.locId === loc.id ? nearbyResult : { status: "loading", places: [] };
+  return `<div class="map-panel-nearby">
+      <h3 class="map-panel-nearby-title">${esc(t("nearbyTitle"))}</h3>
+      <div id="mapPanelNearbyBody">${nearbyBodyHtml(cached.status, cached.places)}</div>
+    </div>`;
+}
+
+function bindNearbyClicks() {
+  $$("#mapPanelNearbyBody .map-nearby-place").forEach((button) => {
+    button.addEventListener("click", () => {
+      const place = nearbyResult.places.find((p) => p.loc.id === button.dataset.nearby);
+      if (place) selectLocation(place.loc);
+    });
+  });
+}
+
+async function loadAndRenderNearbyPlaces(loc) {
+  if (!isNearbyEligible(loc)) return;
+  if (nearbyResult.locId !== loc.id) nearbyToken++;
+  const token = nearbyToken;
+  const result = await loadNearbyPlaces(loc);
+  if (token !== nearbyToken) return; /* a newer location superseded this lookup */
+  nearbyResult = { locId: loc.id, status: result.status, places: result.places };
+  const body = $("#mapPanelNearbyBody");
+  if (!body) return; /* panel re-rendered/hidden while this was in flight */
+  body.innerHTML = nearbyBodyHtml(result.status, result.places);
+  bindNearbyClicks();
+}
+
+/* ── Mobile bottom sheet ──────────────────────────────────────────────────
+   Desktop is untouched (see the ≤820px gate in styles/views/map.css). State
+   lives here, not in core/state.js, because it is transient viewport/UI
+   state, not app data — the same reasoning as `panelHidden` above. */
+let sheetState = DEFAULT_SHEET_STATE;
+let sheetController = null;
+
+/* A brand-new selection resets to the default "half" peek; re-renders of the
+   SAME location (favourite toggle, unit/language change) must not yank the
+   sheet out from under a user who just dragged it — see features/location.js. */
+export function resetMapSheet() {
+  sheetState = DEFAULT_SHEET_STATE;
+}
+
+/* Escape support (task requirement): collapses the sheet rather than fully
+   hiding the panel, which stays the close button's job. Harmless to call
+   outside mobile widths — the CSS driving `data-sheet-state` is scoped to the
+   same ≤820px breakpoint, so this is a no-op visually on desktop. */
+export function collapseMapSheet() {
+  if (!sheetController || sheetController.getState() === "collapsed") return false;
+  sheetController.setState("collapsed");
+  $("#mapPanelHandle")?.focus();
+  return true;
+}
+
+function sheetHandleHtml() {
+  return `<button class="map-sheet-handle" id="mapPanelHandle" type="button"
+      aria-label="${esc(t("sheetHandleLabel"))}">
+      <span class="map-sheet-grip" aria-hidden="true"></span>
+    </button>`;
+}
+
+function panelPeekHtml(loc, wx) {
+  return `<div class="map-panel-peek">
+      <span>${esc(locName(loc))}</span>
+      <b>${fmtTemp(wx.current.temp)}${tempUnit()}</b>
+    </div>`;
+}
+
 function weatherPanelHtml(loc, wx) {
   const c = wx.current;
   const favorite = isFav(loc);
   return `
-    <div class="map-panel-head">
-      <div class="map-panel-location">
-        <span class="map-panel-pin" aria-hidden="true">●</span>
-        <div><h2>${loc.kind === "country" ? `${flagsHtml(loc, "small")} ` : ""}${esc(locName(loc))}</h2><p>${esc(kindLabel(loc.kind))}</p></div>
+    ${sheetHandleHtml()}
+    ${panelPeekHtml(loc, wx)}
+    <div class="map-panel-body">
+      <div class="map-panel-head">
+        <div class="map-panel-location">
+          <span class="map-panel-pin" aria-hidden="true">●</span>
+          <div><h2>${loc.kind === "country" ? `${flagsHtml(loc, "small")} ` : ""}${esc(locName(loc))}</h2><p>${esc(panelSubtitle(loc))}</p></div>
+        </div>
+        <div class="map-panel-actions">
+          <button class="map-panel-favorite ${favorite ? "is-active" : ""}" id="mapFavoriteBtn"
+            type="button" aria-label="${favorite ? t("removeFavorite") : t("addFavorite")}" aria-pressed="${favorite}">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m12 3 2.7 5.5 6.1.9-4.4 4.3 1 6.1-5.4-2.9-5.4 2.9 1-6.1-4.4-4.3 6.1-.9L12 3Z"/></svg>
+          </button>
+          <button class="map-panel-share" id="mapPanelShare" type="button" aria-label="${t("mapShare")}">
+            <svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+              <circle cx="18" cy="5" r="3" /><circle cx="6" cy="12" r="3" /><circle cx="18" cy="19" r="3" />
+              <path d="m8.6 13.5 6.8 4M15.4 6.5l-6.8 4" />
+            </svg>
+          </button>
+          <button class="map-panel-close" id="mapPanelClose" type="button" aria-label="${t("hideMapDetails")}">
+            <span aria-hidden="true">×</span>
+          </button>
+        </div>
       </div>
-      <div class="map-panel-actions">
-        <button class="map-panel-favorite ${favorite ? "is-active" : ""}" id="mapFavoriteBtn"
-          type="button" aria-label="${favorite ? t("removeFavorite") : t("addFavorite")}" aria-pressed="${favorite}">
-          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m12 3 2.7 5.5 6.1.9-4.4 4.3 1 6.1-5.4-2.9-5.4 2.9 1-6.1-4.4-4.3 6.1-.9L12 3Z"/></svg>
-        </button>
-        <button class="map-panel-close" id="mapPanelClose" type="button" aria-label="${t("hideMapDetails")}">
-          <span aria-hidden="true">×</span>
-        </button>
+      ${geoIdentityHtml(loc)}
+      ${locPhotoHtml(loc, "map-panel-photo")}
+      <div class="map-panel-current">
+        <div class="map-panel-icon">${weatherIcon(wmo(c.code).icon, c.isDay)}</div>
+        <div><strong>${fmtTemp(c.temp)}${tempUnit()}</strong><span>${wxDesc(c.code, state.lang)}</span></div>
       </div>
-    </div>
-    ${geoIdentityHtml(loc)}
-    <div class="map-panel-current">
-      <div class="map-panel-icon">${weatherIcon(wmo(c.code).icon, c.isDay)}</div>
-      <div><strong>${fmtTemp(c.temp)}${tempUnit()}</strong><span>${wxDesc(c.code, state.lang)}</span></div>
-    </div>
-    <dl class="map-panel-stats">
-      <div><dt>${t("feelsLike")}</dt><dd>${fmtTemp(c.feels)}${tempUnit()}</dd></div>
-      <div><dt>${t("humidity")}</dt><dd>${Math.round(c.humidity)}%</dd></div>
-      <div><dt>${t("wind")}</dt><dd>${fmtWind(c.windSpeed)} ${windUnit()}</dd></div>
-      <div><dt>${t("pressure")}</dt><dd>${Math.round(c.pressure)} hPa</dd></div>
-    </dl>
-    <button class="map-forecast-button" id="mapForecastBtn" type="button">
-      <span>${t("viewForecast")}</span><span aria-hidden="true">→</span>
-    </button>
-    <div class="map-hourly" aria-label="${t("hourlyForecast")}">${hourlyHtml(wx)}</div>`;
+      <dl class="map-panel-stats">
+        <div><dt>${t("feelsLike")}</dt><dd>${fmtTemp(c.feels)}${tempUnit()}</dd></div>
+        <div><dt>${t("humidity")}</dt><dd>${Math.round(c.humidity)}%</dd></div>
+        <div><dt>${t("wind")}</dt><dd>${fmtWind(c.windSpeed)} ${windUnit()}</dd></div>
+        <div><dt>${t("pressure")}</dt><dd>${Math.round(c.pressure)} hPa</dd></div>
+      </dl>
+      <button class="map-forecast-button" id="mapForecastBtn" type="button">
+        <span>${t("viewForecast")}</span><span aria-hidden="true">→</span>
+      </button>
+      <div class="map-hourly" aria-label="${t("hourlyForecast")}">${hourlyHtml(wx)}</div>
+      ${nearbySectionHtml(loc)}
+    </div>`;
 }
 
 function popularHtml() {
@@ -265,10 +415,21 @@ export function renderMapInfo() {
   panel.hidden = panelHidden;
   showButton.hidden = !panelHidden;
 
+  sheetController?.destroy();
+  sheetController = bindMapSheet(panel, $("#mapPanelHandle"), {
+    initialState: sheetState,
+    onChange: (next) => {
+      sheetState = next;
+    },
+  });
+
+  hydrateLocPhoto($(".map-panel-photo", panel), state.loc, { creditClass: "map-panel-credit" });
+
   $("#mapFavoriteBtn").addEventListener("click", () => {
     toggleFavorite();
     renderMapInfo();
   });
+  $("#mapPanelShare")?.addEventListener("click", () => emit("map:share-requested"));
   $("#mapPanelClose").addEventListener("click", async (event) => {
     const accepted = await confirmAction({
       title: t("hideMapDetailsTitle"),
@@ -294,4 +455,7 @@ export function renderMapInfo() {
       selectLocation(LOCATIONS.find((loc) => loc.id === button.dataset.loc));
     }),
   );
+
+  bindNearbyClicks();
+  void loadAndRenderNearbyPlaces(state.loc);
 }

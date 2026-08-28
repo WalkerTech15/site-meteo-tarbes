@@ -1,5 +1,14 @@
-import { describe, it, expect } from "vitest";
-import { toF, toMph, compassIndex, compassAbbr } from "./units.js";
+import { describe, it, expect, afterEach } from "vitest";
+import { state } from "./state.js";
+import {
+  toF,
+  toMph,
+  compassIndex,
+  compassAbbr,
+  toMiles,
+  fmtDistance,
+  distanceUnit,
+} from "./units.js";
 
 describe("toF", () => {
   it("converts 0°C to 32°F", () => {
@@ -49,5 +58,36 @@ describe("compass", () => {
       expect(i).toBeGreaterThanOrEqual(0);
       expect(i).toBeLessThanOrEqual(7);
     }
+  });
+});
+
+describe("distance (nearby places)", () => {
+  const originalUnitTemp = state.unitTemp;
+  afterEach(() => {
+    state.unitTemp = originalUnitTemp;
+  });
+
+  it("toMiles converts km to miles", () => {
+    expect(toMiles(1.60934)).toBeCloseTo(1, 5);
+    expect(toMiles(0)).toBe(0);
+  });
+
+  it("follows the temperature unit — metric shows km, imperial shows mi", () => {
+    state.unitTemp = "c";
+    expect(distanceUnit()).toBe("km");
+    state.unitTemp = "f";
+    expect(distanceUnit()).toBe("mi");
+  });
+
+  it("fmtDistance keeps one decimal under 10 units, rounds to a whole number at/above 10", () => {
+    state.unitTemp = "c";
+    expect(fmtDistance(4.26)).toBe(4.3);
+    expect(fmtDistance(9.96)).toBe(10);
+    expect(fmtDistance(23.4)).toBe(23);
+  });
+
+  it("fmtDistance converts to miles under an imperial setting", () => {
+    state.unitTemp = "f";
+    expect(fmtDistance(16.0934)).toBe(10); // 10 mi, whole-number branch
   });
 });

@@ -8,6 +8,8 @@ import {
   AUSTIN_LABEL,
   TARBES_LABEL,
   LYON_LABEL,
+  reverseCoordsFrom,
+  json,
 } from "./mocks.js";
 
 async function searchAndSelect(app, query) {
@@ -2060,5 +2062,185 @@ test.describe("map layer switcher: mobile scrolling", () => {
       () => document.documentElement.scrollWidth - document.documentElement.clientWidth,
     );
     expect(overflow).toBeLessThanOrEqual(0);
+  });
+});
+
+/* Task 1 (nearby weather) + task 2's photo/subtitle/share additions to the
+   map's location detail panel. The default location (Paris) is curated with
+   kind "city" and a landmark, so it exercises every piece: eligible for
+   nearby places, has a reviewed Pexels photo, has a landmark subtitle. */
+test.describe("map detail panel — photo, subtitle, share", () => {
+  async function openMap(page) {
+    await installMocks(page);
+    await page.goto("/");
+    await expect(page.locator("#heroCityName")).not.toBeEmpty();
+    await page.locator('.side-item[data-view="map"]').click();
+    await expect(page.locator("#mapWeatherPanel .map-panel-head")).toBeVisible();
+  }
+
+  test("shows the curated landmark photo with Pexels attribution", async ({ page }) => {
+    await openMap(page);
+    const photo = page.locator("#mapWeatherPanel .map-panel-photo");
+    await expect(photo.locator("img.loc-photo-img")).toHaveCount(1);
+    const credit = photo.locator("a.loc-credit");
+    await expect(credit).toBeVisible();
+    await expect(credit).toHaveText("Pexels ↗");
+    await expect(credit).toHaveAttribute(
+      "aria-label",
+      `Photo de ${PEXELS_PHOTOGRAPHER} sur Pexels`,
+    );
+  });
+
+  test("shows a concise landmark subtitle, not the generic kind label", async ({ page }) => {
+    await openMap(page);
+    await expect(page.locator(".map-panel-location p")).toHaveText("Près de Tour Eiffel");
+  });
+
+  test("the share button copies the current view link, same as the top Share chip", async ({
+    page,
+    context,
+  }) => {
+    await context.grantPermissions(["clipboard-read", "clipboard-write"]);
+    await openMap(page);
+    await page.locator("#mapPanelShare").click();
+    await expect(page.locator("#toast")).toBeVisible();
+    const clipboard = await page.evaluate(() => navigator.clipboard.readText());
+    expect(clipboard).toContain("#/map");
+    expect(clipboard).toBe(page.url());
+  });
+
+  test("favourite and forecast actions still work from the redesigned panel", async ({ page }) => {
+    await openMap(page);
+    await page.locator("#mapFavoriteBtn").click();
+    await expect(page.locator("#mapFavoriteBtn")).toHaveAttribute("aria-pressed", "true");
+
+    await page.locator("#mapForecastBtn").click();
+    await expect(page.locator("#view-forecast")).toBeVisible();
+  });
+});
+
+test.describe("nearby places (map detail panel)", () => {
+  async function openMap(page, overrides) {
+    await installMocks(page, overrides);
+    await page.goto("/");
+    await expect(page.locator("#heroCityName")).not.toBeEmpty();
+    await page.locator('.side-item[data-view="map"]').click();
+    await expect(page.locator("#mapWeatherPanel .map-panel-head")).toBeVisible();
+  }
+
+  const nearbyBody = (page) => page.locator("#mapPanelNearbyBody");
+
+  test("ready: lists distinct nearby places with name, distance, temperature, rain and wind", async ({
+    page,
+  }) => {
+    await openMap(page);
+    const items = nearbyBody(page).locator(".map-nearby-place");
+    await expect(items.first()).toBeVisible({ timeout: 10000 });
+    const count = await items.count();
+    expect(count).toBeGreaterThanOrEqual(3);
+    expect(count).toBeLessThanOrEqual(5);
+
+    const names = await items.locator(".map-nearby-text b").allTextContents();
+    expect(new Set(names).size).toBe(names.length); // no duplicate place
+
+    const first = items.first();
+    await expect(first).toHaveAttribute("aria-label", /\d+(\.\d+)? km/);
+    await expect(first.locator(".map-nearby-stats b")).toHaveText(/°C$/);
+    await expect(first.locator(".map-nearby-stats span")).toHaveText(/% · \d+ km\/h/);
+  });
+
+  test("clicking a nearby place selects it as the current location", async ({ page }) => {
+    await openMap(page);
+    const first = nearbyBody(page).locator(".map-nearby-place").first();
+    await expect(first).toBeVisible({ timeout: 10000 });
+    const name = await first.locator(".map-nearby-text b").innerText();
+
+    await first.click();
+    await expect(page.locator("#heroCityName")).toContainText(name);
+  });
+
+  test("loading: shows a loading note before the results arrive", async ({ page }) => {
+    await openMap(page, { reverseDelayMs: () => 1200 });
+    await expect(nearbyBody(page).locator('[data-state="loading"]')).toBeVisible();
+    await expect(nearbyBody(page).locator(".map-nearby-place").first()).toBeVisible({
+      timeout: 10000,
+    });
+    await expect(nearbyBody(page).locator('[data-state="loading"]')).toHaveCount(0);
+  });
+
+  test("empty: every probe answers with no usable place", async ({ page }) => {
+    await installMocks(page);
+    /* every reverse-geocode probe around Paris answers with no feature at
+       all — forward text search (unaffected) still falls through untouched */
+    await page.route("**://api.maptiler.com/geocoding/**", async (route, request) => {
+      const coords = reverseCoordsFrom(request.url());
+      if (!coords) return route.fallback();
+      return route.fulfill(json({ features: [] }));
+    });
+    await page.goto("/");
+    await expect(page.locator("#heroCityName")).not.toBeEmpty();
+    await page.locator('.side-item[data-view="map"]').click();
+    await expect(page.locator("#mapWeatherPanel .map-panel-head")).toBeVisible();
+
+    await expect(nearbyBody(page).locator('[data-state="empty"]')).toBeVisible({ timeout: 10000 });
+    await expect(nearbyBody(page)).toContainText("Aucun lieu à proximité trouvé.");
+  });
+
+  test("error: the geocoder itself is unreachable for every probe", async ({ page }) => {
+    await installMocks(page);
+    await page.route("**://api.maptiler.com/geocoding/**", async (route, request) => {
+      const coords = reverseCoordsFrom(request.url());
+      if (!coords) return route.fallback();
+      return route.fulfill({ status: 500, contentType: "text/plain", body: "mocked failure" });
+    });
+    /* the keyless BigDataCloud fallback must fail too, or reverseGeocodeLocation
+       recovers silently and this becomes the "empty" case instead of "error" */
+    await page.route("**://api.bigdatacloud.net/**", (route) =>
+      route.fulfill({ status: 500, contentType: "text/plain", body: "mocked failure" }),
+    );
+    await page.goto("/");
+    await expect(page.locator("#heroCityName")).not.toBeEmpty();
+    await page.locator('.side-item[data-view="map"]').click();
+    await expect(page.locator("#mapWeatherPanel .map-panel-head")).toBeVisible();
+
+    await expect(nearbyBody(page).locator('[data-state="error"]')).toBeVisible({ timeout: 10000 });
+    await expect(nearbyBody(page)).toContainText("indisponibles");
+  });
+
+  test("ineligible: a country selection shows no nearby-places section at all", async ({
+    page,
+  }) => {
+    await openMap(page);
+    await page.locator("#searchInput").fill("France");
+    await page.locator("#searchResults .search-item").first().click();
+    await expect(page.locator("#heroCityName")).toContainText("France");
+
+    await expect(page.locator("#mapWeatherPanel .map-panel-nearby")).toHaveCount(0);
+  });
+
+  test("does not break the map or the rest of the panel when the batched forecast call fails", async ({
+    page,
+  }) => {
+    await installMocks(page);
+    let nearbyForecastHit = false;
+    await page.route("**://api.open-meteo.com/**", (route, request) => {
+      const url = new URL(request.url());
+      const coordCount = (url.searchParams.get("latitude") || "").split(",").length;
+      if (coordCount > 1) {
+        nearbyForecastHit = true;
+        return route.fulfill({ status: 500, contentType: "text/plain", body: "mocked failure" });
+      }
+      return route.fallback();
+    });
+    await page.goto("/");
+    await expect(page.locator("#heroCityName")).not.toBeEmpty();
+    await page.locator('.side-item[data-view="map"]').click();
+    await expect(page.locator("#mapWeatherPanel .map-panel-head")).toBeVisible();
+
+    /* the hero/panel's own weather is unaffected — only the batched nearby
+       forecast call was made to fail */
+    await expect(page.locator(".map-panel-current strong")).toContainText("°");
+    await expect(nearbyBody(page).locator('[data-state="error"]')).toBeVisible({ timeout: 10000 });
+    expect(nearbyForecastHit).toBe(true);
   });
 });

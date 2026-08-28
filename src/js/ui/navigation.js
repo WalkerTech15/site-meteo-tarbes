@@ -134,10 +134,23 @@ export function bindSidebarA11y() {
       first.focus();
     }
   });
-  /* Resizing past the breakpoint with the drawer open would otherwise leave the
-     now-visible desktop sidebar inert. */
+  /* Crossing the breakpoint always resets the drawer to closed, in BOTH
+     directions: going up, so the now-visible desktop sidebar is never left
+     inert; coming back down, so a drawer that was open before the excursion
+     doesn't reappear already open.
+
+     Deliberately unconditional rather than `if (!isDrawerMode())`. Reading the
+     live media state here describes where the viewport is *now*, not the
+     transition being handled — and `change` is delivered in a task, so two
+     rapid resizes across the breakpoint (375 → 1280 → 375) can run this
+     handler once the viewport is already back where it started. The old
+     guard then saw drawer mode, skipped the close, and syncSidebarA11y()
+     faithfully reported the stale `is-open` as aria-hidden="false". Since
+     neither direction may leave the drawer open, the guard bought nothing.
+     `is-open` has no styling outside the ≤900px block, so closing on the way
+     up is a no-op for the desktop layout. */
   DRAWER_MQ.addEventListener("change", () => {
-    if (!isDrawerMode()) closeSidebar();
+    closeSidebar();
     syncSidebarA11y();
   });
   syncSidebarA11y();

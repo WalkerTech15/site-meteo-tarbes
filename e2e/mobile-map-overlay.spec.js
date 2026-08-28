@@ -44,11 +44,15 @@ test.describe("map overlay controls on a phone", () => {
 
     const mapBox = await page.locator("#worldMap").boundingBox();
     const controlsBox = await controls(page).boundingBox();
-    const panelBox = await page.locator("#mapWeatherPanel").boundingBox();
 
-    /* below the map, above the details panel — never covering either */
+    /* below the map, in normal document flow — unaffected by task 5's
+       change to the detail panel below. The panel itself is deliberately
+       NOT checked against the controls' position here any more: since task
+       5, it's a `position: fixed` bottom sheet anchored to the viewport,
+       not a document-flow sibling, so it has no fixed ordering relative to
+       whatever the page happens to be scrolled to — see mobile-map-sheet.spec.js
+       for that panel's own contract. */
     expect(controlsBox.y).toBeGreaterThanOrEqual(mapBox.y + mapBox.height - 1);
-    expect(panelBox.y).toBeGreaterThanOrEqual(controlsBox.y + controlsBox.height - 1);
     expect(await docOverflow(page)).toBeLessThanOrEqual(0);
   });
 
@@ -94,7 +98,14 @@ test.describe("map overlay controls on a phone", () => {
     const map = page.locator("#worldMap");
     await map.scrollIntoViewIfNeeded();
     const box = await map.boundingBox();
-    await page.touchscreen.tap(box.x + box.width / 2, box.y + box.height / 2);
+    /* Task 5: the detail panel is now a bottom sheet that overlaps the LOWER
+       part of the map on a short phone (the map card can be taller than the
+       viewport itself), by design — "half" is sized to leave the map's own
+       top portion genuinely tappable, not its exact geometric centre, which
+       can fall under the sheet. Tap near the top of the map, still clearly
+       on it, to exercise the same click-to-select pipeline without relying
+       on a point the sheet may legitimately cover. */
+    await page.touchscreen.tap(box.x + box.width / 2, box.y + box.height * 0.15);
 
     await expect(page.locator("#mapWeatherPanel .map-panel-location h2")).toHaveText("Tarbes");
     expect(await docOverflow(page)).toBeLessThanOrEqual(0);

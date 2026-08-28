@@ -14,6 +14,16 @@ export const convWind = (k) =>
 export const fmtWind = (k) => Math.round(convWind(k));
 export const windUnit = () => ({ kmh: "km/h", mph: "mph", ms: "m/s" })[state.unitWind];
 
+/* Distance (nearby places). No separate setting for it either — same
+   metric/imperial signal as temperature and precipitation above. */
+export const toMiles = (km) => km / 1.60934;
+export const convDistance = (km) => (state.unitTemp === "f" ? toMiles(km) : km);
+export const fmtDistance = (km) => {
+  const value = convDistance(km);
+  return value < 10 ? Math.round(value * 10) / 10 : Math.round(value);
+};
+export const distanceUnit = () => (state.unitTemp === "f" ? "mi" : "km");
+
 /* Precipitation intensity. There is no separate precipitation unit in
    Settings, so it follows the temperature unit — the app's only imperial/
    metric signal, and the same pairing the old combined `ws_units` preference

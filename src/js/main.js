@@ -48,7 +48,13 @@ import {
 import { renderExplore, renderChart, renderHero } from "./ui/render-home.js";
 import { renderFavorites } from "./ui/render-favorites.js";
 import { renderForecastPage } from "./ui/render-forecast.js";
-import { loadPopular, renderRecentLocations, clearRecentSearches } from "./ui/render-map.js";
+import {
+  loadPopular,
+  renderRecentLocations,
+  clearRecentSearches,
+  collapseMapSheet,
+} from "./ui/render-map.js";
+import { on } from "./core/app-bus.js";
 import { bindForecastCarousel } from "./ui/render-forecast.js";
 import { showToast } from "./ui/notifications.js";
 import { confirmAction } from "./ui/confirm-dialog.js";
@@ -97,6 +103,10 @@ document.addEventListener("keydown", (e) => {
       $("#themeBtn").focus();
     }
     closeMobileSearch({ focusTrigger: true });
+    /* mobile bottom sheet (map detail panel): collapse rather than fully
+       hide it — hiding it entirely is the close button's own, confirmed
+       action. A no-op outside mobile widths and when nothing is open. */
+    collapseMapSheet();
   }
 });
 
@@ -246,6 +256,11 @@ bindMapLayerControls();
 /* click anywhere on the map → reverse geocode → weather → panel */
 bindMapClickSelection();
 $("#mapShareBtn")?.addEventListener("click", () => shareMapView());
+/* the location detail panel's own Share button (ui/render-map.js) can't call
+   shareMapView() directly — features/map-url-sync.js is deliberately imported
+   only here (see that file's header) to keep the module graph acyclic, so it
+   announces on the bus instead. */
+on("map:share-requested", () => shareMapView());
 
 /* ── Resize: realign toggle thumbs, resize maps, redraw charts ── */
 let resizeTimer = null;

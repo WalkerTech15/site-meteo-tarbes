@@ -201,11 +201,11 @@ The browser always calls the same-origin `/api/pexels` (no `.php` — see
 `PEXELS_PROXY_URL` in `src/js/core/config.js`). Which server actually answers
 that request depends on where you deploy:
 
-| Deployment          | Handler               | Where the key lives                                   |
-| -------------------- | ---------------------- | ------------------------------------------------------- |
-| **Vercel** (current) | `api/pexels.js`, a serverless function | `PEXELS_API_KEY` set in the Vercel project's environment variables |
-| **Hostinger/Apache** (still supported) | `public/api/pexels.php` | a file **outside `public_html`** — see [Deploying to Hostinger](#deploying-to-hostinger) |
-| **Development**      | a Vite middleware in `vite.config.js` | `PEXELS_API_KEY` from `.env.local` |
+| Deployment                             | Handler                                | Where the key lives                                                                      |
+| -------------------------------------- | -------------------------------------- | ---------------------------------------------------------------------------------------- |
+| **Vercel** (current)                   | `api/pexels.js`, a serverless function | `PEXELS_API_KEY` set in the Vercel project's environment variables                       |
+| **Hostinger/Apache** (still supported) | `public/api/pexels.php`                | a file **outside `public_html`** — see [Deploying to Hostinger](#deploying-to-hostinger) |
+| **Development**                        | a Vite middleware in `vite.config.js`  | `PEXELS_API_KEY` from `.env.local`                                                       |
 
 All three answer the identical contract below, so the frontend has one code
 path regardless of target. Because the variable is unprefixed, Vite never

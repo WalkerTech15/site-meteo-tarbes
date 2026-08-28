@@ -2,7 +2,14 @@
 import { test, expect, AUSTIN_LABEL } from "./mocks.js";
 
 test.describe("map workspace on a phone", () => {
-  test("the details panel moves below the map without horizontal overflow", async ({ app }) => {
+  /* Task 5: below 820px the details panel is now a draggable bottom sheet
+     (position: fixed, anchored to the viewport's bottom edge) rather than a
+     document-flow block stacked below the map — see mobile-map-sheet.spec.js
+     for its drag/keyboard/state contract. This test now checks the sheet's
+     own structural contract instead of the pre-task-5 stacking order. */
+  test("the details panel is a bottom sheet anchored to the viewport, without horizontal overflow", async ({
+    app,
+  }) => {
     await app.locator("#burgerBtn").click();
     await app.locator('.side-item[data-view="map"]').click();
 
@@ -10,10 +17,15 @@ test.describe("map workspace on a phone", () => {
     const panel = app.locator("#mapWeatherPanel");
     await expect(map).toBeVisible();
     await expect(panel).toBeVisible();
+    await expect(panel).toHaveCSS("position", "fixed");
+    await expect(panel).toHaveAttribute("data-sheet-state", "half");
 
-    const mapBox = await map.boundingBox();
     const panelBox = await panel.boundingBox();
-    expect(panelBox.y).toBeGreaterThanOrEqual(mapBox.y + mapBox.height);
+    const viewport = app.viewportSize();
+    /* anchored to the bottom edge, never spilling past either side */
+    expect(Math.round(panelBox.y + panelBox.height)).toBeLessThanOrEqual(viewport.height + 1);
+    expect(panelBox.x).toBeGreaterThanOrEqual(0);
+    expect(panelBox.x + panelBox.width).toBeLessThanOrEqual(viewport.width + 1);
 
     const overflow = await app.evaluate(
       () => document.documentElement.scrollWidth - document.documentElement.clientWidth,
