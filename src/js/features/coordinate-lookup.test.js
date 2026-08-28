@@ -37,13 +37,14 @@ describe("resolveCoordinateLocation", () => {
     expect(loc.regionCode).toBe("FR-OCC");
   });
 
-  it("falls back to the coordinate over open ocean (no feature returned)", async () => {
+  it("names the ocean over open water (no feature returned) instead of raw coordinates", async () => {
     const { loc, geocodeFailed } = await resolveCoordinateLocation(33.2, -41.5, {
       lookup: async () => null,
     });
     expect(geocodeFailed).toBe(false); /* an empty answer is not a failure */
-    expect(loc.coordsOnly).toBe(true);
-    expect(loc.name.en).toBe("33.20°, -41.50°");
+    expect(loc.coordsOnly).toBe(false);
+    expect(loc.kind).toBe("ocean");
+    expect(loc.name.en).toBe("Atlantic Ocean");
   });
 
   it("reports a provider failure separately, still returning a usable location", async () => {

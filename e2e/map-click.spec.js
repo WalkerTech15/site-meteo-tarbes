@@ -114,12 +114,22 @@ test.describe("clicking the map selects a location", () => {
     await expect(panelName(page)).toHaveText("Tarbes");
   });
 
-  test("open ocean falls back to coordinates instead of a nearby city", async ({ page }) => {
+  test("open ocean names the actual ocean, never a nearby city or raw coordinates", async ({
+    page,
+  }) => {
     await installMocks(page);
     await openMapAt(page, CLICK_OCEAN, { zoom: 5 });
     await clickMapCentre(page);
 
-    await expect(panelName(page)).toHaveText(/^-?\d+\.\d+°, -?\d+\.\d+°$/);
+    /* CLICK_OCEAN (33.2, -41.5) — mid North Atlantic; the reverse-geocoding
+       mock returns no feature there, so core/marine-regions.js identifies
+       the ocean from the coordinate itself (default app language: French) */
+    await expect(panelName(page)).toHaveText("Océan Atlantique");
+    await expect(panelName(page)).not.toHaveText(CLICK_CITY.label);
+    await expect(panelName(page)).not.toHaveText(/^-?\d+\.\d+°, -?\d+\.\d+°$/);
+    /* the panel subtitle follows the new "ocean" kind, never the old default
+       ("Ville" / City) a coordinate with no resolved kind used to fall back to */
+    await expect(page.locator("#mapWeatherPanel .map-panel-location p")).toHaveText("Océan / Mer");
     /* weather still loads for the point */
     await expect(page.locator("#mapWeatherPanel .map-panel-current strong")).not.toBeEmpty();
   });

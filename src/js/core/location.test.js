@@ -150,6 +150,14 @@ describe("kindLabel", () => {
     state.lang = "fr";
     expect(kindLabel("country")).toBe("Pays");
   });
+
+  it("has its own label for an ocean/sea — never the generic city fallback", () => {
+    state.lang = "en";
+    expect(kindLabel("ocean")).toBe("Ocean / Sea");
+    expect(kindLabel("ocean")).not.toBe(kindLabel("city"));
+    state.lang = "fr";
+    expect(kindLabel("ocean")).toBe("Océan / Mer");
+  });
 });
 
 /* A directly-selected Canadian province (kind: "region" — see MT_KIND in

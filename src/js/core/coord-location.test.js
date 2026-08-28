@@ -24,11 +24,33 @@ describe("coordLocation", () => {
     expect(loc.coordsOnly).toBe(false);
   });
 
-  it("falls back to raw coordinates over open ocean", () => {
+  it("names the ocean instead of falling back to raw coordinates over open water", () => {
+    /* (33.2, -41.5) is e2e/mocks.js's CLICK_OCEAN — mid North Atlantic */
     const loc = coordLocation(33.2, -41.5, {});
-    expect(loc.name).toEqual({ en: "33.20°, -41.50°", fr: "33.20°, -41.50°" });
-    expect(loc.coordsOnly).toBe(true);
+    expect(loc.name).toEqual({ en: "Atlantic Ocean", fr: "Océan Atlantique" });
+    expect(loc.kind).toBe("ocean");
+    expect(loc.coordsOnly).toBe(false);
     expect(loc.region).toEqual({ en: "", fr: "" });
+  });
+
+  it("still falls back to raw coordinates when even the ocean/sea guess comes up empty", () => {
+    /* Paris, France — inland, and outside every named-sea box too (unlike a
+       Pyrenees town such as Tarbes, which the generous Mediterranean box
+       also covers — see marine-regions.test.js for that documented
+       tradeoff), so nearestMarineRegion() correctly declines to guess. */
+    const loc = coordLocation(48.8566, 2.3522, {});
+    expect(loc.name).toEqual({ en: "48.86°, 2.35°", fr: "48.86°, 2.35°" });
+    expect(loc.kind).toBe("city");
+    expect(loc.coordsOnly).toBe(true);
+  });
+
+  it("a real geocoded name always wins over a guessed ocean, even mid-ocean", () => {
+    /* same coordinate as the ocean test above, but this time the geocoder
+       DID resolve something (an island, a rig, a buoy with a name) */
+    const loc = coordLocation(33.2, -41.5, { name: { en: "Sable Island", fr: "Île de Sable" } });
+    expect(loc.name.en).toBe("Sable Island");
+    expect(loc.kind).toBe("city");
+    expect(loc.coordsOnly).toBe(false);
   });
 
   it("prefers the best available geographical name over coordinates", () => {

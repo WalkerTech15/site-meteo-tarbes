@@ -11,9 +11,13 @@ import {
   fetchPexelsPhoto,
   fetchPexelsPhotoById,
   pexelsQuery,
+  relevanceKeywords,
+  isRelevantPhoto,
+  resolveLocationImage,
   __resetPhotoCacheForTests,
 } from "./photo-api.js";
 import { state } from "../core/state.js";
+import { LOCATIONS } from "../data/locations.js";
 
 const PROXY_PATH = "api/pexels";
 
@@ -445,6 +449,177 @@ describe("pexelsQuery — precise, unambiguous, worldwide queries", () => {
     for (const loc of [TARBES, TOKYO, JAPAN, NEW_YORK, LOS_ANGELES, PARIS, SMALL_TOWN, REGION]) {
       expect(pexelsQuery(loc).toLowerCase()).not.toContain("landmark");
     }
+  });
+});
+
+/* Oceans and seas (core/coord-location.js + core/marine-regions.js) must
+ * search for the body of water itself — never a random nearby city — and
+ * must never be mistaken, downstream, for an ordinary place. */
+describe("pexelsQuery — oceans and seas", () => {
+  const ATLANTIC = { kind: "ocean", name: { en: "Atlantic Ocean", fr: "Océan Atlantique" } };
+  const MEDITERRANEAN = {
+    kind: "ocean",
+    name: { en: "Mediterranean Sea", fr: "Mer Méditerranée" },
+  };
+
+  it("searches for the ocean itself, qualified as a seascape, never a city", () => {
+    expect(pexelsQuery(ATLANTIC)).toBe("Atlantic Ocean aerial seascape");
+    expect(pexelsQuery(ATLANTIC).toLowerCase()).not.toContain("cityscape");
+    expect(pexelsQuery(ATLANTIC).toLowerCase()).not.toContain("streets");
+  });
+
+  it("does the same for a named sea, not only the ocean basins", () => {
+    expect(pexelsQuery(MEDITERRANEAN)).toBe("Mediterranean Sea aerial seascape");
+  });
+
+  it("carries no region/country qualifier — an ocean has none", () => {
+    const withStrayFields = {
+      kind: "ocean",
+      name: { en: "Pacific Ocean", fr: "Océan Pacifique" },
+      region: { en: "should never appear" },
+      country: { en: "should never appear either" },
+    };
+    const q = pexelsQuery(withStrayFields);
+    expect(q).toBe("Pacific Ocean aerial seascape");
+    expect(q).not.toContain("should never appear");
+  });
+});
+
+describe("relevanceKeywords / isRelevantPhoto — reject obviously unrelated results", () => {
+  const TARBES = {
+    kind: "city",
+    name: { en: "Tarbes", fr: "Tarbes" },
+    region: { en: "Occitania" },
+    country: { en: "France" },
+  };
+  const JAPAN = { kind: "country", name: { en: "Japan", fr: "Japon" }, region: { en: "Asia" } };
+  const ATLANTIC = { kind: "ocean", name: { en: "Atlantic Ocean", fr: "Océan Atlantique" } };
+
+  it("keeps only the identifying words for a city — name, region, country", () => {
+    expect(relevanceKeywords(TARBES).sort()).toEqual(["france", "occitania", "tarbes"]);
+  });
+
+  it("checks a country against its own name only, not its continent", () => {
+    /* "Asia" (the region field) would let almost any Asian photo pass */
+    expect(relevanceKeywords(JAPAN)).toEqual(["japan"]);
+  });
+
+  it("checks an ocean/sea against its own name only", () => {
+    expect(relevanceKeywords(ATLANTIC).sort()).toEqual(["atlantic", "ocean"]);
+  });
+
+  it("drops short connector words that prove nothing by themselves", () => {
+    const SAN_FRANCISCO = {
+      kind: "city",
+      name: { en: "San Francisco" },
+      region: {},
+      country: { en: "United States" },
+    };
+    const words = relevanceKeywords(SAN_FRANCISCO);
+    expect(words).not.toContain("san");
+    expect(words).toContain("francisco");
+  });
+
+  it("accepts a photo whose alt text names the place", () => {
+    const photo = { alt: "Aerial view of Tarbes in the French Pyrenees", photographer: "X" };
+    expect(isRelevantPhoto(TARBES, photo)).toBe(true);
+  });
+
+  it("accepts a match on region or country alone, not only the exact place name", () => {
+    expect(isRelevantPhoto(TARBES, { alt: "Countryside in France", photographer: "X" })).toBe(true);
+  });
+
+  it("is accent- and case-insensitive", () => {
+    const withAccent = { kind: "city", name: { en: "" }, region: { en: "Occitanie" } };
+    expect(isRelevantPhoto(withAccent, { alt: "A village in OCCITANIE", photographer: "" })).toBe(
+      true,
+    );
+  });
+
+  it("rejects a photo that shares nothing with the queried place", () => {
+    const photo = { alt: "A cup of coffee on a wooden table", photographer: "Someone Else" };
+    expect(isRelevantPhoto(TARBES, photo)).toBe(false);
+  });
+
+  it("rejects a mismatched country photo for a country search", () => {
+    const wrongCountry = { alt: "Cherry blossoms in South Korea", photographer: "X" };
+    expect(isRelevantPhoto(JAPAN, wrongCountry)).toBe(false);
+  });
+
+  it("rejects a city photo shown for an ocean/sea search — no false city display", () => {
+    const cityPhoto = { alt: "Downtown skyline with skyscrapers at dusk", photographer: "X" };
+    expect(isRelevantPhoto(ATLANTIC, cityPhoto)).toBe(false);
+  });
+
+  it("accepts a genuine seascape photo for an ocean search", () => {
+    const seascape = { alt: "Waves in the Atlantic Ocean at sunset", photographer: "X" };
+    expect(isRelevantPhoto(ATLANTIC, seascape)).toBe(true);
+  });
+
+  it("never rejects for a location with no usable identifying words", () => {
+    expect(isRelevantPhoto({ kind: "city", name: {} }, { alt: "anything at all" })).toBe(true);
+  });
+
+  it("never rejects when the photo itself carries no alt/photographer text", () => {
+    expect(isRelevantPhoto(TARBES, { alt: "", photographer: "" })).toBe(true);
+  });
+
+  it("always rejects a null photo", () => {
+    expect(isRelevantPhoto(TARBES, null)).toBe(false);
+  });
+});
+
+/* "all countries and international locations": every curated country
+ * (src/js/data/locations.js) must produce a country-specific query built
+ * from its own name, and pass its own relevance check against a photo that
+ * plausibly names it — spanning five continents, not just France. */
+describe("pexelsQuery / relevanceKeywords — every curated country", () => {
+  const countries = LOCATIONS.filter((l) => l.kind === "country");
+
+  it("has more than a single country to actually test generality", () => {
+    expect(countries.length).toBeGreaterThanOrEqual(10);
+  });
+
+  for (const country of countries) {
+    const name = country.name.en;
+    it(`${name}: a country-specific query, never another country's name`, () => {
+      const q = pexelsQuery(country);
+      expect(q.startsWith(name)).toBe(true);
+      expect(q).toBe(`${name} landscape travel`);
+      for (const other of countries) {
+        if (other.id === country.id) continue;
+        expect(q).not.toContain(other.name.en);
+      }
+    });
+
+    it(`${name}: relevance passes for a photo naming the country`, () => {
+      expect(isRelevantPhoto(country, { alt: `Scenic view in ${name}`, photographer: "X" })).toBe(
+        true,
+      );
+    });
+
+    it(`${name}: relevance rejects an unrelated country's photo`, () => {
+      const impostor = countries.find((c) => c.id !== country.id);
+      expect(
+        isRelevantPhoto(country, {
+          alt: `Famous landmark in ${impostor.name.en}`,
+          photographer: "X",
+        }),
+      ).toBe(false);
+    });
+  }
+});
+
+/* resolveLocationImage/locVisual (photo-api.js) is the SYNCHRONOUS fallback
+ * shown before/without a Pexels photo — an ocean/sea must never fall through
+ * to the generic "🏙️" cityscape glyph used for an ordinary unknown place. */
+describe("resolveLocationImage — ocean/sea fallback glyph", () => {
+  it("shows a wave, not the generic city glyph, for an ocean/sea location", () => {
+    expect(resolveLocationImage({ kind: "ocean", name: { en: "Atlantic Ocean" } })).toBe("🌊");
+  });
+
+  it("still shows the generic city glyph for an ordinary unknown place", () => {
+    expect(resolveLocationImage({ kind: "city", name: { en: "Somewhere" } })).toBe("🏙️");
   });
 });
 

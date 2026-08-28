@@ -56,6 +56,7 @@ export const I18N = {
     kindVillage: "Village",
     kindAddress: "Address",
     kindPlace: "Place",
+    kindOcean: "Ocean / Sea",
     landmarkLabel: "Iconic landmark",
 
     conditions: "Current conditions",
@@ -524,6 +525,7 @@ export const I18N = {
     kindVillage: "Village",
     kindAddress: "Adresse",
     kindPlace: "Lieu",
+    kindOcean: "Océan / Mer",
     landmarkLabel: "Monument emblématique",
 
     conditions: "Conditions actuelles",

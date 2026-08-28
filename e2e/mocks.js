@@ -387,14 +387,23 @@ const PIXEL = "data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAA
 
 /* The browser now talks to the SAME-ORIGIN proxy (/api/pexels), never to
    Pexels — the key lives on the server. So this is the proxy's response shape,
-   not Pexels': {"photo": {...}} | {"photo": null}. */
-export function photoProxyPayload() {
+   not Pexels': {"photo": {...}} | {"photo": null}.
+   `query` — present only for a text search, never a by-ID lookup — is echoed
+   into the alt text so the mocked photo is realistically relevant to
+   WHATEVER place asked for it (a real Pexels caption for a matching photo
+   would plausibly mention it too), rather than one fixed sentence for every
+   location in the suite. src/js/services/photo-api.js's relevance filter
+   checks exactly this field, so a test that wants to exercise a REJECTION
+   passes its own query-aware `photoProxy` override instead (see
+   e2e/location-photos.spec.js) — this default stays a "passes relevance"
+   fixture, matching how the rest of the suite already uses it. */
+export function photoProxyPayload(query) {
   return {
     photo: {
       src: { medium: PIXEL, large: PIXEL, large2x: PIXEL },
       photographer: PEXELS_PHOTOGRAPHER,
       link: PEXELS_LINK,
-      alt: PEXELS_ALT,
+      alt: query ? `${PEXELS_ALT} — ${query}` : PEXELS_ALT,
     },
   };
 }
@@ -527,7 +536,9 @@ export async function installMocks(page, overrides = {}) {
     const placeCount = latParam.split(",").length;
     if (placeCount > 1) {
       return route.fulfill(
-        json(Array.from({ length: placeCount }, (_, i) => weatherPayload(kind, i, weatherTimezone))),
+        json(
+          Array.from({ length: placeCount }, (_, i) => weatherPayload(kind, i, weatherTimezone)),
+        ),
       );
     }
     return route.fulfill(json(weatherPayload(kind, 0, weatherTimezone)));
@@ -578,7 +589,8 @@ export async function installMocks(page, overrides = {}) {
      `photoProxy` lets a test choose the status/body to simulate 429/502/503. */
   await page.route("**/api/pexels*", (route) => {
     if (typeof photoProxy === "function") return photoProxy(route);
-    return route.fulfill(json(photoProxyPayload()));
+    const query = new URL(route.request().url()).searchParams.get("query");
+    return route.fulfill(json(photoProxyPayload(query)));
   });
 
   /* Belt and braces: if a future change ever calls Pexels from the browser

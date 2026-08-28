@@ -111,6 +111,7 @@ export function kindLabel(kind) {
       village: t("kindVillage"),
       address: t("kindAddress"),
       poi: t("kindPlace"),
+      ocean: t("kindOcean"),
     }[kind] || t("kindCity")
   );
 }
