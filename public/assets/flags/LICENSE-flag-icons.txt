@@ -1,3 +1,10 @@
+Historical note: countries/ previously vendored flag-icons 7.5.0 in full.
+As of the authentic-aspect-ratio fix, 269 of 271 files in countries/ were
+replaced with a differently-sourced asset (see countries/SOURCES.md for the
+full per-file provenance). Two files (asean.svg, pc.svg) are still the
+original flag-icons artwork below, kept only because no verifiably free
+authentic-ratio replacement could be found — see SOURCES.md.
+
 The MIT License (MIT)
 
 Copyright (c) 2013 Panayiotis Lipiridis
