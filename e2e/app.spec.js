@@ -593,10 +593,11 @@ test.describe("geographic identity box", () => {
     }
 
     /* one shared height, each keeping its own natural (different) width —
-       the US flag (4:3) is narrower than Texas's (3:2) at that height */
+       the US flag's authentic ratio (1.9:1) is wider than Texas's (3:2) at
+       that height */
     expect(usFlag.height).toBe(txFlag.height);
     expect(usFlag.width).not.toBe(txFlag.width);
-    expect(usFlag.width).toBeLessThan(txFlag.width);
+    expect(usFlag.width).toBeGreaterThan(txFlag.width);
   });
 
   test("32. a French city shows France and its region without duplicating either", async ({

@@ -150,21 +150,47 @@ function intrinsicRatio(relPath) {
   return Number(wh[1]) / Number(wh[2]);
 }
 
-describe("intrinsic flag ratios: USA, France, Japan, Canada (countries) vs Texas, California, New York (states)", () => {
-  it("every local country flag asset — including the US — shares the same 4:3 ratio", () => {
+describe("intrinsic flag ratios: USA, France, Japan, Canada use their own authentic ratio, not a shared fake 4:3 canvas", () => {
+  /* flag-icons' stock "4x3" set (still used for every other country in this
+   * repo) force-fits EVERY flag into a 640x480 (4:3) canvas by stretching or
+   * squashing its artwork to match — which is exactly why the US flag read
+   * as too short/stubby next to a correctly-proportioned state flag even
+   * after height-based sizing was fixed: its own source ratio was wrong.
+   * These four assets were redrawn at their real, official ratio (stripes/
+   * canton/stars, tricolor bands, sun disc and maple-leaf panel recomputed
+   * or repositioned for the correct canvas — never non-uniformly scaled) so
+   * the artwork itself, not just the CSS box around it, is authentic. */
+  it("USA is 1.9:1 (10:19), per the 1959 executive-order proportions — not 4:3", () => {
     const us = intrinsicRatio("countries/us.svg");
-    const fr = intrinsicRatio("countries/fr.svg");
-    const jp = intrinsicRatio("countries/jp.svg");
-    const ca = intrinsicRatio("countries/ca.svg");
-    for (const r of [us, fr, jp, ca]) expect(r).toBeCloseTo(4 / 3, 2);
+    expect(us).toBeCloseTo(1.9, 2);
+    expect(Math.abs(us - 4 / 3)).toBeGreaterThan(0.1);
   });
 
-  it("US state flags do NOT share the country flags' 4:3 ratio — this is why height-based sizing (not a fixed width) is required", () => {
+  it("France is 3:2 (equal vertical thirds) — not 4:3", () => {
+    const fr = intrinsicRatio("countries/fr.svg");
+    expect(fr).toBeCloseTo(1.5, 2);
+    expect(Math.abs(fr - 4 / 3)).toBeGreaterThan(0.1);
+  });
+
+  it("Japan is 3:2, per the 1999 Act on National Flag and Anthem — not 4:3", () => {
+    const jp = intrinsicRatio("countries/jp.svg");
+    expect(jp).toBeCloseTo(1.5, 2);
+    expect(Math.abs(jp - 4 / 3)).toBeGreaterThan(0.1);
+  });
+
+  it("Canada is 2:1, with a true square central panel for the maple leaf — not 4:3", () => {
+    const ca = intrinsicRatio("countries/ca.svg");
+    expect(ca).toBeCloseTo(2, 2);
+    expect(Math.abs(ca - 4 / 3)).toBeGreaterThan(0.1);
+  });
+
+  it("US state flags still differ from the (now-authentic) US country ratio — height-based sizing is still required, not a fixed width", () => {
     const countryRatio = intrinsicRatio("countries/us.svg");
     const texas = intrinsicRatio("us-states/texas.svg");
     const california = intrinsicRatio("us-states/california.svg");
     const newYork = intrinsicRatio("us-states/new-york.svg");
-    /* Texas/California are ~3:2, New York ~2:1 — none of the three is 4:3 */
+    /* Texas/California are 3:2, New York is 2:1 — none matches the US
+       country flag's own 1.9:1 */
     for (const r of [texas, california, newYork]) {
       expect(Math.abs(r - countryRatio)).toBeGreaterThan(0.05);
     }
