@@ -536,6 +536,69 @@ test.describe("geographic identity box", () => {
     await expect(identity).toHaveAttribute("aria-label", "Austin, Ville, États-Unis, Texas");
   });
 
+  /* Regression coverage for the map-panel identity chip: the USA flag was
+   * reported cropped/squashed next to the Texas state flag. Exercises the
+   * exact rendering path — .geo-identity-row > .geo-chip >
+   * img.flag-img.geo-chip-flag — and measures real pixels: the flag must
+   * not be cropped (its rendered box matches its own intrinsic ratio) or
+   * stretched (object-fit isn't cover/fill), and it must share the state
+   * flag's height while keeping its own natural width. */
+  test("the USA flag in the map identity chip is not cropped, and shares Texas's flag height", async ({
+    app,
+  }) => {
+    await searchAndSelect(app, AUSTIN_LABEL);
+    await app.locator('.side-item[data-view="map"]').click();
+
+    const flags = app.locator(
+      "#mapWeatherPanel .geo-identity-row > .geo-chip > img.flag-img.geo-chip-flag",
+    );
+    await expect(flags).toHaveCount(2);
+    await expect.poll(() => flags.first().evaluate((el) => el.complete)).toBe(true);
+    await expect.poll(() => flags.last().evaluate((el) => el.complete)).toBe(true);
+
+    const [usFlag, txFlag] = await Promise.all([
+      flags.nth(0).evaluate((el) => {
+        const cs = getComputedStyle(el);
+        return {
+          src: el.currentSrc || el.src,
+          width: parseFloat(cs.width),
+          height: parseFloat(cs.height),
+          objectFit: cs.objectFit,
+          naturalWidth: el.naturalWidth,
+          naturalHeight: el.naturalHeight,
+        };
+      }),
+      flags.nth(1).evaluate((el) => {
+        const cs = getComputedStyle(el);
+        return {
+          src: el.currentSrc || el.src,
+          width: parseFloat(cs.width),
+          height: parseFloat(cs.height),
+          objectFit: cs.objectFit,
+          naturalWidth: el.naturalWidth,
+          naturalHeight: el.naturalHeight,
+        };
+      }),
+    ]);
+
+    expect(usFlag.src).toContain("/countries/us.svg");
+    expect(txFlag.src).toContain("/us-states/texas.svg");
+
+    /* never cropped or stretched to fit some other shape */
+    for (const flag of [usFlag, txFlag]) {
+      expect(flag.objectFit).toBe("contain");
+      const naturalRatio = flag.naturalWidth / flag.naturalHeight;
+      const renderedRatio = flag.width / flag.height;
+      expect(Math.abs(renderedRatio - naturalRatio)).toBeLessThan(0.05);
+    }
+
+    /* one shared height, each keeping its own natural (different) width —
+       the US flag (4:3) is narrower than Texas's (3:2) at that height */
+    expect(usFlag.height).toBe(txFlag.height);
+    expect(usFlag.width).not.toBe(txFlag.width);
+    expect(usFlag.width).toBeLessThan(txFlag.width);
+  });
+
   test("32. a French city shows France and its region without duplicating either", async ({
     app,
   }) => {
@@ -553,6 +616,55 @@ test.describe("geographic identity box", () => {
     await expect(identity.locator(".geo-hierarchy")).toHaveText("Occitanie, France");
     /* never a bare "France, France" */
     await expect(identity).not.toHaveAttribute("aria-label", /France, France/);
+  });
+
+  /* Same geometry contract as the USA/Texas test above, checked for three
+   * more countries via the exact rendering path the fix targets — proves
+   * this is a GLOBAL fix, not a USA-only patch. */
+  test("France, Japan and Canada flags in the map identity chip are not cropped or stretched", async ({
+    app,
+  }) => {
+    async function flagGeometry(locator) {
+      await expect.poll(() => locator.evaluate((el) => el.complete)).toBe(true);
+      return locator.evaluate((el) => {
+        const cs = getComputedStyle(el);
+        return {
+          src: el.currentSrc || el.src,
+          width: parseFloat(cs.width),
+          height: parseFloat(cs.height),
+          objectFit: cs.objectFit,
+          naturalWidth: el.naturalWidth,
+          naturalHeight: el.naturalHeight,
+        };
+      });
+    }
+    function assertUncroppedAndUnstretched(flag, expectedSrcFragment) {
+      expect(flag.src).toContain(expectedSrcFragment);
+      expect(flag.objectFit).toBe("contain");
+      const naturalRatio = flag.naturalWidth / flag.naturalHeight;
+      const renderedRatio = flag.width / flag.height;
+      expect(Math.abs(renderedRatio - naturalRatio)).toBeLessThan(0.05);
+      expect(flag.height).toBeGreaterThan(0);
+    }
+    const countryFlag = (app) =>
+      app.locator(
+        "#mapWeatherPanel .geo-identity-row > .geo-chip > img.flag-img.geo-chip-flag",
+      ).first();
+
+    // France
+    await searchAndSelect(app, TARBES_LABEL);
+    await app.locator('.side-item[data-view="map"]').click();
+    assertUncroppedAndUnstretched(await flagGeometry(countryFlag(app)), "/countries/fr.svg");
+
+    // Japan — a curated city with no state/province tier of its own
+    await searchAndSelect(app, "Tokyo");
+    await app.locator('.side-item[data-view="map"]').click();
+    assertUncroppedAndUnstretched(await flagGeometry(countryFlag(app)), "/countries/jp.svg");
+
+    // Canada — a curated province, country chip only
+    await searchAndSelect(app, "Québec");
+    await app.locator('.side-item[data-view="map"]').click();
+    assertUncroppedAndUnstretched(await flagGeometry(countryFlag(app)), "/countries/ca.svg");
   });
 
   test("33. a region with no supported flag falls back to the neutral icon, never a guess", async ({

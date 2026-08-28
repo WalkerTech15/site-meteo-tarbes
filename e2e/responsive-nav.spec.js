@@ -214,3 +214,75 @@ test.describe("existing header/sidebar controls still work at both breakpoints",
     });
   }
 });
+
+/* The main navigation lives only in the sidebar (permanent on desktop, an
+ * off-canvas drawer on mobile — same #sidebar element, same DOM order, just
+ * repositioned by CSS at the 900px breakpoint). It must never move into the
+ * top header, never duplicate an item, and must always list, in this exact
+ * order: Accueil, Carte, Prévisions, Favoris, À propos, Réglages. */
+test.describe("sidebar/mobile navigation item order", () => {
+  const EXPECTED_VIEWS = ["home", "map", "forecast", "favorites", "about", "settings"];
+  const EXPECTED_LABELS_FR = ["Accueil", "Carte", "Prévisions", "Favoris", "À propos", "Réglages"];
+  const EXPECTED_LABELS_EN = ["Home", "Map", "Forecast", "Favorites", "About", "Settings"];
+
+  async function navItemViews(page) {
+    return page.locator(".side-item").evaluateAll((els) => els.map((el) => el.dataset.view));
+  }
+  async function navItemLabels(page) {
+    /* first non-empty text node/span, excluding the favourites count badge */
+    return page
+      .locator(".side-item")
+      .evaluateAll((els) =>
+        els.map((el) =>
+          el.querySelector("span:not(.side-ico):not(.side-badge)").textContent.trim(),
+        ),
+      );
+  }
+
+  for (const [label, viewport] of [
+    ["desktop", { width: 1280, height: 800 }],
+    ["mobile", { width: 375, height: 812 }],
+  ]) {
+    test(`${label}: exactly six items, in the required order, no duplicates`, async ({ page }) => {
+      await freshAt(page, viewport);
+      if (viewport.width <= 900) await page.locator("#burgerBtn").click();
+
+      const items = page.locator(".side-item");
+      await expect(items).toHaveCount(6);
+      expect(await navItemViews(page)).toEqual(EXPECTED_VIEWS);
+      expect(new Set(await navItemViews(page)).size).toBe(6); /* no duplicated view */
+      expect(await navItemLabels(page)).toEqual(EXPECTED_LABELS_FR);
+
+      /* the top header still carries only the logo, search, theme and
+         language controls — navigation never migrated up there */
+      await expect(page.locator(".topnav .side-item")).toHaveCount(0);
+      await expect(page.locator(".topnav-actions > *")).toHaveCount(2);
+    });
+  }
+
+  test("the order survives a language switch (labels translate, sequence does not)", async ({
+    page,
+  }) => {
+    await freshAt(page, { width: 1280, height: 800 });
+    await page.locator("#langBtn").click();
+    await page.locator('#langMenu button[data-lang="en"]').click();
+
+    expect(await navItemViews(page)).toEqual(EXPECTED_VIEWS);
+    expect(await navItemLabels(page)).toEqual(EXPECTED_LABELS_EN);
+  });
+
+  test("clicking each item in order still routes to its view and updates active/current state", async ({
+    page,
+  }) => {
+    await freshAt(page, { width: 1280, height: 800 });
+    for (const view of EXPECTED_VIEWS) {
+      await page.locator(`.side-item[data-view="${view}"]`).click();
+      await expect(page.locator(`#view-${view}`)).toBeVisible();
+      await expect(page.locator(`.side-item[data-view="${view}"]`)).toHaveClass(/is-active/);
+      await expect(page.locator(`.side-item[data-view="${view}"]`)).toHaveAttribute(
+        "aria-current",
+        "page",
+      );
+    }
+  });
+});

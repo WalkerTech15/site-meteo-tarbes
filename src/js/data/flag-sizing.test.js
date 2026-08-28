@@ -92,6 +92,27 @@ describe(".location-flag-wrap: the shared country+region system", () => {
   });
 });
 
+describe(".geo-chip-flag: map weather panel / geo-identity chips (img.flag-img.geo-chip-flag)", () => {
+  it("sizes by height, auto width, object-fit: contain — never a fixed width, never cover/fill", () => {
+    const body = ruleBody(mapCss, ".geo-chip-flag");
+    expect(body).toMatch(/height:\s*\d/);
+    expect(body).toMatch(/width:\s*auto/);
+    /* negative lookbehind excludes `max-width:` — only a bare `width:` (not
+       "auto") would re-introduce a fixed-width crop/stretch box */
+    expect(body).not.toMatch(/(?<![a-z-])width:\s*(?!auto)\S/i);
+    expect(body).toMatch(/object-fit:\s*contain/);
+    expect(body).not.toMatch(/object-fit:\s*(cover|fill)/);
+    /* max-width: none — nothing clamps the natural width back down once
+       object-fit has already sized it correctly from the height */
+    expect(body).toMatch(/max-width:\s*none/);
+  });
+
+  it("is the only rule for this selector — no later override in map.css re-adds cropping/stretching", () => {
+    const matches = mapCss.match(/\.geo-chip-flag\s*\{/g) || [];
+    expect(matches).toHaveLength(1);
+  });
+});
+
 describe("no flag context crops (object-fit: cover) or stretches (object-fit: fill)", () => {
   it("the country-filter-chip icon box contains its flag instead of cropping it", () => {
     const m = mapCss.match(/\.chip-icon img,\s*\.chip-icon \.flag\s*\{([^}]*)\}/);
@@ -129,12 +150,13 @@ function intrinsicRatio(relPath) {
   return Number(wh[1]) / Number(wh[2]);
 }
 
-describe("intrinsic flag ratios: USA, France, Japan (countries) vs Texas, California, New York (states)", () => {
+describe("intrinsic flag ratios: USA, France, Japan, Canada (countries) vs Texas, California, New York (states)", () => {
   it("every local country flag asset — including the US — shares the same 4:3 ratio", () => {
     const us = intrinsicRatio("countries/us.svg");
     const fr = intrinsicRatio("countries/fr.svg");
     const jp = intrinsicRatio("countries/jp.svg");
-    for (const r of [us, fr, jp]) expect(r).toBeCloseTo(4 / 3, 2);
+    const ca = intrinsicRatio("countries/ca.svg");
+    for (const r of [us, fr, jp, ca]) expect(r).toBeCloseTo(4 / 3, 2);
   });
 
   it("US state flags do NOT share the country flags' 4:3 ratio — this is why height-based sizing (not a fixed width) is required", () => {
