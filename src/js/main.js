@@ -14,6 +14,8 @@ import {
   setUnitWind,
   setTheme,
   setLang,
+  setClockFormat,
+  setClockSeconds,
   applyTheme,
   syncThemeNav,
   syncLangBtnLabel,
@@ -45,7 +47,7 @@ import {
   bindSegToggle,
   syncSegToggle,
 } from "./ui/navigation.js";
-import { renderExplore, renderChart, renderHero } from "./ui/render-home.js";
+import { renderExplore, renderChart, renderHero, updateHeroClock } from "./ui/render-home.js";
 import { renderFavorites } from "./ui/render-favorites.js";
 import { renderForecastPage } from "./ui/render-forecast.js";
 import {
@@ -175,6 +177,13 @@ $$("#modeTiles .set-tile").forEach((b) =>
 $$("#themeTiles .set-tile").forEach((b) =>
   b.addEventListener("click", () => setTheme(b.dataset.theme)),
 );
+$$("#chipClockFormat button").forEach((b) =>
+  b.addEventListener("click", () => setClockFormat(b.dataset.cf)),
+);
+$("#clockSecondsSwitch")?.addEventListener("click", () => {
+  setClockSeconds(!state.clockSeconds);
+  showToast(t("prefSaved"));
+});
 window.matchMedia("(prefers-color-scheme: dark)").addEventListener("change", () => {
   if (state.theme === "system") applyTheme();
 });
@@ -339,6 +348,13 @@ loadPopular();
 setInterval(() => {
   if (state.wx && state.view === "home") renderHero();
 }, 60000);
+
+/* Keep the hero clock ticking (needed for the optional seconds display;
+   harmless single-text-node overhead the rest of the time) without waiting
+   on the minute-granularity refresh above. */
+setInterval(() => {
+  if (state.wx && state.view === "home") updateHeroClock();
+}, 1000);
 
 async function handlePrivacyAction(action, trigger) {
   if (action === "location") showToast(t("locMsg"));

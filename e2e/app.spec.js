@@ -35,7 +35,7 @@ test.describe("home", () => {
     await expect(app.locator('[data-metric="rainNext12h"]')).toBeVisible();
     await expect(app.locator('[data-metric="temperature"]')).toBeHidden();
     await expect(app.locator("#homeHourlyStrip .hour-cell")).toHaveCount(6);
-    await expect(app.locator("#forecastRow .forecast-card")).toHaveCount(5);
+    await expect(app.locator("#forecastRow .forecast-card")).toHaveCount(7);
     /* live badge, not the demo fallback — the mocked API answered 200 */
     await expect(app.locator(".hero-live")).not.toContainText(/démo|demo/i);
     expect(errors).toEqual([]);
@@ -60,7 +60,7 @@ test.describe("home", () => {
     /* the hero badge flips from "Live" to the demo-data label */
     await expect(page.locator(".hero-live")).toContainText(/démo|demo/i);
     /* and the UI is still fully populated from the deterministic demo dataset */
-    await expect(page.locator("#forecastRow .forecast-card")).toHaveCount(5);
+    await expect(page.locator("#forecastRow .forecast-card")).toHaveCount(7);
     await expect(page.locator(".hero-temp")).toContainText("°");
   });
 });

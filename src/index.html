@@ -490,7 +490,7 @@
           <!-- Forecast -->
           <section class="block" aria-labelledby="forecastTitle">
             <div class="block-head">
-              <h2 class="section-title" id="forecastTitle" data-i18n="fiveDay">5-Day Forecast</h2>
+              <h2 class="section-title" id="forecastTitle" data-i18n="sevenDay">7-Day Forecast</h2>
               <p class="section-sub" id="forecastSub"></p>
             </div>
             <div class="forecast-row" id="forecastRow"><!-- rendered by JS --></div>
@@ -1823,6 +1823,51 @@
                       <path d="m5 12 5 5 9-10" /></svg
                   ></span>
                 </button>
+              </div>
+            </div>
+
+            <!-- Time -->
+            <div class="card set-card">
+              <div class="set-head">
+                <span class="metric-ico tint-rose" aria-hidden="true"
+                  ><svg
+                    viewBox="0 0 24 24"
+                    width="18"
+                    height="18"
+                    fill="none"
+                    stroke="currentColor"
+                    stroke-width="1.9"
+                    stroke-linecap="round"
+                  >
+                    <circle cx="12" cy="12" r="9" />
+                    <path d="M12 7v5l3 2" /></svg
+                ></span>
+                <div>
+                  <h2 data-i18n="setTime">Time</h2>
+                  <p data-i18n="setTimeSub"></p>
+                </div>
+              </div>
+              <div class="uchip-groups">
+                <div class="uchip-group">
+                  <span class="ulabel" data-i18n="clockFormatLabel">Clock format</span>
+                  <div class="uchips" role="radiogroup" id="chipClockFormat">
+                    <button role="radio" data-cf="12" data-i18n="clockFormat12">12-hour</button>
+                    <button role="radio" data-cf="24" data-i18n="clockFormat24">24-hour</button>
+                  </div>
+                </div>
+              </div>
+              <div class="set-toggle-row">
+                <div class="notif-txt">
+                  <b id="clockSecondsLbl" data-i18n="showSeconds">Show seconds</b>
+                  <span data-i18n="showSecondsSub"></span>
+                </div>
+                <button
+                  class="switch"
+                  role="switch"
+                  aria-checked="false"
+                  aria-labelledby="clockSecondsLbl"
+                  id="clockSecondsSwitch"
+                ></button>
               </div>
             </div>
           </div>

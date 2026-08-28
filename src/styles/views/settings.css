@@ -188,6 +188,20 @@
   background: #475569;
 }
 
+/* Standalone switch row (Settings → Time → "Show seconds") — same label
+   typography as a notif-item, but a single full-width row rather than a
+   grid cell, since this card has only one such toggle. */
+.set-toggle-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-top: var(--s-3);
+  padding: 14px;
+  border-radius: var(--r-sm);
+  border: 1px solid var(--border);
+  background: var(--bg);
+}
+
 .notif-grid {
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));

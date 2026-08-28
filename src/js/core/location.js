@@ -21,12 +21,15 @@ export function locName(loc) {
 }
 
 /* Local clock at the selected city, not the visitor's. Falls back silently to
-   no display if the zone id is missing/invalid (Intl throws on a bad zone). */
+   no display if the zone id is missing/invalid (Intl throws on a bad zone).
+   Format (12/24-hour) and the optional seconds are the user's own choice
+   (Settings → Time, see features/settings.js), never inferred from language. */
 const _clockFmt = {};
 export function localTimeStr(tz) {
   if (!tz) return null;
   const locale = state.lang === "fr" ? "fr-FR" : "en-US";
-  const key = `${locale}::${tz}`;
+  const hourCycle = state.clockFormat === "12" ? "h12" : "h23";
+  const key = `${locale}::${tz}::${hourCycle}::${state.clockSeconds ? 1 : 0}`;
   try {
     const fmt =
       _clockFmt[key] ||
@@ -34,6 +37,8 @@ export function localTimeStr(tz) {
         timeZone: tz,
         hour: "2-digit",
         minute: "2-digit",
+        ...(state.clockSeconds ? { second: "2-digit" } : {}),
+        hourCycle,
       }));
     return fmt.format(new Date());
   } catch {

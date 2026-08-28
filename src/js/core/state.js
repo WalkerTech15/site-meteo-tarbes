@@ -14,6 +14,13 @@ export const state = {
   unitTemp: getStr(KEYS.unitTemp, legacyImperial ? "f" : "c"),
   unitWind: getStr(KEYS.unitWind, legacyImperial ? "mph" : "kmh"),
   theme: getStr(KEYS.theme, "light"),
+  /* "24" matches the previous unconfigurable default (fr-FR's Intl default,
+     and the app's own default language) — introducing the setting changes
+     no one's display until they explicitly pick 12-hour. */
+  clockFormat: getStr(KEYS.clockFormat, "24"),
+  /* off by default — getStr() returns null for a visitor who never set it,
+     and null !== "1" */
+  clockSeconds: getStr(KEYS.clockSeconds) === "1",
   notifs: getJSON(KEYS.notifs, DEFAULT_NOTIFS),
   favorites: getJSON(KEYS.favorites, []),
   /* Recent searches: opt-in, so a missing flag means off for a new visitor.

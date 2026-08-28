@@ -75,7 +75,7 @@ export function renderHero() {
   $("#heroInner").innerHTML = `
     <div class="hero-top">
       <span class="hero-loc-kicker"><span aria-hidden="true">${locVisual(loc)}</span> ${kindLabel(loc.kind)}</span>
-      ${localTime ? `<span class="hero-clock"><svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg> ${localTime}</span>` : ""}
+      ${localTime ? `<span class="hero-clock"><svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg> <span id="heroClockTime">${localTime}</span></span>` : ""}
     </div>
     <div class="hero-head">
       <h1 class="hero-city" id="heroCityName">${esc(locName(loc))}
@@ -106,6 +106,19 @@ export function renderHero() {
     </div>`;
 
   $("#heroFavBtn").addEventListener("click", toggleFavorite);
+}
+
+/* Cheap per-second refresh of just the clock text — used by main.js's ticker
+   and by the Settings → Time controls (12/24-hour, seconds) so a preference
+   change is reflected immediately without rebuilding the whole hero card
+   (which would also re-hydrate the landmark photo for no reason). A no-op
+   before the hero has ever rendered, or for a location with no known zone. */
+export function updateHeroClock() {
+  if (!state.wx) return;
+  const el = $("#heroClockTime");
+  if (!el) return;
+  const localTime = localTimeStr(state.wx.timezone);
+  if (localTime) el.textContent = localTime;
 }
 
 const METRICS = [
@@ -386,8 +399,10 @@ export function forecastCardHtml(d, i) {
     </div>`;
 }
 
+/* Compact Home strip: 7 days, same daily data and cards as the Forecast page
+   (see ui/render-forecast.js) — just fewer per row before it scrolls. */
 export function renderForecast() {
-  $("#forecastRow").innerHTML = state.wx.daily.slice(0, 5).map(forecastCardHtml).join("");
+  $("#forecastRow").innerHTML = state.wx.daily.slice(0, 7).map(forecastCardHtml).join("");
   $("#forecastSub").textContent = `${t("forecastFor")} ${locHierarchyLabel(state.loc)}`;
 }
 

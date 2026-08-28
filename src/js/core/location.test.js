@@ -1,4 +1,4 @@
-import { describe, it, expect, afterEach } from "vitest";
+import { describe, it, expect, afterEach, vi } from "vitest";
 import { state } from "./state.js";
 import {
   locAccessibleName,
@@ -6,6 +6,7 @@ import {
   kindLabel,
   flagsHtml,
   regionKeyFor,
+  localTimeStr,
 } from "./location.js";
 
 const FRANCE = {
@@ -196,5 +197,77 @@ describe("flagsHtml / regionKeyFor for a directly-selected Canadian province", (
     expect(regionKeyFor(camrose)).toBe("alberta");
     const html = flagsHtml(camrose);
     expect(html.match(/alberta\.svg/g)).toHaveLength(1);
+  });
+});
+
+/* The Settings → Time card's whole contract: 12/24-hour choice, the optional
+   seconds, and the selected city's own IANA zone rather than the visitor's —
+   see features/settings.js's setClockFormat/setClockSeconds. */
+describe("localTimeStr", () => {
+  const originalFormat = state.clockFormat;
+  const originalSeconds = state.clockSeconds;
+  /* 2026-08-28T14:05:09Z: Europe/Paris is on CEST (UTC+2) → 16:05:09,
+     America/New_York is on EDT (UTC-4) → 10:05:09. */
+  const INSTANT = "2026-08-28T14:05:09Z";
+
+  afterEach(() => {
+    state.clockFormat = originalFormat;
+    state.clockSeconds = originalSeconds;
+    vi.useRealTimers();
+  });
+
+  it("defaults to 24-hour, no seconds", () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date(INSTANT));
+    state.lang = "en";
+    state.clockFormat = "24";
+    state.clockSeconds = false;
+    expect(localTimeStr("Europe/Paris")).toBe("16:05");
+  });
+
+  it("switches to 12-hour with AM/PM when chosen", () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date(INSTANT));
+    state.clockFormat = "12";
+    state.clockSeconds = false;
+    expect(localTimeStr("Europe/Paris")).toBe("04:05 PM");
+  });
+
+  it("appends seconds only when the toggle is on", () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date(INSTANT));
+    state.clockFormat = "24";
+    state.clockSeconds = false;
+    expect(localTimeStr("Europe/Paris")).toBe("16:05");
+    state.clockSeconds = true;
+    expect(localTimeStr("Europe/Paris")).toBe("16:05:09");
+  });
+
+  it("uses the given city's IANA zone, not the host machine's", () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date(INSTANT));
+    state.clockFormat = "24";
+    state.clockSeconds = false;
+    expect(localTimeStr("Europe/Paris")).toBe("16:05");
+    expect(localTimeStr("America/New_York")).toBe("10:05");
+  });
+
+  it("respects both interface languages for the same instant/zone", () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date(INSTANT));
+    state.clockFormat = "24";
+    state.clockSeconds = false;
+    state.lang = "en";
+    const en = localTimeStr("Europe/Paris");
+    state.lang = "fr";
+    const fr = localTimeStr("Europe/Paris");
+    expect(en).toBe("16:05");
+    expect(fr).toBe("16:05");
+  });
+
+  it("returns null instead of throwing for a missing or invalid zone", () => {
+    expect(localTimeStr(null)).toBeNull();
+    expect(localTimeStr(undefined)).toBeNull();
+    expect(localTimeStr("Not/AZone")).toBeNull();
   });
 });

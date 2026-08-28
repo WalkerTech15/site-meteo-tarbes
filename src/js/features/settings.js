@@ -5,7 +5,7 @@ import { $, $$ } from "../core/dom.js";
 import { setStr, KEYS } from "../core/storage.js";
 import { t, applyStaticI18n } from "../core/i18n.js";
 import { syncSegToggle, syncSidebarA11y } from "../ui/navigation.js";
-import { renderChart, renderExplore } from "../ui/render-home.js";
+import { renderChart, renderExplore, updateHeroClock } from "../ui/render-home.js";
 import { renderFavorites } from "../ui/render-favorites.js";
 import { renderAllWeather } from "./location.js";
 import { refreshMapLanguage, resizeMaps } from "./map.js";
@@ -46,6 +46,20 @@ export function setTheme(v) {
   syncThemeNav(); /* one preference, two controls (navbar + Settings) — keep both in sync */
 }
 
+export function setClockFormat(v) {
+  state.clockFormat = v;
+  setStr(KEYS.clockFormat, v);
+  updateSettingsUI();
+  updateHeroClock();
+}
+
+export function setClockSeconds(v) {
+  state.clockSeconds = v;
+  setStr(KEYS.clockSeconds, v ? "1" : "0");
+  updateSettingsUI();
+  updateHeroClock();
+}
+
 export function applyTheme() {
   const dark =
     state.theme === "dark" ||
@@ -70,6 +84,11 @@ export function updateSettingsUI() {
   $$("#themeTiles .set-tile").forEach((b) =>
     b.setAttribute("aria-checked", b.dataset.theme === state.theme),
   );
+  $$("#chipClockFormat button").forEach((b) =>
+    b.setAttribute("aria-checked", b.dataset.cf === state.clockFormat),
+  );
+  const secSwitch = $("#clockSecondsSwitch");
+  if (secSwitch) secSwitch.setAttribute("aria-checked", !!state.clockSeconds);
   $$(".switch[data-notif]").forEach((b) =>
     b.setAttribute("aria-checked", !!state.notifs[b.dataset.notif]),
   );

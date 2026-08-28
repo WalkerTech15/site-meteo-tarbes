@@ -40,11 +40,11 @@ const WEATHER_KINDS = {
    correctly rather than all showing place 0's weather. 0 (the default)
    reproduces the exact single-location payload every existing test already
    asserts on, unchanged. */
-function weatherPayload(kind = "calm", place = 0) {
+function weatherPayload(kind = "calm", place = 0, timezone = "Europe/Paris") {
   const w = WEATHER_KINDS[kind] || WEATHER_KINDS.calm;
   const dTemp = place * 2;
   return {
-    timezone: "Europe/Paris",
+    timezone,
     current: {
       time: `${DAY}T00:00`,
       temperature_2m: WEATHER_TEMP_C + dTemp,
@@ -484,6 +484,11 @@ export async function installMocks(page, overrides = {}) {
      URL carries the coordinates, which is how a test gives two cities two
      different forecasts. */
   const { weatherKind = "calm" } = overrides;
+  /* Every mocked location is "Europe/Paris" by default — same zone the
+     Playwright context itself is pinned to (see playwright.config.js), so a
+     test that wants to prove the clock follows the SELECTED city, not the
+     visitor's own zone, needs to override this to something else. */
+  const { weatherTimezone = "Europe/Paris" } = overrides;
 
   /* Registered FIRST on purpose: Playwright resolves routes in reverse
      registration order, so the specific handlers below override this one.
@@ -522,10 +527,10 @@ export async function installMocks(page, overrides = {}) {
     const placeCount = latParam.split(",").length;
     if (placeCount > 1) {
       return route.fulfill(
-        json(Array.from({ length: placeCount }, (_, i) => weatherPayload(kind, i))),
+        json(Array.from({ length: placeCount }, (_, i) => weatherPayload(kind, i, weatherTimezone))),
       );
     }
-    return route.fulfill(json(weatherPayload(kind)));
+    return route.fulfill(json(weatherPayload(kind, 0, weatherTimezone)));
   });
   await page.route("**://air-quality-api.open-meteo.com/**", (route) =>
     route.fulfill(json({ current: { european_aqi: 31 } })),

@@ -9,6 +9,8 @@ export const KEYS = {
   unitWind: "ws_unit_w",
   legacyUnits: "ws_units", // old combined key, read-only, never written by current code
   theme: "ws_theme",
+  clockFormat: "ws_clock_fmt",
+  clockSeconds: "ws_clock_sec",
   notifs: "ws_notifs",
   favorites: "ws_favs",
   lastLocation: "ws_lastLoc",
