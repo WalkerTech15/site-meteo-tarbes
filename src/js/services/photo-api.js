@@ -530,6 +530,26 @@ function renderPhotoCredit(host, photo, extraClass = "") {
   host.appendChild(a);
 }
 
+/* Fire-and-forget cache warmup — no DOM, no swap, just the network lookup.
+   Measured with Lighthouse: on Home, the hero photo used to sit behind
+   `await fetchWeather(loc)` for no real reason (hydrateLocPhoto only needs
+   the location, never the weather), which showed up as ~870ms of pure
+   "resource load delay" on the LCP image before the actual fetch could even
+   start. Callers that know the location before they have anywhere to render
+   it (selectLocation, right when state.loc is set) call this so the same
+   proxy/Commons round trip hydrateLocPhoto will make runs IN PARALLEL with
+   the weather fetch instead of strictly after it. By the time hydrateLocPhoto
+   actually runs, PHOTO_CACHE/CANDIDATE_CACHE/WIKIMEDIA_CACHE already has the
+   answer (or the same IN_FLIGHT promise is still running and gets reused) —
+   same cache, so this can never cause a duplicate request. */
+export function prefetchLocPhoto(loc) {
+  if (!loc) return;
+  if (loc.landmark && (loc.landmark.img || loc.landmark.noPhotoSearch)) return;
+  if (loc.img) return;
+  if (loc.landmark && loc.landmark.pexelsId) fetchPexelsPhotoById(loc.landmark.pexelsId);
+  else fetchBestPhoto(loc);
+}
+
 export async function hydrateLocPhoto(el, loc, opts = {}) {
   if (!el || !loc) return;
   const token = photoToken;
@@ -551,6 +571,11 @@ export async function hydrateLocPhoto(el, loc, opts = {}) {
        thumbnail size, so it skips straight to a plain img.src. */
     const srcset = photo && photo.source !== "wikimedia" ? pexelsSrcset(photo.sizes) : "";
     const pre = new Image();
+    /* Only the hero passes opts.priority: it's the LCP candidate on Home, so
+       it should win the browser's fetch scheduler over everything else still
+       loading (map chunks, other below-the-fold images) — never set for the
+       explore carousel or the map info panel, which are never LCP. */
+    if (opts.priority) pre.fetchPriority = "high";
     /* preload through the same srcset/sizes the real <img> will use, so the
        candidate the browser picks is already cached when we swap it in */
     if (srcset) {
@@ -564,6 +589,7 @@ export async function hydrateLocPhoto(el, loc, opts = {}) {
         img = document.createElement("img");
         img.className = "loc-photo-img";
         img.decoding = "async";
+        if (opts.priority) img.fetchPriority = "high";
         el.appendChild(img);
       }
       /* Pexels supplies a description ("Eiffel Tower at dusk"); curated and

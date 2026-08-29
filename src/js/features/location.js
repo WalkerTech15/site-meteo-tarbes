@@ -7,7 +7,7 @@ import { setJSON, KEYS } from "../core/storage.js";
 import { emit } from "../core/app-bus.js";
 import { recordRecent } from "./recent-locations.js";
 import { fetchWeather, demoWeather } from "../services/weather-api.js";
-import { bumpPhotoToken } from "../services/photo-api.js";
+import { bumpPhotoToken, prefetchLocPhoto } from "../services/photo-api.js";
 import { showToast } from "../ui/notifications.js";
 import {
   renderHeroSkeleton,
@@ -58,6 +58,11 @@ export async function selectLocation(loc) {
   renderHeroSkeleton();
   /* the previous city's hazards must not hang over the one now loading */
   clearAdvisory();
+  /* Starts the hero photo's own network lookup NOW, in parallel with the
+     weather fetch below, rather than leaving it to wait behind it — the photo
+     only ever needed `loc`, never `wx`. See prefetchLocPhoto's own comment
+     (services/photo-api.js) for the measured LCP impact. */
+  prefetchLocPhoto(loc);
 
   let wx;
   let isDemo = false;

@@ -45,7 +45,7 @@ vi.mock("./map-url.js", () => ({
    ./recent-locations.js is deliberately left real: it's pure, DOM-free, and
    is itself the privacy contract (isDeviceLocation) map-url-sync.js relies on. */
 vi.mock("./geolocation.js", () => ({ renderSidePos: vi.fn() }));
-vi.mock("../services/photo-api.js", () => ({ bumpPhotoToken: vi.fn() }));
+vi.mock("../services/photo-api.js", () => ({ bumpPhotoToken: vi.fn(), prefetchLocPhoto: vi.fn() }));
 vi.mock("../ui/render-home.js", () => ({
   renderHeroSkeleton: vi.fn(),
   renderHero: vi.fn(),

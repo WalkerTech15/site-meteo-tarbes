@@ -61,7 +61,10 @@ export function renderHero() {
   hl.innerHTML = locPhotoHtml(loc, "hero-photo");
   /* the landmark layer is pointer-events:none and sits behind .hero-inner, so
      the (clickable) Pexels credit is hosted by .hero-inner instead */
-  hydrateLocPhoto(hl.querySelector(".loc-photo"), loc, { creditHost: $("#heroInner") });
+  hydrateLocPhoto(hl.querySelector(".loc-photo"), loc, {
+    creditHost: $("#heroInner"),
+    priority: true,
+  });
 
   const mins = Math.max(0, Math.round((Date.now() - wx.updatedAt.getTime()) / 60000));
   const updatedTxt = mins < 1 ? t("justNow") : `${mins} ${t("minAgo")}`;

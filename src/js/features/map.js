@@ -42,6 +42,23 @@ function loadMapLibre() {
   return maplibreglPromise;
 }
 
+/* Resolves on the next idle moment (or after `timeout`, whichever comes
+   first) — Safari has no requestIdleCallback, so it just resolves on the next
+   tick there instead. Used once, below, to keep the Home mini-map's very
+   first load (which pulls in the whole MapTiler SDK chunk) from competing
+   with the hero photo and weather fetch for bandwidth and main-thread time
+   right after first paint — measured with Lighthouse as one of the largest
+   transfers happening inside the LCP window. An explicit visit to the full
+   Map page is never delayed by this (see the `id === "homeMap"` check at the
+   call site) — only the automatic, below-the-fold Home preview is. */
+function idle(timeout = 300) {
+  return new Promise((resolve) => {
+    if (typeof requestIdleCallback === "function")
+      requestIdleCallback(() => resolve(), { timeout });
+    else setTimeout(resolve, 0);
+  });
+}
+
 /* zoom per location type; huge countries get a wider view */
 function zoomFor(loc) {
   if (typeof loc._zoom === "number") return loc._zoom; /* MapTiler result: type-based */
@@ -454,9 +471,14 @@ async function updateMap(id) {
     }
     el.classList.add("is-loading");
     if (!CREATING[id]) {
-      CREATING[id] = createMapInstance(id, el, cfg).finally(() => {
-        delete CREATING[id];
-      });
+      /* Only the Home preview's own first creation waits a tick — the Map
+         page (id "worldMap") is always an explicit visit and never deferred. */
+      const kickoff = id === "homeMap" ? idle() : Promise.resolve();
+      CREATING[id] = kickoff
+        .then(() => createMapInstance(id, el, cfg))
+        .finally(() => {
+          delete CREATING[id];
+        });
     }
     try {
       await CREATING[id];
