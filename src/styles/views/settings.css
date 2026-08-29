@@ -1,4 +1,4 @@
-/* Settings view: unit/language/mode/theme tiles, notifications, privacy. */
+/* Settings view: unit/language/mode/theme tiles, time, privacy. */
 
 .set-grid {
   display: grid;
@@ -202,11 +202,6 @@
   background: var(--bg);
 }
 
-.notif-grid {
-  display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: var(--s-2);
-}
 .notif-item {
   display: flex;
   align-items: center;
@@ -274,15 +269,4 @@
   font-size: 11.5px;
   color: var(--text-2);
   line-height: 1.4;
-}
-
-/* "Prototype" badge on the notifications card */
-.proto-pill {
-  margin-left: 8px;
-  vertical-align: 2px;
-  font-size: 11px;
-  padding: 3px 9px;
-  color: var(--amber);
-  background: var(--amber-soft);
-  border-color: rgba(217, 119, 6, 0.35);
 }

@@ -3,7 +3,7 @@
 import { state } from "./core/state.js";
 import { $, $$ } from "./core/dom.js";
 import { t, applyStaticI18n } from "./core/i18n.js";
-import { getJSON, setJSON, clearAll, KEYS } from "./core/storage.js";
+import { getJSON, clearAll, KEYS } from "./core/storage.js";
 import { injectIconDefs, weatherIcon, MAP_LAYER_ICONS } from "./data/icons.js";
 import { flagHtml } from "./data/flags.js";
 import { LOCATIONS, DEFAULT_LOCATION_ID } from "./data/locations.js";
@@ -187,14 +187,6 @@ $("#clockSecondsSwitch")?.addEventListener("click", () => {
 window.matchMedia("(prefers-color-scheme: dark)").addEventListener("change", () => {
   if (state.theme === "system") applyTheme();
 });
-$$(".switch[data-notif]").forEach((b) =>
-  b.addEventListener("click", () => {
-    state.notifs[b.dataset.notif] = !state.notifs[b.dataset.notif];
-    setJSON(KEYS.notifs, state.notifs);
-    updateSettingsUI();
-    showToast(t("prefSaved"));
-  }),
-);
 $$(".priv-tile").forEach((b) =>
   b.addEventListener("click", () => handlePrivacyAction(b.dataset.priv, b)),
 );
@@ -382,7 +374,6 @@ async function handlePrivacyAction(action, trigger) {
         unitTemp: state.unitTemp,
         unitWind: state.unitWind,
         theme: state.theme,
-        notifs: state.notifs,
       },
       favorites: state.favorites,
       lastLocation: state.loc,

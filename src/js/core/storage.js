@@ -11,7 +11,6 @@ export const KEYS = {
   theme: "ws_theme",
   clockFormat: "ws_clock_fmt",
   clockSeconds: "ws_clock_sec",
-  notifs: "ws_notifs",
   favorites: "ws_favs",
   lastLocation: "ws_lastLoc",
   geo: "ws_geo",

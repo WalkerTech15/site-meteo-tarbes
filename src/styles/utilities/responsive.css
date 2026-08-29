@@ -69,7 +69,6 @@
   .set-grid {
     grid-template-columns: minmax(0, 1fr);
   }
-  .notif-grid,
   .priv-grid {
     grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
   }
@@ -176,7 +175,6 @@
   .src-row .link-chip {
     margin-left: 58px;
   }
-  .notif-grid,
   .priv-grid,
   .set-tiles {
     grid-template-columns: minmax(0, 1fr);

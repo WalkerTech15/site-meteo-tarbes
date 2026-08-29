@@ -47,9 +47,7 @@ test.describe("settings — time", () => {
     await expect(app.locator("#heroClockTime")).toHaveText(/^\d{2}:\d{2}$/);
   });
 
-  test("switching to 12-hour applies to the hero clock immediately, no reload", async ({
-    app,
-  }) => {
+  test("switching to 12-hour applies to the hero clock immediately, no reload", async ({ app }) => {
     await goToSettings(app);
     await app.locator('#chipClockFormat button[data-cf="12"]').click();
     await expect(app.locator('#chipClockFormat button[data-cf="12"]')).toHaveAttribute(
@@ -131,6 +129,31 @@ test.describe("settings — time", () => {
        minute rollover between the two reads above */
     expect([before, after]).toContain(text);
     expect(text).not.toBe(fmt("Europe/Paris"));
+  });
+
+  test("the removed Notifications prototype is gone, but Time settings still work", async ({
+    app,
+  }) => {
+    await goToSettings(app);
+    /* the whole card, its "Prototype" badge, and all four switches — gone */
+    await expect(app.locator("[data-notif]")).toHaveCount(0);
+    await expect(app.locator(".notif-grid")).toHaveCount(0);
+    await expect(app.locator(".proto-pill")).toHaveCount(0);
+    await expect(app.locator("#view-settings")).not.toContainText("Notifications");
+    await expect(app.locator("#view-settings")).not.toContainText("Prototype");
+
+    /* Time — a sibling card sharing the same .notif-item/.notif-txt/.switch
+       styling as the removed card — is unaffected. [data-i18n="setTime"] is
+       used instead of the visible text so this doesn't depend on which
+       language the page happens to be in. */
+    await expect(app.locator('[data-i18n="setTime"]')).toBeVisible();
+    await expect(app.locator("#chipClockFormat")).toBeVisible();
+    await expect(app.locator("#clockSecondsSwitch")).toBeVisible();
+    await app.locator('#chipClockFormat button[data-cf="12"]').click();
+    await expect(app.locator('#chipClockFormat button[data-cf="12"]')).toHaveAttribute(
+      "aria-checked",
+      "true",
+    );
   });
 
   test("the clock format chips and seconds switch expose correct semantics", async ({ app }) => {

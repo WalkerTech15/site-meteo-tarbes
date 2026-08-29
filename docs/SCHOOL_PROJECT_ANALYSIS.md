@@ -91,7 +91,7 @@ Be upfront about these. A jury respects a student who names their own gaps.
 
 | Feature                                | Actual status                                                                                                                                                                                                                                                         |
 | -------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| **Notifications**                      | **Preferences only.** The four switches write to localStorage and nothing else. No notification is ever sent, and the app never requests browser notification permission. Labelled "Prototype" in the UI, and the settings text says so explicitly in both languages. |
+| **Notifications**                      | **Removed.** An earlier prototype added four preference-only switches (localStorage, no notification ever sent, no browser permission ever requested, labelled "Prototype" in both languages). It was removed rather than left half-finished — see §18. |
 | **Offline support**                    | **Does not exist.** There is no service worker and nothing is precached. The demo dataset is an in-session fallback for _failed API calls_, not offline capability — the app cannot be opened from scratch without a network.                                         |
 | **"Export my data"**                   | Works, but exports only what the app itself stored (settings, favourites, last location).                                                                                                                                                                             |
 | **Pexels photos**                      | Optional, and they need a PHP host: the key is held by a server-side proxy, so on a static host (e.g. GitHub Pages) the endpoint can't run and locations fall back to gradients and emoji. Same fallback when no key is configured.                                   |
@@ -192,7 +192,7 @@ selectLocation(loc)
 
 ## 10. State management and localStorage — **[Code]**
 
-There is no state library. One plain object in `core/state.js` holds everything: `lang`, `mode`, `unitTemp`, `unitWind`, `theme`, `view`, `loc`, `wx`, `favorites`, `notifs`, `isDemo`, and the chart tab selections.
+There is no state library. One plain object in `core/state.js` holds everything: `lang`, `mode`, `unitTemp`, `unitWind`, `theme`, `view`, `loc`, `wx`, `favorites`, `isDemo`, and the chart tab selections.
 
 The persistence pattern is **"mutate state, persist, re-render"** — no reactivity, no observers.
 
@@ -204,7 +204,6 @@ The persistence pattern is **"mutate state, persist, re-render"** — no reactiv
 | `ws_theme`               | `"light"` / `"dark"` / `"system"`   |
 | `ws_favs`                | array of location objects           |
 | `ws_lastLoc`             | location to restore on next visit   |
-| `ws_notifs`              | the four notification preferences   |
 | `ws_geo`                 | cached geolocation fix (30-min TTL) |
 
 **A defensive detail worth mentioning:** **[Code]** every read goes through `core/storage.js`, where each one is wrapped in `try/catch`. A single corrupted value — from a partial write, a browser extension, or someone editing devtools — cannot crash startup, and localStorage being unavailable entirely (private mode, quota exceeded) degrades to "preferences don't persist" rather than a blank page.
@@ -350,14 +349,14 @@ Two layers, deliberately separated.
 6. **Bilingual by construction**, not by retrofit.
 7. **A credential moved out of the browser, with the reasoning to back it.** Not "I added a proxy", but: I can say which of my two keys belongs client-side and why, what the prefix actually controls, where the secret lives on the server and why that directory, what the endpoint validates, and what the proxy still does _not_ protect against.
 
-**[Inference]** 8. **It is honest about itself.** The prototype badge and the corrected offline wording are cases where the project says "this doesn't work yet" instead of hiding it. The Pexels key is the counter-example that proves the point: it was documented as a known limitation, and then actually fixed.
+**[Inference]** 8. **It is honest about itself.** Removing the incomplete Notifications prototype instead of leaving it half-built, and the corrected offline wording, are cases where the project says "this doesn't work yet" instead of hiding it. The Pexels key is the counter-example that proves the point: it was documented as a known limitation, and then actually fixed.
 
 ---
 
 ## 18. Known limitations — **[Code]**
 
 1. No service worker → **not** an offline app.
-2. Notifications are preferences only.
+2. No notifications: an earlier preferences-only prototype was removed rather than shipped half-finished.
 3. **Photos now need a server that can run the proxy** (Vercel serverless function or a PHP host). The Pexels key is server-side, so a purely static deployment (GitHub Pages) can't run the proxy and falls back to gradients. That is a deliberate trade: portability given up for a credential that is no longer published.
 4. **The proxy is open by design.** It keeps the key private, but anyone can call `/api/pexels` and consume your quota. Per-IP rate limiting blunts this; only authentication would close it, and a public weather site has no basis for that.
 5. **The rate limiter is best-effort.** It uses per-IP files in the system temp directory and deliberately fails _open_ — if the directory is unwritable on shared hosting, requests pass rather than the site breaking. It also does not survive a load-balanced multi-server setup.
@@ -386,7 +385,7 @@ Ordered by effort-to-value. **[Inference]** throughout — these are proposals, 
 
 4. A service worker precaching the app shell — this, and only this, would make the offline claim true.
 5. A short-lived server-side cache in the photo proxy (query → result), so repeat visitors don't each spend a Pexels request, and quota abuse via the open endpoint costs less.
-6. Weather alerts from a real warnings API — which would make the notifications section real.
+6. Weather alerts from a real warnings API — the fastest path back to a genuine notifications feature, now that the preferences-only prototype has been removed.
 7. Regional air-quality indices instead of European-only.
 
 **Larger**
@@ -415,7 +414,7 @@ Ordered by effort-to-value. **[Inference]** throughout — these are proposals, 
 
 **(1:20–1:45) The engineering I'm proudest of.** Three things. First, resilience: 8-second timeouts, a 5-minute cache that deduplicates simultaneous requests, and a deterministic demo dataset if everything fails — so the page is never broken. Second, performance: the map library is 210 KB gzipped, and it's code-split so you only download it if you actually open a map. Third, accessibility: real buttons everywhere, and the mobile menu is properly `inert` when it's closed, so it isn't secretly tabbable.
 
-**(1:45–2:00) What's honest about it.** Notifications are a prototype — they save preferences and nothing else, and the UI says so. It is not an offline app; the demo data is a fallback for failed requests, not offline support. One thing I did fix rather than document: my Pexels key used to be compiled into the JavaScript, because anything with Vite's `VITE_` prefix is. Pexels keys can't be domain-restricted, so that key was effectively published. It now sits in a file outside the web root and the browser calls my own endpoint instead. The build fails if a credential ever reappears in the bundle.
+**(1:45–2:00) What's honest about it.** The Notifications prototype — preference-only switches with a UI that said so — has since been removed rather than left half-finished. It is not an offline app; the demo data is a fallback for failed requests, not offline support. One thing I did fix rather than document: my Pexels key used to be compiled into the JavaScript, because anything with Vite's `VITE_` prefix is. Pexels keys can't be domain-restricted, so that key was effectively published. It now sits in a file outside the web root and the browser calls my own endpoint instead. The build fails if a credential ever reappears in the bundle.
 
 ---
 
@@ -435,7 +434,7 @@ Ordered by effort-to-value. **[Inference]** throughout — these are proposals, 
 
 **5. Testing (45 s)** — the two layers and why they're separate. The strongest line: _"No end-to-end test can touch the network — anything unmocked is aborted, so the suite can't silently become flaky."_
 
-**6. Limitations and next steps (45 s)** — say these before you're asked. Notifications are a prototype; it isn't offline; the photo proxy keeps the key private but is itself open to anyone who calls it, and it needs a PHP host, so a static deployment loses photos. Then the fixes: a service worker, and a server-side cache in front of the proxy.
+**6. Limitations and next steps (45 s)** — say these before you're asked. There's no notification feature — the earlier preferences-only prototype was removed; it isn't offline; the photo proxy keeps the key private but is itself open to anyone who calls it, and it needs a PHP host, so a static deployment loses photos. Then the fixes: a service worker, and a server-side cache in front of the proxy.
 
 **7. Close (30 s)** — **[You]** what you learned. The most credible version names something that surprised you or that you got wrong first.
 
@@ -498,9 +497,9 @@ Rehearse this. **[Code]** — every step works.
 
 > Four layers. Every request times out after 8 seconds so nothing hangs. A 5-minute cache means a recently-viewed location doesn't need the network. If a request does fail, demo data takes over and the badge changes. And features degrade independently — no MapTiler key means no map, but weather still works.
 
-**6. "Do the notifications work?"**
+**6. "Do you have notifications?"**
 
-> No. They save preferences to localStorage and nothing else. The app never even asks for notification permission. They're badged "Prototype" and the settings text says so in both languages. Making them real needs a service worker and a push service — I listed it as future work rather than shipping a switch that lies.
+> No — there's no notification feature. An earlier prototype added four preference-only switches (labelled "Prototype", saved to localStorage, no notification ever sent, no browser permission ever requested), and it was removed rather than left half-finished. Making real notifications needs a service worker and a push service — I listed that as future work rather than shipping a switch that lies.
 
 **7. "How do you know it works? Did you just click around?"**
 
@@ -569,7 +568,7 @@ These are the ways a good project loses credibility. **[Code]** — each corresp
 | ❌ Don't say                              | ✅ Say instead                                                                                                                                                                                                                                        |
 | ----------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | "It works offline."                       | "It falls back to demo data if an API fails while the app is open. It's not an offline app — there's no service worker."                                                                                                                              |
-| "It sends weather alerts."                | "The notification switches save preferences. Nothing is sent yet — they're a prototype."                                                                                                                                                              |
+| "It sends weather alerts."                | "There's no notification feature — an earlier preferences-only prototype was removed rather than left half-finished."                                                                                                                                 |
 | "My API keys are secure."                 | "The Pexels key is server-side and never reaches the browser. The MapTiler key is in the bundle on purpose and is protected by an allowed-origins list, not by secrecy. And my proxy is still an open endpoint — it protects the key, not the quota." |
 | "It's fully accessible / WCAG compliant." | "I made specific accessibility decisions — real buttons, `inert` on the closed drawer, focus trapping, reduced-motion support." **[You]** — only claim conformance if you actually audited against the standard.                                      |
 | "It's a PWA."                             | It isn't. No manifest, no service worker.                                                                                                                                                                                                             |

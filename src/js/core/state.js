@@ -4,8 +4,6 @@
    imports instead of an implicit global). */
 import { getStr, getJSON, KEYS } from "./storage.js";
 
-const DEFAULT_NOTIFS = { alerts: true, daily: true, changes: true, features: false };
-
 const legacyImperial = getStr(KEYS.legacyUnits) === "imperial";
 
 export const state = {
@@ -21,7 +19,6 @@ export const state = {
   /* off by default — getStr() returns null for a visitor who never set it,
      and null !== "1" */
   clockSeconds: getStr(KEYS.clockSeconds) === "1",
-  notifs: getJSON(KEYS.notifs, DEFAULT_NOTIFS),
   favorites: getJSON(KEYS.favorites, []),
   /* Recent searches: opt-in, so a missing flag means off for a new visitor.
      The list itself is loaded/sanitized by features/recent-locations.js at

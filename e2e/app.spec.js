@@ -320,21 +320,6 @@ test.describe("settings page", () => {
     expect(text).not.toMatch(/pexels_api_key|maptiler_key|VITE_[A-Z_]*KEY/i);
   });
 
-  test("74. the prototype notification switches persist locally", async ({ app }) => {
-    await goToSettings(app);
-    const alerts = app.locator('.switch[data-notif="alerts"]');
-    await expect(alerts).toHaveAttribute("aria-checked", "true");
-    await alerts.click();
-    await expect(alerts).toHaveAttribute("aria-checked", "false");
-
-    await app.reload();
-    await goToSettings(app);
-    await expect(app.locator('.switch[data-notif="alerts"]')).toHaveAttribute(
-      "aria-checked",
-      "false",
-    );
-  });
-
   test("75. the settings page has no horizontal overflow at phone width", async ({ app }) => {
     await app.setViewportSize({ width: 390, height: 844 });
     await app.locator("#burgerBtn").click();
@@ -355,7 +340,6 @@ test.describe("settings page", () => {
     await app.locator('#modeTiles .set-tile[data-mode="detailed"]').click();
     await app.locator('#themeTiles .set-tile[data-theme="system"]').click();
     await app.locator('#langTiles .set-tile[data-lang="en"]').click();
-    await app.locator('.switch[data-notif="daily"]').click();
     expect(errors).toEqual([]);
   });
 });
@@ -657,9 +641,9 @@ test.describe("geographic identity box", () => {
       expect(flag.height).toBeGreaterThan(0);
     }
     const countryFlag = (app) =>
-      app.locator(
-        "#mapWeatherPanel .geo-identity-row > .geo-chip > img.flag-img.geo-chip-flag",
-      ).first();
+      app
+        .locator("#mapWeatherPanel .geo-identity-row > .geo-chip > img.flag-img.geo-chip-flag")
+        .first();
 
     // France
     await searchAndSelect(app, TARBES_LABEL);
@@ -1498,9 +1482,6 @@ test.describe("forecast advisory banner", () => {
     await installMocks(page, { weatherKind: "storm" });
     await page.goto("/");
     await expect(region(page)).toBeVisible();
-    /* flipping a prototype notification switch must not change that either */
-    await page.locator('.side-item[data-view="settings"]').click();
-    await page.locator('#view-settings .switch[data-notif="alerts"]').click();
 
     expect(await page.evaluate(() => window.__notifyCalls)).toEqual([]);
     expect(await page.evaluate(() => (window.Notification || {}).permission ?? "default")).not.toBe(
@@ -2048,9 +2029,7 @@ test.describe("language menu accessibility", () => {
     await expect(page.locator("#sidebar")).toHaveAttribute("aria-hidden", "false");
   });
 
-  test("lists Français first, English second, with French selected by default", async ({
-    app,
-  }) => {
+  test("lists Français first, English second, with French selected by default", async ({ app }) => {
     const buttons = app.locator("#langMenu button");
     const order = await buttons.evaluateAll((els) => els.map((el) => el.dataset.lang));
     expect(order).toEqual(["fr", "en"]);
@@ -2061,8 +2040,14 @@ test.describe("language menu accessibility", () => {
     expect(labels).toEqual(["Français", "English"]);
 
     /* flags, roles and aria-checked are preserved on the reordered items */
-    await expect(app.locator('#langMenu button[data-lang="fr"]')).toHaveAttribute("role", "menuitemradio");
-    await expect(app.locator('#langMenu button[data-lang="en"]')).toHaveAttribute("role", "menuitemradio");
+    await expect(app.locator('#langMenu button[data-lang="fr"]')).toHaveAttribute(
+      "role",
+      "menuitemradio",
+    );
+    await expect(app.locator('#langMenu button[data-lang="en"]')).toHaveAttribute(
+      "role",
+      "menuitemradio",
+    );
     await expect(app.locator('#langMenu button[data-lang="fr"] [data-flag]')).toHaveCount(1);
     await expect(app.locator('#langMenu button[data-lang="en"] [data-flag]')).toHaveCount(1);
 
