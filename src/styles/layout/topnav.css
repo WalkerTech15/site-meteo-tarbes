@@ -134,6 +134,14 @@ body[data-theme="dark"] .topnav {
   border-radius: 12px;
 }
 
+@media (min-width: 901px) {
+  /* Keep the display-mode control between the search and theme controls,
+     with a little extra separation from the theme button. */
+  .topnav-actions #modeToggle {
+    margin-right: 8px;
+  }
+}
+
 #modeToggle button,
 #modeToggle .seg-thumb,
 #modeToggleSide button,

@@ -38,6 +38,7 @@ const TOKYO = loc("tokyo");
 const LIMA = loc("lima");
 const OSLO = loc("oslo");
 const CAIRO = loc("cairo");
+const MADRID = loc("madrid");
 
 let store;
 const originalFetch = globalThis.fetch;
@@ -85,7 +86,7 @@ describe("loadComparison — sanitizing what comes back from storage", () => {
 
 describe("toggleComparison", () => {
   beforeEach(() => {
-    state.favorites = [PARIS, TOKYO, LIMA, OSLO, CAIRO];
+    state.favorites = [PARIS, TOKYO, LIMA, OSLO, CAIRO, MADRID];
   });
 
   it("adds, then removes, reporting which happened", () => {
@@ -105,14 +106,14 @@ describe("toggleComparison", () => {
   });
 
   it("refuses to exceed the cap, and says so instead of failing silently", () => {
-    for (const l of [PARIS, TOKYO, LIMA, OSLO]) expect(toggleComparison(l)).toBe("added");
+    for (const l of [PARIS, TOKYO, LIMA, OSLO, CAIRO]) expect(toggleComparison(l)).toBe("added");
     expect(comparisonFull()).toBe(true);
-    expect(toggleComparison(CAIRO)).toBe("full");
+    expect(toggleComparison(MADRID)).toBe("full");
     expect(state.comparison).toHaveLength(MAX_COMPARISON);
   });
 
   it("still lets an already-selected place be removed at the cap", () => {
-    for (const l of [PARIS, TOKYO, LIMA, OSLO]) toggleComparison(l);
+    for (const l of [PARIS, TOKYO, LIMA, OSLO, CAIRO]) toggleComparison(l);
     expect(toggleComparison(PARIS)).toBe("removed");
     expect(comparisonFull()).toBe(false);
   });

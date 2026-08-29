@@ -36,6 +36,20 @@ body[data-theme="dark"] .chart-tabs button[aria-selected="true"] {
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.4);
 }
 
+/* Match the Forecast metric switch to the rectangular Simple/Detailed
+   control without changing the Home detailed chart tabs. */
+#fcTabs {
+  gap: 4px;
+  padding: 4px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+}
+
+#fcTabs button {
+  padding: 7px 12px;
+  border-radius: 8px;
+}
+
 .chart-card {
   padding: var(--s-3);
   border-radius: var(--r-lg);

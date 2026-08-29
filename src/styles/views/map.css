@@ -126,6 +126,12 @@ body[data-theme="dark"] .map-filters .chip.is-active {
   box-shadow: var(--shadow-sm);
 }
 
+/* Match the rectangular Simple/Detailed control while keeping this change
+   limited to the map's share action. */
+.map-share-chip {
+  border-radius: 12px;
+}
+
 .map-card {
   position: relative;
   isolation: isolate;
@@ -948,6 +954,14 @@ body[data-theme="dark"] .geo-hierarchy {
     border-color 0.18s,
     background 0.18s,
     transform 0.18s;
+}
+.map-panel-close span {
+  display: flex;
+  width: 100%;
+  height: 100%;
+  align-items: center;
+  justify-content: center;
+  line-height: 1;
 }
 .map-panel-close:hover,
 .map-panel-close:focus-visible {

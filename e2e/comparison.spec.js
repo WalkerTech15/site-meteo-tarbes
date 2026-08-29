@@ -123,22 +123,22 @@ test.describe("compare places", () => {
     await expect(chips(app).nth(0)).toHaveAttribute("aria-pressed", "false");
   });
 
-  test("caps the selection at four places and explains why", async ({ app }) => {
-    await saveNamedPlaces(app, ["paris", "tokyo", "sydney", "france", "japan"]);
+  test("caps the selection at five places and explains why", async ({ app }) => {
+    await saveNamedPlaces(app, ["paris", "tokyo", "sydney", "france", "japan", "vietnam"]);
     await goToFavorites(app);
 
     const all = chips(app);
     const count = await all.count();
-    expect(count).toBeGreaterThanOrEqual(5);
-    for (let i = 0; i < 4; i++) await all.nth(i).click();
+    expect(count).toBeGreaterThanOrEqual(6);
+    for (let i = 0; i < 5; i++) await all.nth(i).click();
 
-    await expect(columns(app)).toHaveCount(5); /* metric + four places */
-    /* the fifth chip is disabled rather than silently ignored */
-    await expect(all.nth(4)).toBeDisabled();
+    await expect(columns(app)).toHaveCount(6); /* metric + five places */
+    /* the sixth chip is disabled rather than silently ignored */
+    await expect(all.nth(5)).toBeDisabled();
     /* and an already-selected chip stays clickable, so a slot can be freed */
     await expect(all.nth(0)).toBeEnabled();
     await all.nth(0).click();
-    await expect(all.nth(4)).toBeEnabled();
+    await expect(all.nth(5)).toBeEnabled();
   });
 
   test("survives a reload — the picked places come back", async ({ app }) => {

@@ -19,11 +19,9 @@ import { getJSON, setJSON, KEYS } from "../core/storage.js";
 import { FETCH_TIMEOUT_MS, FAVORITES_WEATHER_TTL_MS } from "../core/config.js";
 import { createLatestOnly } from "../core/latest-only.js";
 
-/* How many places can be compared at once. Four columns is what fits a
-   phone's horizontal scroll without the labels collapsing, and beyond that
-   a comparison stops being readable at a glance — which is the whole point
-   of the feature. */
-export const MAX_COMPARISON = 4;
+/* How many places can be compared at once. Five columns remains readable
+   with the existing horizontal scroll on smaller screens. */
+export const MAX_COMPARISON = 5;
 
 /* The metrics a comparison shows, in display order. Kept as data (rather
    than inline in the renderer) so the row set is one list to read, and so
