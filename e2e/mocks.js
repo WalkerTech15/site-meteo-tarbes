@@ -170,6 +170,25 @@ function tarbesFeature() {
   };
 }
 
+/* Shaped exactly as MapTiler answers for a sea: an unremarkable "place"
+   type, both language variants of the name, and an Italian country context
+   from the territorial-waters polygon the point falls in. Nothing here says
+   "water" except the name itself. */
+function mediterraneanSeaFeature() {
+  const { lon, lat } = CLICK_SEA_NAMED;
+  return {
+    id: "place.e2e-mediterranean",
+    text: "Mediterranean Sea",
+    text_en: "Mediterranean Sea",
+    text_fr: "Mer Méditerranée",
+    place_name: "Mediterranean Sea",
+    place_type: ["place"],
+    center: [lon, lat],
+    properties: { country_code: "it" },
+    context: [{ id: "country.9", text: "Italia", country_code: "it" }],
+  };
+}
+
 function lyonFeature() {
   return {
     id: "place.e2e-lyon",
@@ -216,6 +235,12 @@ export const CLICK_OCEAN = { lon: -41.5, lat: 33.2 };
    County, Alberta, at ~52.8652°N -112.4788°E. */
 export const CLICK_COUNTY = { lon: -112.4788, lat: 52.8652, label: "Camrose" };
 export const CLICK_COUNTRY = { lon: 19.1451, lat: 51.9194, label: "Pologne" };
+/* Open water the provider DOES name. MapTiler has no marine place_type this
+   app maps, so a sea comes back as a generic "place" — and territorial
+   waters mean it can carry a country context too. Distinct from CLICK_OCEAN
+   (no feature at all): here the marine identity has to be recognised from
+   the returned NAME, not inferred from the coordinate. */
+export const CLICK_SEA_NAMED = { lon: 15, lat: 36, label: "Mer Méditerranée" };
 
 const near = (value, target) => Math.abs(value - target) < 0.4;
 
@@ -367,6 +392,9 @@ export function reverseGeocodePayloadFor(lon, lat) {
   }
   if (near(lon, CLICK_COUNTRY.lon) && near(lat, CLICK_COUNTRY.lat)) {
     return { features: [polandCountryFeature()] };
+  }
+  if (near(lon, CLICK_SEA_NAMED.lon) && near(lat, CLICK_SEA_NAMED.lat)) {
+    return { features: [mediterraneanSeaFeature()] };
   }
   return { features: [genericReverseFeature(lon, lat)] };
 }

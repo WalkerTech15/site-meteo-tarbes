@@ -173,6 +173,18 @@ const LANDMASSES = [
   [165, -48, 180, -33], // New Zealand
 ];
 
+/* The five open oceans, named separately from WATERS because they are the
+ * coordinate fallback rather than boxes — and because the by-name lookup
+ * below has to recognise them too. */
+const OCEANS = [
+  ["Arctic Ocean", "Océan Arctique"],
+  ["Southern Ocean", "Océan Austral"],
+  ["Atlantic Ocean", "Océan Atlantique"],
+  ["Indian Ocean", "Océan Indien"],
+  ["Pacific Ocean", "Océan Pacifique"],
+];
+const ocean = (i) => ({ en: OCEANS[i][0], fr: OCEANS[i][1], kind: "ocean" });
+
 /**
  * @param {number} lat
  * @param {number} lon
@@ -190,10 +202,63 @@ export function nearestMarineRegion(lat, lon) {
   }
   if (LANDMASSES.some((bbox) => inBox(lat, lon, bbox))) return null;
 
-  if (lat >= 66) return { en: "Arctic Ocean", fr: "Océan Arctique", kind: "ocean" };
-  if (lat <= -60) return { en: "Southern Ocean", fr: "Océan Austral", kind: "ocean" };
-  if (lon >= -70 && lon <= 20)
-    return { en: "Atlantic Ocean", fr: "Océan Atlantique", kind: "ocean" };
-  if (lon > 20 && lon <= 147) return { en: "Indian Ocean", fr: "Océan Indien", kind: "ocean" };
-  return { en: "Pacific Ocean", fr: "Océan Pacifique", kind: "ocean" };
+  if (lat >= 66) return ocean(0);
+  if (lat <= -60) return ocean(1);
+  if (lon >= -70 && lon <= 20) return ocean(2);
+  if (lon > 20 && lon <= 147) return ocean(3);
+  return ocean(4);
+}
+
+/* Diacritic- and case-insensitive, punctuation-tolerant. Deliberately local
+   rather than reusing data/locations.js normalize(): this module is pure and
+   dependency-free by design (see the header), and the comparison here only
+   ever runs against the fixed table below. */
+function normalizeWaterName(value) {
+  return String(value || "")
+    .normalize("NFD")
+    .replace(/[̀-ͯ]/g, "")
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, " ")
+    .trim();
+}
+
+/* name (either language) → the water body, built once from the same tables
+   nearestMarineRegion() uses, so the two can never disagree. */
+const WATERS_BY_NAME = new Map();
+for (const [en, fr, , kind] of WATERS) {
+  WATERS_BY_NAME.set(normalizeWaterName(en), { en, fr, kind });
+  WATERS_BY_NAME.set(normalizeWaterName(fr), { en, fr, kind });
+}
+for (const [en, fr] of OCEANS) {
+  const entry = { en, fr, kind: "ocean" };
+  WATERS_BY_NAME.set(normalizeWaterName(en), entry);
+  WATERS_BY_NAME.set(normalizeWaterName(fr), entry);
+}
+
+/**
+ * Identify a body of water from a NAME rather than a coordinate.
+ *
+ * This is what lets a water body that a geocoder *did* name — a search for
+ * "Pacific Ocean", or a reverse lookup that answered "Mer Méditerranée" —
+ * be classified as marine. Without it such a result keeps whatever kind the
+ * provider's place_type mapped to, which for an unrecognised marine type is
+ * "city" (services/geocoding-api.js MT_KIND) — so the app would label an
+ * ocean "City / Ville" and search Pexels for a cityscape.
+ *
+ * Exact whole-name matching only, in either interface language. Substring
+ * matching is deliberately NOT used: "Bay City" and "Oceanside" are towns,
+ * and a photo query built from the wrong classification is exactly the bug
+ * this prevents.
+ *
+ * @param {string | {en?: string, fr?: string}} name
+ * @returns {{en: string, fr: string, kind: string} | null}
+ */
+export function marineRegionByName(name) {
+  if (!name) return null;
+  const candidates = typeof name === "object" ? [name.en, name.fr] : [name];
+  for (const candidate of candidates) {
+    const hit = WATERS_BY_NAME.get(normalizeWaterName(candidate));
+    if (hit) return hit;
+  }
+  return null;
 }

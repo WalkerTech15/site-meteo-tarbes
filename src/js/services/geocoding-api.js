@@ -8,6 +8,7 @@
    text. */
 import { state } from "../core/state.js";
 import { normalize } from "../data/locations.js";
+import { marineRegionByName } from "../core/marine-regions.js";
 import {
   MAPTILER_KEY,
   FETCH_TIMEOUT_MS,
@@ -89,6 +90,35 @@ function localizedText(feature) {
 const EMPTY_TEXT = { en: "", fr: "" };
 const hasText = (value) => Boolean(value && (value.en || value.fr));
 
+/* The city-blue gradient behind a loading/absent photo, and the cooler
+   water-toned one a body of water uses instead (same pair as
+   core/coord-location.js, which builds the map-click equivalent). */
+const LAND_GRAD = ["#3B82F6", "#1E40AF"];
+const WATER_GRAD = ["#0EA5E9", "#0C4A6E"];
+
+/* MapTiler has no marine place_type this app recognises, so a search for an
+   ocean or sea arrives with an unmapped type and falls through MT_KIND's
+   default to kind "city" — which would label the Pacific "City / Ville" and
+   query Pexels for a cityscape. Recognising the feature by its own name
+   (core/marine-regions.js, exact whole-name match in either language) puts
+   it back on the marine branch every consumer already keys off: kind
+   "ocean" plus the finer `waterKind`, no country/region/flag, and the water
+   gradient. Land results keep exactly the shape they had. */
+function marineFields(name, kind, cc, region, country) {
+  const marine = marineRegionByName(name);
+  if (!marine) {
+    return { kind, cc, region, country, waterKind: null, grad: LAND_GRAD };
+  }
+  return {
+    kind: "ocean",
+    cc: "",
+    region: EMPTY_TEXT,
+    country: EMPTY_TEXT,
+    waterKind: marine.kind,
+    grad: WATER_GRAD,
+  };
+}
+
 /* Convert one MapTiler GeoJSON feature into a WeatherSphere loc object. */
 function featureToLoc(f) {
   const primary = (f.place_type && f.place_type[0]) || "place";
@@ -117,17 +147,13 @@ function featureToLoc(f) {
   const geometry = ["Polygon", "MultiPolygon"].includes(f.geometry?.type) ? f.geometry : null;
   return {
     id: "mt-" + (f.id || `${f.center[0]},${f.center[1]}`),
-    kind: map.kind,
-    cc: ccFromFeature(f),
+    ...marineFields(name, map.kind, ccFromFeature(f), region, country),
     flag: "📍",
     lat: f.center[1],
     lon: f.center[0],
     name,
-    region,
-    country,
     landmark: null,
     aliases: [],
-    grad: ["#3B82F6", "#1E40AF"],
     dynamic: true,
     bbox: Array.isArray(f.bbox) && f.bbox.length === 4 ? f.bbox : null,
     geometry,

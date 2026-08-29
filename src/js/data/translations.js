@@ -58,6 +58,9 @@ export const I18N = {
     kindPlace: "Place",
     kindOcean: "Ocean / Sea",
     kindLake: "Lake",
+    kindGulf: "Gulf",
+    kindBay: "Bay",
+    kindStrait: "Strait",
     landmarkLabel: "Iconic landmark",
 
     conditions: "Current conditions",
@@ -529,6 +532,9 @@ export const I18N = {
     kindPlace: "Lieu",
     kindOcean: "Océan / Mer",
     kindLake: "Lac",
+    kindGulf: "Golfe",
+    kindBay: "Baie",
+    kindStrait: "Détroit",
     landmarkLabel: "Monument emblématique",
 
     conditions: "Conditions actuelles",

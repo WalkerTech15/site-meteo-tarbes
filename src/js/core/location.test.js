@@ -173,11 +173,27 @@ describe("locKindLabel", () => {
     expect(locKindLabel({ kind: "state" })).toBe(kindLabel("state"));
   });
 
-  it("keeps Ocean / Sea for oceans, seas, gulfs, bays and straits", () => {
+  it("keeps Ocean / Sea for oceans and seas", () => {
     state.lang = "en";
-    for (const waterKind of ["ocean", "sea", "gulf", "bay", "strait"]) {
+    for (const waterKind of ["ocean", "sea"]) {
       expect(locKindLabel({ kind: "ocean", waterKind })).toBe("Ocean / Sea");
     }
+  });
+
+  /* Gulfs, bays and straits used to share the "Ocean / Sea" label as arms of
+     the sea. They now name themselves: the app normalises every water body
+     to kind "ocean", so waterKind is the only thing that can tell the Gulf
+     of Mexico from the open Pacific, and calling it an ocean on screen was
+     simply less accurate than the data we already had. */
+  it("gives gulfs, bays and straits their own label, in both languages", () => {
+    state.lang = "en";
+    expect(locKindLabel({ kind: "ocean", waterKind: "gulf" })).toBe("Gulf");
+    expect(locKindLabel({ kind: "ocean", waterKind: "bay" })).toBe("Bay");
+    expect(locKindLabel({ kind: "ocean", waterKind: "strait" })).toBe("Strait");
+    state.lang = "fr";
+    expect(locKindLabel({ kind: "ocean", waterKind: "gulf" })).toBe("Golfe");
+    expect(locKindLabel({ kind: "ocean", waterKind: "bay" })).toBe("Baie");
+    expect(locKindLabel({ kind: "ocean", waterKind: "strait" })).toBe("Détroit");
   });
 
   it("labels a lake as a lake, in both languages", () => {
@@ -350,5 +366,73 @@ describe("localTimeStr", () => {
     expect(localTimeStr(null)).toBeNull();
     expect(localTimeStr(undefined)).toBeNull();
     expect(localTimeStr("Not/AZone")).toBeNull();
+  });
+});
+
+/* Priority 2's verification matrix, checked at the one helper every visible
+   surface routes through (search rows, hero kicker, map panel, recents,
+   favorites). The point is not that each label is pretty but that no place
+   type can silently fall through to the "City / Ville" default — which is
+   exactly how a body of water used to be described as a city. */
+describe("every location type reports its own label, never the City default", () => {
+  const CITY_DEFAULT = { en: "City", fr: "Ville" };
+
+  const land = [
+    ["Paris", { kind: "city" }, { en: "City", fr: "Ville" }],
+    ["France", { kind: "country" }, { en: "Country", fr: "Pays" }],
+    ["Japan", { kind: "country" }, { en: "Country", fr: "Pays" }],
+    ["United States", { kind: "country" }, { en: "Country", fr: "Pays" }],
+    ["Canada", { kind: "country" }, { en: "Country", fr: "Pays" }],
+    ["Texas", { kind: "state" }, { en: "US State", fr: "État américain" }],
+    ["Quebec", { kind: "province" }, { en: "Province", fr: "Province" }],
+    ["Occitanie", { kind: "region" }, { en: "Region", fr: "Région" }],
+    ["Tarbes", { kind: "town" }, { en: "Town", fr: "Ville" }],
+    ["Saint-Rémy", { kind: "village" }, { en: "Village", fr: "Village" }],
+  ];
+
+  const water = [
+    ["Pacific Ocean", "ocean", { en: "Ocean / Sea", fr: "Océan / Mer" }],
+    ["Mediterranean Sea", "sea", { en: "Ocean / Sea", fr: "Océan / Mer" }],
+    ["Gulf of Mexico", "gulf", { en: "Gulf", fr: "Golfe" }],
+    ["Hudson Bay", "bay", { en: "Bay", fr: "Baie" }],
+    ["Some Strait", "strait", { en: "Strait", fr: "Détroit" }],
+    ["Lake Superior", "lake", { en: "Lake", fr: "Lac" }],
+  ];
+
+  it("labels every land type correctly in both languages", () => {
+    for (const [, loc, expected] of land) {
+      for (const lang of ["en", "fr"]) {
+        state.lang = lang;
+        expect(locKindLabel(loc)).toBe(expected[lang]);
+      }
+    }
+  });
+
+  it("labels every body of water as water, never as a city", () => {
+    for (const [, waterKind, expected] of water) {
+      for (const lang of ["en", "fr"]) {
+        state.lang = lang;
+        const label = locKindLabel({ kind: "ocean", waterKind });
+        expect(label).toBe(expected[lang]);
+        expect(label).not.toBe(CITY_DEFAULT[lang]);
+      }
+    }
+  });
+
+  /* The app normalises water to kind "ocean", but a stored row, a provider,
+     or a future refactor could hand these through as the kind itself — and
+     then the bare-kind path must not say "City" either. */
+  it("never says City for a raw water kind either", () => {
+    for (const kind of ["ocean", "sea", "gulf", "bay", "strait", "lake"]) {
+      for (const lang of ["en", "fr"]) {
+        state.lang = lang;
+        expect(kindLabel(kind)).not.toBe(CITY_DEFAULT[lang]);
+      }
+    }
+  });
+
+  it("carries no country flag for a body of water", () => {
+    state.lang = "en";
+    expect(flagsHtml({ kind: "ocean", waterKind: "sea", cc: "", name: { en: "Med" } })).toBe("");
   });
 });

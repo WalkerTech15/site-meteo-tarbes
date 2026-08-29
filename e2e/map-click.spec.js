@@ -15,6 +15,7 @@ import {
   CLICK_REGION_BBOX,
   CLICK_COUNTY,
   CLICK_COUNTRY,
+  CLICK_SEA_NAMED,
 } from "./mocks.js";
 
 /* These specs drive REAL MapLibre + @maptiler/weather layers: every test
@@ -131,6 +132,27 @@ test.describe("clicking the map selects a location", () => {
        ("Ville" / City) a coordinate with no resolved kind used to fall back to */
     await expect(page.locator("#mapWeatherPanel .map-panel-location p")).toHaveText("Océan / Mer");
     /* weather still loads for the point */
+    await expect(page.locator("#mapWeatherPanel .map-panel-current strong")).not.toBeEmpty();
+  });
+
+  /* The other half of the ocean case. CLICK_OCEAN returns no feature, so the
+     coordinate alone identifies the water. Here the provider DOES answer —
+     with a generic "place" carrying an Italian country context — which used
+     to make a sea click inherit kind "city": the panel said "Ville", an
+     Italian flag appeared beside it, and the photo pipeline went looking for
+     a cityscape. */
+  test("a sea the geocoder names is still a sea, not a city", async ({ page }) => {
+    await installMocks(page);
+    await openMapAt(page, CLICK_SEA_NAMED, { zoom: 5 });
+    await clickMapCentre(page);
+
+    await expect(panelName(page)).toHaveText("Mer Méditerranée");
+    const subtitle = page.locator("#mapWeatherPanel .map-panel-location p");
+    await expect(subtitle).toHaveText("Océan / Mer");
+    await expect(subtitle).not.toHaveText("Ville");
+    /* no country owns a sea, so the territorial-waters flag must not show */
+    await expect(page.locator("#mapWeatherPanel .location-flags")).toHaveCount(0);
+    /* the weather for the point still loads */
     await expect(page.locator("#mapWeatherPanel .map-panel-current strong")).not.toBeEmpty();
   });
 

@@ -61,6 +61,10 @@ export function toRecentEntry(loc) {
   return {
     id: loc.id ? String(loc.id) : "",
     kind: loc.kind || "city",
+    /* Stored because it cannot be re-derived: `kind` is "ocean" for every
+       body of water, so without this a restored Lake Superior comes back
+       labelled "Ocean / Sea" and its photo is searched as a seascape. */
+    waterKind: loc.waterKind || null,
     lat,
     lon,
     name,
@@ -78,9 +82,15 @@ export function toRecentEntry(loc) {
    restored country/region is framed by its type-based zoom instead. */
 export function recentToLocation(entry) {
   if (!entry) return null;
+  /* An entry stored before waterKind was persisted still carries kind
+     "ocean", so the marine gradient is keyed off that rather than off
+     waterKind alone — an older recent row keeps the right colours even
+     though its finer kind is gone. */
+  const water = entry.kind === "ocean" || Boolean(entry.waterKind);
   return {
     id: entry.id || `recent-${entry.lat},${entry.lon}`,
     kind: entry.kind || "city",
+    waterKind: entry.waterKind || null,
     cc: entry.cc || "",
     flag: "📍",
     lat: entry.lat,
@@ -90,7 +100,7 @@ export function recentToLocation(entry) {
     country: { ...entry.country },
     landmark: null,
     aliases: [],
-    grad: ["#3B82F6", "#1E40AF"],
+    grad: water ? ["#0EA5E9", "#0C4A6E"] : ["#3B82F6", "#1E40AF"],
     dynamic: true,
     regionCode: entry.regionCode || "",
   };

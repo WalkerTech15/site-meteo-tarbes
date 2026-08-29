@@ -99,8 +99,22 @@ test.describe("recent locations", () => {
     await expect(rows(page)).toHaveCount(1);
 
     const entry = JSON.parse(await stored(page))[0];
+    /* waterKind is type metadata about the PLACE, not the visitor: every body
+       of water is stored as kind "ocean", so without it a restored lake comes
+       back labelled "Ocean / Sea" and its photo is queried as a seascape. */
     expect(Object.keys(entry).sort()).toEqual(
-      ["cc", "country", "id", "kind", "lat", "lon", "name", "region", "regionCode"].sort(),
+      [
+        "cc",
+        "country",
+        "id",
+        "kind",
+        "lat",
+        "lon",
+        "name",
+        "region",
+        "regionCode",
+        "waterKind",
+      ].sort(),
     );
     const raw = await stored(page);
     for (const forbidden of ["temp", "humidity", "wind", "hourly", "daily", "updatedAt"]) {

@@ -113,20 +113,42 @@ export function kindLabel(kind) {
       poi: t("kindPlace"),
       ocean: t("kindOcean"),
       sea: t("kindOcean"),
+      /* Every kind core/marine-regions.js can report is mapped here too, so
+         a water body can never fall through to the "City" default below —
+         the app normalises marine results to kind "ocean", but a stored or
+         provider-supplied kind must not be able to mislabel one. */
+      gulf: t("kindGulf"),
+      bay: t("kindBay"),
+      strait: t("kindStrait"),
+      lake: t("kindLake"),
     }[kind] || t("kindCity")
   );
 }
 
+/* waterKind (core/marine-regions.js) → its own label. Oceans and seas share
+   the existing "Ocean / Sea" wording; the rest name themselves, because
+   calling Lake Superior a sea — or the Gulf of Mexico an ocean — is simply
+   wrong on screen. */
+const WATER_KIND_LABEL = {
+  ocean: "kindOcean",
+  sea: "kindOcean",
+  gulf: "kindGulf",
+  bay: "kindBay",
+  strait: "kindStrait",
+  lake: "kindLake",
+};
+
 /* The label for a whole location rather than a bare kind string.
-   Identical to kindLabel(loc.kind) for everything on land, and for open
-   water too — EXCEPT a lake, which core/marine-regions.js can now identify
-   and which "Ocean / Sea" would plainly misdescribe. Gulfs, bays and
-   straits are arms of the sea and keep that label; only the freshwater
-   case needed its own. Every caller that renders a kind to the user should
-   use this, so a new waterKind never has to be chased across the UI. */
+   Identical to kindLabel(loc.kind) on land. For water it prefers the finer
+   `waterKind` core/marine-regions.js resolved, because the app deliberately
+   normalises every marine result to kind "ocean" — so this is the only
+   place that can tell Lake Superior from the Gulf of Mexico from the open
+   Pacific. Every caller that renders a kind to the user should use this, so
+   a new waterKind never has to be chased across the UI. */
 export function locKindLabel(loc) {
   if (!loc) return kindLabel(undefined);
-  if (loc.waterKind === "lake") return t("kindLake");
+  const water = WATER_KIND_LABEL[loc.waterKind];
+  if (water) return t(water);
   return kindLabel(loc.kind);
 }
 

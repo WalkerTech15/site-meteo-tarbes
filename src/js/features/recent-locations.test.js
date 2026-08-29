@@ -78,8 +78,23 @@ describe("what is stored", () => {
     const entry = toRecentEntry(
       place("mt-1", "Tarbes", { regionCode: "FR-OCC", bbox: [0, 0, 1, 1], _zoom: 11 }),
     );
+    /* waterKind joins the list because it cannot be re-derived on restore:
+       every body of water is stored as kind "ocean", so without it a
+       restored lake comes back labelled "Ocean / Sea". Still type metadata
+       about the place itself — nothing about the visitor. */
     expect(Object.keys(entry).sort()).toEqual(
-      ["cc", "country", "id", "kind", "lat", "lon", "name", "regionCode", "region"].sort(),
+      [
+        "cc",
+        "country",
+        "id",
+        "kind",
+        "lat",
+        "lon",
+        "name",
+        "regionCode",
+        "region",
+        "waterKind",
+      ].sort(),
     );
   });
 
@@ -196,5 +211,61 @@ describe("loading a store written earlier", () => {
 
   it("sanitizeRecents tolerates a non-array", () => {
     expect(sanitizeRecents("nope")).toEqual([]);
+  });
+});
+
+/* Priority 2: a recent row must not come back as a different KIND of place
+   than the one that was saved. Every body of water is stored as kind
+   "ocean", so waterKind is the only thing separating a lake from the open
+   sea — and it used to be dropped on the way to storage, so re-opening a
+   lake from Recents relabelled it "Ocean / Sea" and re-queried its photo as
+   a seascape. */
+describe("water bodies survive the recents round-trip", () => {
+  const water = (name, waterKind) => ({
+    id: `map-1,1`,
+    kind: "ocean",
+    waterKind,
+    lat: 1,
+    lon: 1,
+    name: { en: name, fr: name },
+    region: { en: "", fr: "" },
+    country: { en: "", fr: "" },
+    cc: "",
+  });
+
+  it("preserves the finer water kind through store and restore", () => {
+    for (const kind of ["ocean", "sea", "gulf", "bay", "strait", "lake"]) {
+      const restored = recentToLocation(toRecentEntry(water("Somewhere Wet", kind)));
+      expect(restored.kind).toBe("ocean");
+      expect(restored.waterKind).toBe(kind);
+    }
+  });
+
+  it("restores the water gradient rather than the city one", () => {
+    const restored = recentToLocation(toRecentEntry(water("Lake Superior", "lake")));
+    expect(restored.grad).toEqual(["#0EA5E9", "#0C4A6E"]);
+  });
+
+  /* Rows written before waterKind was stored still carry kind "ocean" —
+     they must not regress to the city gradient on restore. */
+  it("still treats a legacy entry with no waterKind as water", () => {
+    const legacy = recentToLocation({
+      id: "map-1,1",
+      kind: "ocean",
+      lat: 1,
+      lon: 1,
+      name: { en: "Pacific Ocean", fr: "Océan Pacifique" },
+      region: { en: "", fr: "" },
+      country: { en: "", fr: "" },
+      cc: "",
+    });
+    expect(legacy.grad).toEqual(["#0EA5E9", "#0C4A6E"]);
+    expect(legacy.waterKind).toBeNull();
+  });
+
+  it("leaves a land location on the city gradient with no water kind", () => {
+    const restored = recentToLocation(toRecentEntry(place("mt-1", "Tarbes")));
+    expect(restored.grad).toEqual(["#3B82F6", "#1E40AF"]);
+    expect(restored.waterKind).toBeNull();
   });
 });

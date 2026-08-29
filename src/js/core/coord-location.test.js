@@ -125,3 +125,61 @@ describe("coordLocation", () => {
     expect(coordLocation(1, 2, { bbox: [0, 0, 1] }).bbox).toBeNull();
   });
 });
+
+/* Priority 1: a coordinate the geocoder DID name, where that name is itself a
+   body of water. Before this, such a result kept the provider's place kind —
+   "city" for any marine type MapTiler's mapping doesn't recognise — so the
+   panel said "City / Ville" and the photo pipeline searched for a cityscape,
+   which is how an ocean ended up showing a city photo from somewhere else. */
+describe("coordLocation — water the geocoder named", () => {
+  it("classifies a named ocean as marine rather than a city", () => {
+    const loc = coordLocation(0, -140, { name: { en: "Pacific Ocean" }, kind: "city" });
+    expect(loc.kind).toBe("ocean");
+    expect(loc.waterKind).toBe("ocean");
+    expect(loc.coordsOnly).toBe(false);
+  });
+
+  it("uses the canonical bilingual name, not the provider's single language", () => {
+    const loc = coordLocation(36, 15, { name: "Mediterranean Sea", kind: "city" });
+    expect(loc.name).toEqual({ en: "Mediterranean Sea", fr: "Mer Méditerranée" });
+    expect(loc.waterKind).toBe("sea");
+  });
+
+  it("keeps the finer water kind a name implies", () => {
+    expect(coordLocation(47.5, -87, { name: "Lake Superior" }).waterKind).toBe("lake");
+    expect(coordLocation(25, -90, { name: "Gulf of Mexico" }).waterKind).toBe("gulf");
+  });
+
+  /* Territorial waters mean a provider can attach a country to a sea point.
+     Carrying it through would draw a national flag beside "Mediterranean
+     Sea" and let the photo query qualify the water by a country. */
+  it("drops a country, region and flag code a provider attached to open water", () => {
+    const loc = coordLocation(36, 15, {
+      name: "Mediterranean Sea",
+      cc: "IT",
+      country: "Italy",
+      region: "Sicily",
+    });
+    expect(loc.cc).toBe("");
+    expect(loc.country).toEqual({ en: "", fr: "" });
+    expect(loc.region).toEqual({ en: "", fr: "" });
+  });
+
+  it("uses the water gradient, not the city one", () => {
+    expect(coordLocation(0, -140, { name: "Pacific Ocean" }).grad).toEqual(["#0EA5E9", "#0C4A6E"]);
+  });
+
+  /* The guard that keeps the fix from over-reaching: a real place is still a
+     real place, even when its name contains a water word or it sits in the
+     middle of an ocean. */
+  it("still lets a genuine land place win, including mid-ocean", () => {
+    const island = coordLocation(33.2, -41.5, { name: { en: "Sable Island" } });
+    expect(island.kind).toBe("city");
+    expect(island.waterKind).toBeNull();
+
+    const town = coordLocation(43.6, -83.9, { name: "Bay City", cc: "US" });
+    expect(town.kind).toBe("city");
+    expect(town.waterKind).toBeNull();
+    expect(town.cc).toBe("US");
+  });
+});

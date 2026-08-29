@@ -11,7 +11,7 @@
  * itself become the name.
  *
  * Pure: no DOM, no network, no state — unit-testable directly. */
-import { nearestMarineRegion } from "./marine-regions.js";
+import { marineRegionByName, nearestMarineRegion } from "./marine-regions.js";
 
 /* Same two-decimal form the geolocation card has always shown (~1.1 km). */
 export function coordLabel(lat, lon) {
@@ -63,14 +63,30 @@ export function coordLocation(lat, lon, info = {}, { idPrefix = "map" } = {}) {
      water), and only once THAT also comes up empty do the raw coordinates
      become the name. */
   const named = firstNamed(info.name, info.region, info.country);
-  const marine = named ? null : nearestMarineRegion(latitude, longitude);
+  /* Two independent ways to conclude "this is water", in priority order.
+     BY NAME first: the geocoder answered with a name that IS a known body of
+     water ("Pacific Ocean", "Mer Méditerranée"). That is direct evidence, so
+     it outranks the coordinate guess and — unlike it — is also allowed to
+     override a provider name, because it IS the provider's own name, just
+     recognised for what it is. Without this the result kept whatever kind
+     the provider's place_type mapped to, which for an unrecognised marine
+     type is "city": an ocean labelled "City / Ville", searched on Pexels as
+     a cityscape.
+     BY COORDINATE second, and still only when the geocoder gave no name at
+     all — the long-standing rule that a real geocoded name (an island, a
+     rig) always beats a guessed body of water. */
+  const namedMarine = marineRegionByName(named);
+  const marine = namedMarine || (named ? null : nearestMarineRegion(latitude, longitude));
   /* `marine` also carries a `kind` (ocean/sea/gulf/bay/strait/lake) — kept
      out of the name pair, which is strictly {en, fr}, and surfaced as
-     `waterKind` below instead. */
-  const name = named
-    ? localized(named, coordLabel(latitude, longitude))
-    : marine
-      ? { en: marine.en, fr: marine.fr }
+     `waterKind` below instead. A recognised water body uses the table's own
+     bilingual pair rather than the provider's single-language text, so the
+     French UI says "Océan Pacifique" even when the lookup answered in
+     English. */
+  const name = marine
+    ? { en: marine.en, fr: marine.fr }
+    : named
+      ? localized(named, coordLabel(latitude, longitude))
       : localized(null, coordLabel(latitude, longitude));
 
   return {
@@ -78,7 +94,11 @@ export function coordLocation(lat, lon, info = {}, { idPrefix = "map" } = {}) {
        alone, so two different clicks must produce two different entries.
        Four decimals ≈ 11 m. */
     id: `${idPrefix}-${latitude.toFixed(4)},${longitude.toFixed(4)}`,
-    kind: info.kind || (marine ? "ocean" : "city"),
+    /* "ocean" is the single kind every marine branch in the app keys off
+       (photo query, relevance filter, flags, kind label), so a body of water
+       gets it whatever the provider called the feature — `waterKind` below
+       carries the finer distinction. */
+    kind: marine ? "ocean" : info.kind || "city",
     /* The finer classification, when the coordinate was identified as open
        water. `kind` deliberately stays "ocean" — every marine branch in the
        app keys off it (see isMarineKind in services/photo-relevance.js) —
@@ -86,14 +106,18 @@ export function coordLocation(lat, lon, info = {}, { idPrefix = "map" } = {}) {
        actually need: a lake is not a sea, and a gulf photographs
        differently from open ocean. Absent for a land location. */
     waterKind: marine ? marine.kind : null,
-    cc: (info.cc || "").toUpperCase(),
+    /* An ocean or sea belongs to no country, so a territorial-waters country
+       code the provider may have attached is dropped: keeping it would draw
+       a national flag beside "Pacific Ocean" (see locCountryFlagHtml). */
+    cc: marine ? "" : (info.cc || "").toUpperCase(),
     flag: "📍",
     lat: latitude,
     lon: longitude,
     name,
-    /* never repeat the place name as its own region/country */
-    region: named === info.name ? localized(info.region) : { en: "", fr: "" },
-    country: localized(info.country),
+    /* never repeat the place name as its own region/country — and a body of
+       water sits in neither, so both stay empty for a marine result */
+    region: !marine && named === info.name ? localized(info.region) : { en: "", fr: "" },
+    country: marine ? { en: "", fr: "" } : localized(info.country),
     landmark: null,
     aliases: [],
     /* a cooler, water-toned gradient behind the fallback/loading state —

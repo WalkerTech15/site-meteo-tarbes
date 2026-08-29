@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { nearestMarineRegion, WATER_KINDS } from "./marine-regions.js";
+import { marineRegionByName, nearestMarineRegion, WATER_KINDS } from "./marine-regions.js";
 
 describe("nearestMarineRegion — named seas/gulfs", () => {
   const cases = [
@@ -213,5 +213,65 @@ describe("nearestMarineRegion — invalid input", () => {
     expect(nearestMarineRegion(NaN, 0)).toBeNull();
     expect(nearestMarineRegion(0, NaN)).toBeNull();
     expect(nearestMarineRegion(undefined, undefined)).toBeNull();
+  });
+});
+
+/* Identifying water by NAME, not coordinate. This is what stops a geocoder
+   result the provider typed as an ordinary place — a search for "Pacific
+   Ocean", a reverse lookup answering "Mer Méditerranée" — from being
+   labelled "City / Ville" and photographed as a cityscape. */
+describe("marineRegionByName", () => {
+  it("recognises oceans and named seas in either interface language", () => {
+    expect(marineRegionByName("Pacific Ocean")).toMatchObject({
+      en: "Pacific Ocean",
+      kind: "ocean",
+    });
+    expect(marineRegionByName("Océan Pacifique")).toMatchObject({
+      en: "Pacific Ocean",
+      kind: "ocean",
+    });
+    expect(marineRegionByName("Mer Méditerranée")).toMatchObject({
+      en: "Mediterranean Sea",
+      kind: "sea",
+    });
+  });
+
+  it("carries the finer kind through, so a lake or gulf is not called a sea", () => {
+    expect(marineRegionByName("Lake Superior").kind).toBe("lake");
+    expect(marineRegionByName("Gulf of Mexico").kind).toBe("gulf");
+    expect(marineRegionByName("Hudson Bay").kind).toBe("bay");
+  });
+
+  it("is case-, accent- and punctuation-tolerant", () => {
+    expect(marineRegionByName("  mediterranean sea ").kind).toBe("sea");
+    expect(marineRegionByName("MER MEDITERRANEE").kind).toBe("sea");
+    expect(marineRegionByName("golfe d'oman").kind).toBe("gulf");
+  });
+
+  it("accepts a localized {en, fr} pair as well as a bare string", () => {
+    expect(marineRegionByName({ en: "Black Sea", fr: "" }).kind).toBe("sea");
+    expect(marineRegionByName({ en: "", fr: "Mer Noire" }).kind).toBe("sea");
+  });
+
+  /* Whole-name matching only. Towns whose names merely CONTAIN a water word
+     must stay on land, or the fix would cause the very mislabelling it is
+     meant to prevent. */
+  it("never matches a land place whose name merely contains a water word", () => {
+    for (const town of ["Bay City", "Oceanside", "Lake Charles", "Redwood City", "Gulfport"]) {
+      expect(marineRegionByName(town)).toBeNull();
+    }
+  });
+
+  it("returns null for empty or missing input", () => {
+    expect(marineRegionByName("")).toBeNull();
+    expect(marineRegionByName(null)).toBeNull();
+    expect(marineRegionByName(undefined)).toBeNull();
+    expect(marineRegionByName({})).toBeNull();
+  });
+
+  it("only ever reports a kind the rest of the app knows", () => {
+    for (const name of ["Pacific Ocean", "Lake Baikal", "Gulf of Aden", "Baffin Bay"]) {
+      expect(WATER_KINDS).toContain(marineRegionByName(name).kind);
+    }
   });
 });
