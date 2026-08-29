@@ -173,3 +173,110 @@ test.describe("settings — time", () => {
     );
   });
 });
+
+/* Card-level layout — the Time card is the only .set-card with just one chip
+   group and one toggle row, so it inherited the same var(--s-3) rhythm as
+   denser cards (Units' two chip groups, etc.) and read as visibly emptier.
+   .set-time (settings.css) tightens that rhythm to var(--s-2) for this card
+   only; these tests lock the tightened gaps in and guard the things that
+   must stay untouched (width, border, radius, background). */
+test.describe("settings — time: card layout & spacing", () => {
+  const timeCard = (app) =>
+    app.locator("#chipClockFormat").locator("xpath=ancestor::div[contains(@class,'set-card')][1]");
+  const unitsCard = (app) =>
+    app.locator("#chipTemp").locator("xpath=ancestor::div[contains(@class,'set-card')][1]");
+
+  async function timeCardBoxes(app) {
+    const card = timeCard(app);
+    const [cardBox, headBox, groupsBox, labelBox, chipsBox, rowBox] = await Promise.all([
+      card.boundingBox(),
+      card.locator(".set-head").boundingBox(),
+      card.locator(".uchip-groups").boundingBox(),
+      card.locator(".ulabel").boundingBox(),
+      card.locator("#chipClockFormat").boundingBox(),
+      card.locator(".set-toggle-row").boundingBox(),
+    ]);
+    return { cardBox, headBox, groupsBox, labelBox, chipsBox, rowBox };
+  }
+
+  test("has tightened, non-excessive gaps between title, controls, seconds row and the card edge", async ({
+    app,
+  }) => {
+    await goToSettings(app);
+    const { cardBox, headBox, groupsBox, labelBox, chipsBox, rowBox } = await timeCardBoxes(app);
+
+    const gaps = {
+      titleToControls: groupsBox.y - (headBox.y + headBox.height),
+      labelToChips: chipsBox.y - (labelBox.y + labelBox.height),
+      controlsToSeconds: rowBox.y - (groupsBox.y + groupsBox.height),
+      secondsToCardBottom: cardBox.y + cardBox.height - (rowBox.y + rowBox.height),
+    };
+
+    for (const [name, gap] of Object.entries(gaps)) {
+      expect(gap, name).toBeGreaterThanOrEqual(0);
+    }
+    expect(gaps.titleToControls, "titleToControls").toBeLessThanOrEqual(20);
+    expect(gaps.labelToChips, "labelToChips").toBeLessThanOrEqual(10);
+    expect(gaps.controlsToSeconds, "controlsToSeconds").toBeLessThanOrEqual(20);
+    expect(gaps.secondsToCardBottom, "secondsToCardBottom").toBeLessThanOrEqual(20);
+  });
+
+  test("the clock-format label lines up with its 12/24-hour controls", async ({ app }) => {
+    await goToSettings(app);
+    const { labelBox, chipsBox } = await timeCardBoxes(app);
+    expect(Math.abs(labelBox.x - chipsBox.x)).toBeLessThanOrEqual(1);
+  });
+
+  test("keeps the same width and start position as the other Settings cards", async ({ app }) => {
+    await goToSettings(app);
+    const [timeBox, unitsBox] = await Promise.all([
+      timeCard(app).boundingBox(),
+      unitsCard(app).boundingBox(),
+    ]);
+    expect(Math.abs(timeBox.width - unitsBox.width)).toBeLessThanOrEqual(1);
+    expect(Math.abs(timeBox.x - unitsBox.x)).toBeLessThanOrEqual(1);
+  });
+
+  test("keeps the same border, radius and background as sibling Settings cards", async ({
+    app,
+  }) => {
+    await goToSettings(app);
+    const readStyle = (el) => {
+      const s = getComputedStyle(el);
+      return {
+        radius: s.borderRadius,
+        borderWidth: s.borderWidth,
+        borderColor: s.borderColor,
+        background: s.backgroundColor,
+      };
+    };
+    const [timeStyle, unitsStyle] = await Promise.all([
+      timeCard(app).evaluate(readStyle),
+      unitsCard(app).evaluate(readStyle),
+    ]);
+    expect(timeStyle).toEqual(unitsStyle);
+  });
+
+  test("on mobile, the format controls and seconds row stay readable with no page overflow", async ({
+    app,
+  }) => {
+    await app.setViewportSize({ width: 375, height: 800 });
+    /* below the 900px drawer breakpoint the sidebar (and its nav items) is
+       reachable only after opening the burger drawer — see responsive.css */
+    await app.locator(".icon-btn.nav-burger").click();
+    await goToSettings(app);
+    await expect(app.locator("#chipClockFormat")).toBeVisible();
+    await expect(app.locator("#clockSecondsSwitch")).toBeVisible();
+
+    const overflow = await app.evaluate(
+      () => document.documentElement.scrollWidth - document.documentElement.clientWidth,
+    );
+    expect(overflow).toBeLessThanOrEqual(0);
+
+    for (const width of await app
+      .locator("#chipClockFormat button")
+      .evaluateAll((els) => els.map((el) => el.getBoundingClientRect().width))) {
+      expect(width).toBeGreaterThan(0);
+    }
+  });
+});

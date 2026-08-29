@@ -202,6 +202,24 @@
   background: var(--bg);
 }
 
+/* The Time card only holds one chip group and one toggle row, so the same
+   var(--s-3) rhythm used by denser cards (Units' two chip groups, etc.)
+   leaves visibly empty gaps here. Tighten to var(--s-2) throughout — same
+   spacing scale, just the next step down — without touching the shared
+   .set-head/.ulabel/.set-toggle-row rules other cards still rely on. */
+.set-time.set-card {
+  padding-bottom: var(--s-2);
+}
+.set-time .set-head {
+  margin-bottom: var(--s-2);
+}
+.set-time .ulabel {
+  margin-bottom: 6px;
+}
+.set-time .set-toggle-row {
+  margin-top: var(--s-2);
+}
+
 .notif-item {
   display: flex;
   align-items: center;
