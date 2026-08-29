@@ -254,7 +254,7 @@ body[data-theme="dark"] .forecast-card.is-today {
   inset: 0;
   display: grid;
   place-items: center;
-  transition: opacity 0.3s ease;
+  transition: opacity 0.3s var(--ease);
 }
 .loc-photo-img {
   position: absolute;
@@ -264,7 +264,7 @@ body[data-theme="dark"] .forecast-card.is-today {
   object-fit: cover;
   object-position: center;
   opacity: 0;
-  transition: opacity 0.45s ease;
+  transition: opacity 0.45s var(--ease);
   border-radius: inherit;
 }
 .loc-photo.has-photo .loc-photo-img {

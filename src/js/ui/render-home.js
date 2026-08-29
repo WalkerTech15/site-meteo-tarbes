@@ -50,6 +50,15 @@ export function renderHeroSkeleton() {
       </div>
     </div>
     <div class="hero-updated"><div class="skeleton" style="width:180px;height:14px"></div></div>`;
+  /* Seed the landmark layer with THIS location's own gradient + emoji right
+     away — before weather or the photo lookup finish — so a color-correct
+     placeholder appears immediately instead of the generic static blue
+     backdrop for the whole loading window. renderHero() below replaces this
+     with an identical "loading" container once weather resolves and hydrates
+     the real photo on top of it, so this only changes WHEN the placeholder
+     appears, never what loads, how it's cached, or how the real photo swap
+     works. */
+  if (state.loc) $("#heroLandmark").innerHTML = locPhotoHtml(state.loc, "hero-photo");
 }
 
 export function renderHero() {
