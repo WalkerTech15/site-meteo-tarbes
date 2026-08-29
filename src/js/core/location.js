@@ -149,28 +149,39 @@ export function flagAlt(name) {
   return flagAltFor(name, state.lang);
 }
 
+/* A location with no country (an ocean/sea, or a raw-coordinate fallback that
+   couldn't be geocoded at all — see core/coord-location.js) has no flag to
+   show: "" rather than the generic "?" placeholder flagHtml() would
+   otherwise draw for an empty/unknown code. */
+export function locCountryFlagHtml(loc) {
+  const cc = (loc.cc || "").toUpperCase();
+  if (!cc) return "";
+  const cSrc = countryFlagSrc(cc);
+  const inner = cSrc ? flagImgTag(cSrc, flagAlt(locCountry(loc) || cc)) : flagHtml(cc);
+  return `<span class="location-flag-wrap">${inner}</span>`;
+}
+
+/* The state/province flag alone (US/CA only — see regionKeyFor), or "" when
+   the location has no country, no US/CA region, or no matching flag asset. */
+export function locRegionFlagHtml(loc) {
+  const key = regionKeyFor(loc);
+  if (!key) return "";
+  const rSrc = regionFlagSrc(key);
+  if (!rSrc) return "";
+  const rName = ["state", "province", "region"].includes(loc.kind) ? locName(loc) : locRegion(loc);
+  return `<span class="location-flag-wrap">${flagImgTag(rSrc, flagAlt(rName || key))}</span>`;
+}
+
 /* Country flag + state/province flag (high-quality local SVGs for US/CA), in
    order [country] [region]. Reusable across search, hero, popup, info, favorites.
    Each flag gets its OWN fixed-height wrapper so the country flag and the
    state/province flag keep their different natural widths (US 19:10 vs
    California 3:2, …) — never forced to equal/square boxes. variant "small"
-   uses the compact height. */
+   uses the compact height. Returns "" (no wrapper element at all) when
+   neither flag applies, e.g. an ocean/sea or an unnamed coordinate. */
 export function flagsHtml(loc, variant = "") {
-  const cc = (loc.cc || "").toUpperCase();
-  const wrap = (inner) => `<span class="location-flag-wrap">${inner}</span>`;
-  const wraps = [];
-  const cSrc = countryFlagSrc(cc);
-  wraps.push(wrap(cSrc ? flagImgTag(cSrc, flagAlt(locCountry(loc) || cc)) : flagHtml(cc)));
-  const key = regionKeyFor(loc);
-  if (key) {
-    const rSrc = regionFlagSrc(key);
-    if (rSrc) {
-      const rName = ["state", "province", "region"].includes(loc.kind)
-        ? locName(loc)
-        : locRegion(loc);
-      wraps.push(wrap(flagImgTag(rSrc, flagAlt(rName || key))));
-    }
-  }
+  const wraps = [locCountryFlagHtml(loc), locRegionFlagHtml(loc)].filter(Boolean);
+  if (!wraps.length) return "";
   const small = variant === "small" ? " location-flags--small" : "";
   return `<span class="location-flags${small}">${wraps.join("")}</span>`;
 }

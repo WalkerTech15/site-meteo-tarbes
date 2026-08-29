@@ -26,6 +26,8 @@ import {
   kindLabel,
   localTimeStr,
   flagsHtml,
+  locCountryFlagHtml,
+  locRegionFlagHtml,
 } from "../core/location.js";
 import { isFav, toggleFavorite } from "../features/favorites.js";
 import { locVisual, locPhotoHtml, hydrateLocPhoto, gradBg } from "../services/photo-api.js";
@@ -84,6 +86,30 @@ export function renderHero() {
       : "";
   const localTime = localTimeStr(wx.timezone);
 
+  /* Country first, then region — never the reverse (a region alone is
+     ambiguous: "Texas" before "United States" reads oddly). Each segment
+     carries only its own flag, so an ocean/sea or an unnamed coordinate (no
+     country at all) contributes neither text nor flag instead of falling
+     back to a "?" placeholder. A country selection IS its own country — no
+     flag, unchanged from before. */
+  let heroLocLine;
+  if (loc.kind === "country") {
+    heroLocLine = esc(locCountry(loc));
+  } else {
+    const country = locCountry(loc);
+    const region = locRegion(loc);
+    const regionFlag = locRegionFlagHtml(loc);
+    const countrySeg = country ? `${locCountryFlagHtml(loc)}${esc(country)}` : "";
+    /* A directly-selected state/province (e.g. Alberta) has no separate
+       region text of its own — its name already IS the hero H1 above, so it
+       never repeats here — but its own flag still belongs on this line next
+       to the country, exactly as before this reordering. */
+    const regionSeg = region ? `${regionFlag}${esc(region)}` : regionFlag;
+    heroLocLine = [countrySeg, regionSeg]
+      .filter(Boolean)
+      .join(' <span aria-hidden="true">·</span> ');
+  }
+
   $("#heroInner").innerHTML = `
     <div class="hero-top">
       <span class="hero-loc-kicker"><span aria-hidden="true">${locVisual(loc)}</span> ${kindLabel(loc.kind)}</span>
@@ -96,7 +122,7 @@ export function renderHero() {
           <svg viewBox="0 0 24 24" width="19" height="19" fill="${fav ? "currentColor" : "none"}" stroke="currentColor" stroke-width="1.9" stroke-linejoin="round"><path d="m12 3 2.7 5.6 6.3.9-4.5 4.4 1 6.1L12 17l-5.5 3 1-6.1L3 9.5l6.3-.9L12 3z"/></svg>
         </button>
       </h1>
-      <p class="hero-region">${esc(locRegion(loc))} ${locRegion(loc) ? "·" : ""} ${loc.kind === "country" ? "" : flagsHtml(loc) + " "}${esc(locCountry(loc))} ${landmarkLine}</p>
+      <p class="hero-region">${heroLocLine} ${landmarkLine}</p>
     </div>
     <div class="hero-main">
       <div class="hero-now">
