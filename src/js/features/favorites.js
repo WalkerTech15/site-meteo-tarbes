@@ -8,6 +8,8 @@ import { demoWeather } from "../services/weather-api.js";
 import { showToast } from "../ui/notifications.js";
 import { renderHero } from "../ui/render-home.js";
 import { renderFavorites } from "../ui/render-favorites.js";
+import { refreshComparison } from "../ui/render-comparison.js";
+import { pruneComparison } from "./comparison.js";
 
 export function isFav(loc) {
   return state.favorites.some((f) => f.id === loc.id);
@@ -87,6 +89,11 @@ export function toggleFavorite() {
     loadFavWeather(true);
   }
   persistFavs();
+  /* Un-favouriting a place must not leave it sitting in the comparison —
+     comparisonLocations() already drops ids it cannot resolve, so this only
+     cleans up storage and repaints the table that is on screen. */
+  pruneComparison();
   renderHero();
   renderFavorites();
+  refreshComparison();
 }

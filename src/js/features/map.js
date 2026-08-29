@@ -14,7 +14,7 @@ import { MAPTILER_KEY, MAP_STYLE } from "../core/config.js";
 import { weatherIcon } from "../data/icons.js";
 import { wmo, wxDesc } from "../data/weather-codes.js";
 import { fmtTemp, tempUnit } from "../core/units.js";
-import { flagsHtml, locRegion, locCountry, locName, kindLabel } from "../core/location.js";
+import { flagsHtml, locRegion, locCountry, locName, locKindLabel } from "../core/location.js";
 import { COUNTRY_JUMPS } from "../data/country-jumps.js";
 import { computeFadeVisibility } from "../core/carousel-fade.js";
 import { normalizeBbox } from "../core/geo-bounds.js";
@@ -73,7 +73,7 @@ function popupHtml(loc) {
   const line2 =
     loc.kind === "country"
       ? esc(locRegion(loc))
-      : `${kindLabel(loc.kind)} · ${esc(locRegion(loc))}${locRegion(loc) ? ", " : ""}${esc(locCountry(loc))}`;
+      : `${locKindLabel(loc)} · ${esc(locRegion(loc))}${locRegion(loc) ? ", " : ""}${esc(locCountry(loc))}`;
   const c = state.wx && state.wx.current;
   return `<div class="map-popup">
     <div class="mp-name">${flagsHtml(loc, "small")} <b>${esc(locName(loc))}</b></div>

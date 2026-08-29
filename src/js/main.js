@@ -38,6 +38,7 @@ import {
   shareMapView,
 } from "./features/map-url-sync.js";
 import { loadRecents, setRecentsEnabled } from "./features/recent-locations.js";
+import { loadComparison as loadComparisonIds } from "./features/comparison.js";
 import {
   switchView,
   toggleSidebar,
@@ -47,7 +48,18 @@ import {
   bindSegToggle,
   syncSegToggle,
 } from "./ui/navigation.js";
-import { renderExplore, renderChart, renderHero, updateHeroClock } from "./ui/render-home.js";
+import {
+  renderExplore,
+  renderChart,
+  renderHero,
+  updateHeroClock,
+  updateHeroLiveStatus,
+} from "./ui/render-home.js";
+import {
+  registerServiceWorker,
+  bindOfflineStatus,
+  clearOfflineCaches,
+} from "./services/offline.js";
 import { renderFavorites } from "./ui/render-favorites.js";
 import { renderForecastPage } from "./ui/render-forecast.js";
 import {
@@ -317,6 +329,11 @@ state.favorites = state.favorites.map(freshen);
 state.recents = loadRecents();
 renderRecentLocations();
 
+/* Same discipline as recents: re-sanitized on read, so an older or
+   hand-edited store can never reintroduce a shape the current rules refuse.
+   The table itself is rendered lazily when the Favorites view opens. */
+state.comparison = loadComparisonIds();
+
 const startLoc = freshen(getJSON(KEYS.lastLocation, null));
 const fallbackLoc = startLoc || LOCATIONS.find((l) => l.id === DEFAULT_LOCATION_ID);
 
@@ -337,6 +354,14 @@ if (urlHasSelection()) {
 $("#geoRetryBtn").addEventListener("click", () => locateMe());
 initGeo();
 loadPopular();
+
+/* Offline support. Registration is a no-op outside a production build (see
+   services/offline.js) — the status pill below is wired unconditionally,
+   because losing connectivity must be visible whether or not a worker is
+   caching anything. */
+registerServiceWorker();
+bindOfflineStatus(() => updateHeroLiveStatus());
+updateHeroLiveStatus();
 
 /* Refresh "updated x min ago" line periodically */
 setInterval(() => {
@@ -365,6 +390,9 @@ async function handlePrivacyAction(action, trigger) {
     });
     if (!accepted) return;
     clearAll();
+    /* stored preferences are only half of it — the service worker holds
+       cached shell/weather/photo responses too, and "reset" must mean both */
+    clearOfflineCaches();
     showToast(t("cacheCleared"));
     setTimeout(() => location.reload(), 900);
   } else if (action === "export") {

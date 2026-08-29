@@ -112,8 +112,22 @@ export function kindLabel(kind) {
       address: t("kindAddress"),
       poi: t("kindPlace"),
       ocean: t("kindOcean"),
+      sea: t("kindOcean"),
     }[kind] || t("kindCity")
   );
+}
+
+/* The label for a whole location rather than a bare kind string.
+   Identical to kindLabel(loc.kind) for everything on land, and for open
+   water too — EXCEPT a lake, which core/marine-regions.js can now identify
+   and which "Ocean / Sea" would plainly misdescribe. Gulfs, bays and
+   straits are arms of the sea and keep that label; only the freshwater
+   case needed its own. Every caller that renders a kind to the user should
+   use this, so a new waterKind never has to be chased across the UI. */
+export function locKindLabel(loc) {
+  if (!loc) return kindLabel(undefined);
+  if (loc.waterKind === "lake") return t("kindLake");
+  return kindLabel(loc.kind);
 }
 
 /* Resolve a location's US-state / CA-province flag KEY from geocoding metadata —

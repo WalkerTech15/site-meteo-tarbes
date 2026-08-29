@@ -4,6 +4,7 @@ import {
   locAccessibleName,
   locHierarchyLabel,
   kindLabel,
+  locKindLabel,
   flagsHtml,
   regionKeyFor,
   localTimeStr,
@@ -157,6 +158,45 @@ describe("kindLabel", () => {
     expect(kindLabel("ocean")).not.toBe(kindLabel("city"));
     state.lang = "fr";
     expect(kindLabel("ocean")).toBe("Océan / Mer");
+  });
+});
+
+/* A lake is identified by core/marine-regions.js as kind "ocean" (so every
+   marine branch in the app keeps working) with waterKind "lake" — and
+   "Ocean / Sea" would plainly misdescribe it. locKindLabel is the loc-aware
+   wrapper every user-facing caller uses for exactly that reason. */
+describe("locKindLabel", () => {
+  it("matches kindLabel for an ordinary land location", () => {
+    state.lang = "en";
+    expect(locKindLabel({ kind: "city" })).toBe(kindLabel("city"));
+    expect(locKindLabel({ kind: "country" })).toBe(kindLabel("country"));
+    expect(locKindLabel({ kind: "state" })).toBe(kindLabel("state"));
+  });
+
+  it("keeps Ocean / Sea for oceans, seas, gulfs, bays and straits", () => {
+    state.lang = "en";
+    for (const waterKind of ["ocean", "sea", "gulf", "bay", "strait"]) {
+      expect(locKindLabel({ kind: "ocean", waterKind })).toBe("Ocean / Sea");
+    }
+  });
+
+  it("labels a lake as a lake, in both languages", () => {
+    state.lang = "en";
+    expect(locKindLabel({ kind: "ocean", waterKind: "lake" })).toBe("Lake");
+    state.lang = "fr";
+    expect(locKindLabel({ kind: "ocean", waterKind: "lake" })).toBe("Lac");
+  });
+
+  it("never falls through to the City default for open water", () => {
+    state.lang = "en";
+    expect(locKindLabel({ kind: "ocean", waterKind: "lake" })).not.toBe(kindLabel("city"));
+    expect(locKindLabel({ kind: "ocean" })).not.toBe(kindLabel("city"));
+  });
+
+  it("is total on a missing location", () => {
+    state.lang = "en";
+    expect(() => locKindLabel(null)).not.toThrow();
+    expect(() => locKindLabel(undefined)).not.toThrow();
   });
 });
 

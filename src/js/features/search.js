@@ -7,7 +7,7 @@ import { t } from "../core/i18n.js";
 import { findLocations, normalize } from "../data/locations.js";
 import { maptilerGeocode, geocode } from "../services/geocoding-api.js";
 import { locVisual } from "../services/photo-api.js";
-import { locName, locRegion, locCountry, kindLabel, flagsHtml } from "../core/location.js";
+import { locName, locRegion, locCountry, locKindLabel, flagsHtml } from "../core/location.js";
 import { selectLocation } from "./location.js";
 import { switchView } from "../ui/navigation.js";
 
@@ -101,7 +101,7 @@ function renderSearchResults(list) {
               : `${esc(locRegion(loc))}${locRegion(loc) ? ", " : ""}${esc(locCountry(loc))}${loc.landmark ? ` · ${esc(loc.landmark[state.lang] || loc.landmark.en)}` : ""}`
           }</span>
         </span>
-        <span class="si-kind">${kindLabel(loc.kind)}</span>
+        <span class="si-kind">${locKindLabel(loc)}</span>
       </button>
     </li>`,
     )

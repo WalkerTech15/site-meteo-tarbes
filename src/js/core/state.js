@@ -25,6 +25,9 @@ export const state = {
      startup — kept here so every view reads one shared value. */
   saveRecents: getStr(KEYS.recentsOptIn) === "1",
   recents: [],
+  /* Ids of the saved places picked for side-by-side comparison. Loaded (and
+     re-sanitized) at startup by features/comparison.js, same as recents. */
+  comparison: [],
   loc: null,
   wx: null,
   isDemo: false,

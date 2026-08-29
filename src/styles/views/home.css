@@ -140,6 +140,14 @@
   margin-left: auto;
   font-weight: 600;
 }
+/* Offline: the reading beside this pill came from cache, so the dot loses
+   its "live" green and stops pulsing. The neighbouring "Updated · N min
+   ago" already says how old it is — this says why. */
+.hero-live.is-offline .pulse-dot {
+  background: #fbbf24;
+  box-shadow: none;
+  animation: none;
+}
 .hero-loc-kicker {
   display: inline-flex;
   align-items: center;

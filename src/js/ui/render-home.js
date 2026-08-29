@@ -24,6 +24,7 @@ import {
   locAccessibleName,
   locHierarchyLabel,
   kindLabel,
+  locKindLabel,
   localTimeStr,
   flagsHtml,
   locCountryFlagHtml,
@@ -31,6 +32,7 @@ import {
 } from "../core/location.js";
 import { isFav, toggleFavorite } from "../features/favorites.js";
 import { locVisual, locPhotoHtml, hydrateLocPhoto, gradBg } from "../services/photo-api.js";
+import { isOffline } from "../services/offline.js";
 import { renderLineChart } from "./charts.js";
 import { selectLocation } from "../features/location.js";
 import { switchView } from "./navigation.js";
@@ -112,7 +114,7 @@ export function renderHero() {
 
   $("#heroInner").innerHTML = `
     <div class="hero-top">
-      <span class="hero-loc-kicker"><span aria-hidden="true">${locVisual(loc)}</span> ${kindLabel(loc.kind)}</span>
+      <span class="hero-loc-kicker"><span aria-hidden="true">${locVisual(loc)}</span> ${locKindLabel(loc)}</span>
       ${localTime ? `<span class="hero-clock"><svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg> <span id="heroClockTime">${localTime}</span></span>` : ""}
     </div>
     <div class="hero-head">
@@ -140,10 +142,33 @@ export function renderHero() {
     <div class="hero-updated">
       <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>
       ${t("updated")} · ${updatedTxt}
-      <span class="hero-live"><span class="pulse-dot" aria-hidden="true"></span> ${state.isDemo ? t("demoData") : t("live")}</span>
+      <span class="hero-live" id="heroLive">${heroLiveInner()}</span>
     </div>`;
 
   $("#heroFavBtn").addEventListener("click", toggleFavorite);
+}
+
+/* The freshness pill next to "Updated · N min ago".
+
+   Offline outranks demo/live: while the network is down the reading on
+   screen came from the service worker's cache (or from before the
+   connection dropped), and the one thing the visitor must not be told is
+   that it is live. The neighbouring "Updated · N min ago" stays visible in
+   every state, so the pill says WHY the timestamp might be old and the
+   timestamp says HOW old. */
+function heroLiveInner() {
+  if (isOffline()) return `<span class="pulse-dot" aria-hidden="true"></span> ${t("offline")}`;
+  return `<span class="pulse-dot" aria-hidden="true"></span> ${state.isDemo ? t("demoData") : t("live")}`;
+}
+
+/* Repaints only the pill — never the whole hero, which would re-run the
+   photo hydration for a connectivity blip. A no-op before the hero has
+   rendered. */
+export function updateHeroLiveStatus() {
+  const el = $("#heroLive");
+  if (!el) return;
+  el.innerHTML = heroLiveInner();
+  el.classList.toggle("is-offline", isOffline());
 }
 
 /* Cheap per-second refresh of just the clock text — used by main.js's ticker

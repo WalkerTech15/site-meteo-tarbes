@@ -15,7 +15,7 @@
  */
 import { state } from "./state.js";
 import { esc } from "./dom.js";
-import { locName, locCountry, locRegion, kindLabel, regionKeyFor, flagAlt } from "./location.js";
+import { locName, locCountry, locRegion, locKindLabel, regionKeyFor, flagAlt } from "./location.js";
 import {
   countryFlagSrc,
   flagHtml,
@@ -91,7 +91,7 @@ export function resolveGeoIdentity(loc) {
   return {
     name,
     kind: loc.kind,
-    kindLabel: kindLabel(loc.kind),
+    kindLabel: locKindLabel(loc),
     country,
     region,
     hierarchy,

@@ -64,9 +64,14 @@ export function coordLocation(lat, lon, info = {}, { idPrefix = "map" } = {}) {
      become the name. */
   const named = firstNamed(info.name, info.region, info.country);
   const marine = named ? null : nearestMarineRegion(latitude, longitude);
+  /* `marine` also carries a `kind` (ocean/sea/gulf/bay/strait/lake) — kept
+     out of the name pair, which is strictly {en, fr}, and surfaced as
+     `waterKind` below instead. */
   const name = named
     ? localized(named, coordLabel(latitude, longitude))
-    : marine || localized(null, coordLabel(latitude, longitude));
+    : marine
+      ? { en: marine.en, fr: marine.fr }
+      : localized(null, coordLabel(latitude, longitude));
 
   return {
     /* Coordinate-derived id, not a constant: favorites are matched by id
@@ -74,6 +79,13 @@ export function coordLocation(lat, lon, info = {}, { idPrefix = "map" } = {}) {
        Four decimals ≈ 11 m. */
     id: `${idPrefix}-${latitude.toFixed(4)},${longitude.toFixed(4)}`,
     kind: info.kind || (marine ? "ocean" : "city"),
+    /* The finer classification, when the coordinate was identified as open
+       water. `kind` deliberately stays "ocean" — every marine branch in the
+       app keys off it (see isMarineKind in services/photo-relevance.js) —
+       while `waterKind` carries the distinction the UI and the photo query
+       actually need: a lake is not a sea, and a gulf photographs
+       differently from open ocean. Absent for a land location. */
+    waterKind: marine ? marine.kind : null,
     cc: (info.cc || "").toUpperCase(),
     flag: "📍",
     lat: latitude,

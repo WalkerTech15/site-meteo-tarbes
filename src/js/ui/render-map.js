@@ -9,7 +9,7 @@ import { LOCATIONS } from "../data/locations.js";
 import { weatherIcon } from "../data/icons.js";
 import { wmo, wxDesc } from "../data/weather-codes.js";
 import { fmtTemp, tempUnit, fmtWind, windUnit, fmtDistance, distanceUnit } from "../core/units.js";
-import { locName, locRegion, locCountry, kindLabel, flagsHtml } from "../core/location.js";
+import { locName, locRegion, locCountry, locKindLabel, flagsHtml } from "../core/location.js";
 import { coordLabel } from "../core/coord-location.js";
 import { geoIdentityHtml } from "../core/geo-identity.js";
 import { demoWeather } from "../services/weather-api.js";
@@ -87,7 +87,7 @@ function panelSubtitle(loc) {
     const name = landmark[state.lang] || landmark.en || landmark.fr;
     return t("nearLandmark").replace("{landmark}", name);
   }
-  return kindLabel(loc.kind);
+  return locKindLabel(loc);
 }
 
 /* ── Nearby places ─────────────────────────────────────────────────────────
@@ -329,9 +329,9 @@ function recentEntryHtml(entry, index) {
         ${flagsHtml(loc, "small")}
         <span class="map-recent-text">
           <b>${esc(name)}</b>
-          <span>${esc(where || kindLabel(loc.kind))}</span>
+          <span>${esc(where || locKindLabel(loc))}</span>
         </span>
-        <span class="map-recent-kind">${esc(kindLabel(loc.kind))}</span>
+        <span class="map-recent-kind">${esc(locKindLabel(loc))}</span>
       </button>
     </li>`;
 }

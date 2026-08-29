@@ -15,6 +15,12 @@ import { flagHtml } from "../data/flags.js";
 import { locCountry } from "../core/location.js";
 import { t } from "../core/i18n.js";
 import { wikimediaGeosearch, wikimediaSearch } from "./wikimedia-api.js";
+import {
+  normalizeForMatch,
+  significantWords,
+  pickBestPhoto,
+  isMarineKind,
+} from "./photo-relevance.js";
 
 export function gradBg(loc) {
   return `background:linear-gradient(145deg, ${loc.grad[0]}, ${loc.grad[1]})`;
@@ -38,7 +44,7 @@ const IMAGE_PROVIDERS = [
   /* 4. a wave glyph for an ocean/sea (core/coord-location.js, core/marine-
      regions.js) — never the generic cityscape emoji below, which would
      misrepresent open water as a place with streets and buildings */
-  (loc) => (loc.kind === "ocean" ? "🌊" : null),
+  (loc) => (isMarineKind(loc.kind) ? "🌊" : null),
   /* 5. curated landmark emoji, else a generic location glyph (safe fallback) */
   (loc) => (loc.landmark ? loc.landmark.emoji : "🏙️"),
   /* NOTE: to add Unsplash later, insert a provider ABOVE this line that returns
@@ -105,18 +111,44 @@ const REGION_KINDS = new Set(["region", "state", "province"]);
      "Saint-Rémy-de-Provence Provence-Alpes-Côte d'Azur France streets architecture"
      "California United States landscape travel"
      "Japan landscape travel"  */
+/* A localized {en, fr} field as one usable string. Either language is
+   accepted rather than English only: a geocoder answers in whichever
+   language it has for that tier, so a region or country that only came back
+   with a French name would otherwise silently drop out of the query and
+   leave a small town qualified by nothing at all. */
+function localizedText(field) {
+  return (field && (field.en || field.fr)) || "";
+}
+
+/* Stock-photo phrasing per body of water. Oceans and seas keep the original
+   "aerial seascape"; the finer kinds core/marine-regions.js can now report
+   (gulf/bay/strait, and large lakes, which are NOT seascapes at all) get
+   wording that matches what they actually look like. Unknown/absent
+   waterKind falls back to the ocean phrasing, so nothing regresses for a
+   location classified before this field existed. */
+const WATER_QUERY_SUFFIX = {
+  ocean: "aerial seascape",
+  sea: "aerial seascape",
+  gulf: "coast seascape",
+  bay: "coast seascape",
+  strait: "coast seascape",
+  lake: "landscape shore",
+};
+
 export function pexelsQuery(loc) {
   if (!loc) return "";
   const name = (loc.name && (loc.name.en || loc.name.fr)) || "";
   if (!name) return "";
-  const region = (loc.region && loc.region.en) || "";
-  const country = (loc.country && loc.country.en) || locCountry(loc) || "";
+  const region = localizedText(loc.region);
+  const country = localizedText(loc.country) || locCountry(loc) || "";
 
   /* An ocean/sea (core/coord-location.js + core/marine-regions.js) has no
      region/country to qualify it with — it IS the subject, searched for the
      body of water itself. "aerial seascape" over "landscape travel": the
      latter reads as a place you'd stand in, which open water is not. */
-  if (loc.kind === "ocean") return [name, "aerial seascape"].join(" ");
+  if (isMarineKind(loc.kind)) {
+    return [name, WATER_QUERY_SUFFIX[loc.waterKind] || WATER_QUERY_SUFFIX.ocean].join(" ");
+  }
   if (loc.kind === "country") return [name, "landscape travel"].join(" ");
   if (REGION_KINDS.has(loc.kind))
     return [name, country, "landscape travel"].filter(Boolean).join(" ");
@@ -136,9 +168,9 @@ export function wikimediaQuery(loc) {
   if (!loc) return "";
   const name = (loc.name && (loc.name.en || loc.name.fr)) || "";
   if (!name) return "";
-  if (loc.kind === "ocean" || loc.kind === "country") return name;
-  const region = (loc.region && loc.region.en) || "";
-  const country = (loc.country && loc.country.en) || locCountry(loc) || "";
+  if (isMarineKind(loc.kind) || loc.kind === "country") return name;
+  const region = localizedText(loc.region);
+  const country = localizedText(loc.country) || locCountry(loc) || "";
   return [name, region, country].filter(Boolean).join(" ");
 }
 
@@ -151,47 +183,10 @@ export function wikimediaQuery(loc) {
    that fails it is treated exactly like "no photo" — the caller keeps its
    gradient/emoji fallback (see hydrateLocPhoto). */
 
-/* A handful of short connector words that appear in real place names
-   ("San Francisco", "Port-au-Prince") but are too generic alone to prove or
-   disprove relevance — dropped so they never count as a "match" by
-   themselves while the actually-distinctive word next to them still can. */
-const RELEVANCE_STOPWORDS = new Set([
-  "de",
-  "du",
-  "des",
-  "la",
-  "le",
-  "les",
-  "el",
-  "san",
-  "santa",
-  "saint",
-  "sainte",
-  "new",
-  "port",
-  "fort",
-  "and",
-  "the",
-  "of",
-]);
-
-/* NFD splits "é" into "e" + a combining acute accent; \p{Diacritic} strips
-   just that mark, so "Occitania" and a photo's "Occitanie" compare on equal
-   footing regardless of which language supplied either string. */
-function normalizeForMatch(value) {
-  return String(value || "")
-    .toLowerCase()
-    .normalize("NFD")
-    .replace(/\p{Diacritic}/gu, "");
-}
-
-/* Accent-stripped words of at least 3 letters — long enough to be a
-   meaningful signal, short enough to still catch "sea", "bay". */
-function significantWords(value) {
-  return normalizeForMatch(value)
-    .split(/[^a-z0-9]+/)
-    .filter((w) => w.length >= 3 && !RELEVANCE_STOPWORDS.has(w));
-}
+/* normalizeForMatch / significantWords (and the stopword list behind them)
+   now live in services/photo-relevance.js, shared with the ranking half so
+   the filter and the ranker can never disagree on what counts as a
+   meaningful word. */
 
 /* The words a matching photo should plausibly mention. A country location
    is checked against its own name only — its region is just its continent
@@ -203,7 +198,7 @@ function significantWords(value) {
 export function relevanceKeywords(loc) {
   if (!loc) return [];
   const name = (loc.name && (loc.name.en || loc.name.fr)) || "";
-  if (loc.kind === "country" || loc.kind === "ocean") return significantWords(name);
+  if (loc.kind === "country" || isMarineKind(loc.kind)) return significantWords(name);
   const region = (loc.region && loc.region.en) || "";
   const country = (loc.country && loc.country.en) || locCountry(loc) || "";
   return [
@@ -244,22 +239,23 @@ export function rankPexelsCandidates(loc, candidates) {
     (p) => p && p.src && isRelevantPhoto(loc, p),
   );
   if (pool.length === 0) return null;
-  const name = (loc.name && (loc.name.en || loc.name.fr)) || "";
-  const nameTokens = new Set(significantWords(name));
-  const otherTokens = relevanceKeywords(loc).filter((tok) => !nameTokens.has(tok));
-  /* The exact place name mentioned in a photo's alt/photographer text is a
-     much stronger signal than its (coarser) region/country, which is why it
-     is weighted higher rather than treated as just one more token. */
-  const score = (photo) => {
-    const hay = normalizeForMatch(
-      `${photo.alt || ""} ${photo.photographer || ""} ${photo.title || ""}`,
-    );
-    let s = 0;
-    for (const tok of nameTokens) if (hay.includes(tok)) s += 3;
-    for (const tok of otherTokens) if (hay.includes(tok)) s += 1;
-    return s;
-  };
-  return pool.reduce((best, p) => (score(p) > score(best) ? p : best), pool[0]);
+  /* Scoring itself is services/photo-relevance.js: exact-name-phrase and
+     per-token credit across BOTH interface languages plus curated aliases,
+     then coordinate proximity, image quality, and a penalty for a candidate
+     whose subject contradicts the location's kind (an urban shot for open
+     water).
+
+     `requireEvidence` closes the one gap isRelevantPhoto deliberately
+     leaves open: it accepts a candidate it CANNOT check — a photo with no
+     alt text or photographer at all, or any photo when the geocoder only
+     gave us a non-Latin-script name to match on — because "unconfirmed" is
+     not "confirmed wrong". That leniency is right for a filter, but it is
+     exactly the "a result exists, so show it" outcome for the final pick.
+     Nothing that already matches is affected: a candidate whose text
+     contradicts the place was rejected by isRelevantPhoto above, so the
+     only candidates this drops are unverifiable ones, which fall through
+     to the gradient/emoji fallback instead. */
+  return pickBestPhoto(loc, pool, { requireEvidence: true });
 }
 
 /* Wikimedia equivalent. `trustCoordinates` is set for a geosearch result: the
@@ -276,12 +272,19 @@ export function rankWikimediaCandidates(loc, candidates, { trustCoordinates = fa
   const list = (Array.isArray(candidates) ? candidates : []).filter((c) => c && c.src);
   const pool = trustCoordinates ? list : list.filter((c) => isRelevantPhoto(loc, c));
   if (pool.length === 0) return null;
-  /* Stable sort: landscape orientation first, Commons' own order (distance
-     for geosearch, search relevance for text search) as the tiebreaker. */
-  return [...pool].sort((a, b) => {
-    const landscape = (p) => (p.width && p.height ? (p.width >= p.height ? 0 : 1) : 0);
-    return landscape(a) - landscape(b);
-  })[0];
+  /* Commons candidates carry real coordinates and pixel dimensions, so the
+     shared scorer has more to work with here than for Pexels: proximity to
+     the location's own point ranks a photo taken IN the place above one
+     merely categorised under it, and landscape/resolution break the
+     remaining ties.
+
+     A trusted geosearch result is evidence by construction (Commons placed
+     it within a few km of the point), so it is ranked as-is. A text-search
+     result carries no such guarantee, and Commons' index reaches file
+     titles and categories — a much larger surface for a coincidental hit
+     than stock-photo alt text — so there it must positively connect to the
+     location or be dropped in favour of the fallback. */
+  return pickBestPhoto(loc, pool, { requireEvidence: !trustCoordinates });
 }
 
 /* Asks the SAME-ORIGIN proxy for a photo — never Pexels directly, because that
@@ -413,7 +416,7 @@ async function requestPhotoList(cacheKey, url, cache) {
    centroid, not "the country", so geosearch there would return one arbitrary
    nearby photo rather than anything representative; those kinds go straight
    to a text search instead (see resolveWikimediaPhoto). */
-const GEOSEARCH_KINDS = new Set(["city", "town", "village", "address", "poi", "ocean"]);
+const GEOSEARCH_KINDS = new Set(["city", "town", "village", "address", "poi", "ocean", "sea"]);
 
 /* Wikimedia Commons lookup: geosearch first (when eligible — precise
    coordinates back it with real proximity evidence), then a text search as

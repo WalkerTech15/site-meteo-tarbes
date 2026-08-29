@@ -18,6 +18,10 @@ export const KEYS = {
      which reads as "off" everywhere (see features/recent-locations.js). */
   recents: "ws_recents",
   recentsOptIn: "ws_recents_on",
+  /* Which saved places the visitor has picked for side-by-side comparison —
+     ids only, resolved back to locations from favorites (see
+     features/comparison.js), so no place data is duplicated here. */
+  comparison: "ws_compare",
 };
 
 export function getStr(key, fallback = null) {

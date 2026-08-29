@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { nearestMarineRegion } from "./marine-regions.js";
+import { nearestMarineRegion, WATER_KINDS } from "./marine-regions.js";
 
 describe("nearestMarineRegion — named seas/gulfs", () => {
   const cases = [
@@ -19,10 +19,11 @@ describe("nearestMarineRegion — named seas/gulfs", () => {
     });
   }
 
-  it("gives the French name alongside the English one", () => {
+  it("gives the French name alongside the English one, and the water kind", () => {
     expect(nearestMarineRegion(36, 15)).toEqual({
       en: "Mediterranean Sea",
       fr: "Mer Méditerranée",
+      kind: "sea",
     });
   });
 
@@ -39,6 +40,7 @@ describe("nearestMarineRegion — basin oceans", () => {
     expect(nearestMarineRegion(33.2, -41.5)).toEqual({
       en: "Atlantic Ocean",
       fr: "Océan Atlantique",
+      kind: "ocean",
     });
   });
 
@@ -56,10 +58,18 @@ describe("nearestMarineRegion — basin oceans", () => {
     expect(nearestMarineRegion(85, 150)?.en).toBe("Arctic Ocean");
   });
 
-  it("stays null over high-latitude Siberian land rather than guessing Arctic", () => {
-    /* the Asia landmass box intentionally reaches to 82°N to cover real
-       Siberian territory — this is the documented land-over-ocean tradeoff */
-    expect(nearestMarineRegion(75, 150)).toBeNull();
+  it("names the Arctic marginal seas now that they are mapped", () => {
+    /* (75, 150) is open water in the East Siberian Sea, well north of the
+       Siberian coast. It used to return null purely because the Asia
+       landmass box reaches 82°N and no Arctic sea was listed; naming it is
+       the correct answer, not a relaxation of the land-safety rule. */
+    expect(nearestMarineRegion(75, 150)?.en).toBe("East Siberian Sea");
+  });
+
+  it("still stays null over high-latitude Siberian LAND", () => {
+    /* Yakutsk (62°N, 129.7°E) — deep inland, far south of every Arctic
+       sea box, so the landmass rule still applies */
+    expect(nearestMarineRegion(62, 129.7)).toBeNull();
   });
 
   it("Southern Ocean below the polar band", () => {
@@ -82,6 +92,120 @@ describe("nearestMarineRegion — never labels land as water", () => {
       expect(nearestMarineRegion(lat, lon)).toBeNull();
     });
   }
+
+  /* The boxes added for wider sea coverage are the ones most at risk of
+     swallowing a real coastal settlement, so each is pinned against the
+     nearest inhabited place its box was trimmed to exclude. */
+  const coastalTowns = [
+    ["Murmansk (Barents coast)", 68.97, 33.08],
+    ["Tiksi (Laptev coast)", 71.63, 128.87],
+    ["Utqiagvik (Chukchi coast)", 71.29, -156.79],
+    ["Tuktoyaktuk (Beaufort coast)", 69.44, -133.03],
+    ["Happy Valley-Goose Bay (Labrador)", 53.3, -60.42],
+    ["Trondheim (Norwegian coast)", 63.43, 10.4],
+    ["Adelaide (Australian south coast)", -34.93, 138.6],
+    ["Hermosillo (Gulf of California coast)", 29.07, -110.97],
+    ["Nantes (Bay of Biscay coast)", 47.22, -1.55],
+    ["Portsmouth (English Channel coast)", 50.8, -1.09],
+    ["Dublin (Irish Sea coast)", 53.35, -6.26],
+    ["Charlottetown (Gulf of St. Lawrence)", 46.24, -63.13],
+  ];
+  for (const [name, lat, lon] of coastalTowns) {
+    it(`returns null for ${name} rather than naming the adjacent water`, () => {
+      expect(nearestMarineRegion(lat, lon)).toBeNull();
+    });
+  }
+});
+
+describe("nearestMarineRegion — wider sea/gulf/bay coverage", () => {
+  const cases = [
+    ["Gulf of Aden", 12.5, 47],
+    ["Gulf of Oman", 24.5, 59],
+    ["Philippine Sea", 15, 135],
+    ["East China Sea", 28, 125],
+    ["Yellow Sea", 36, 123],
+    ["Java Sea", -5, 110],
+    ["Sulu Sea", 8, 120],
+    ["Gulf of Thailand", 10, 101],
+    ["Timor Sea", -11, 128],
+    ["Gulf of Carpentaria", -14, 138],
+    ["Great Australian Bight", -36, 128],
+    ["Barents Sea", 75, 40],
+    ["Kara Sea", 75, 75],
+    ["Baffin Bay", 74, -62],
+    ["Labrador Sea", 57, -50],
+    ["Weddell Sea", -70, -40],
+    ["Ross Sea", -74, 175],
+  ];
+  for (const [expected, lat, lon] of cases) {
+    it(`identifies the ${expected} at (${lat}, ${lon})`, () => {
+      expect(nearestMarineRegion(lat, lon)?.en).toBe(expected);
+    });
+  }
+
+  it("keeps a nested water body ahead of the one it opens into", () => {
+    /* the Gulf of Carpentaria sits inside the Arafura Sea's own box —
+       list order, not geometry, is what makes the specific answer win */
+    expect(nearestMarineRegion(-14, 138)?.en).toBe("Gulf of Carpentaria");
+    expect(nearestMarineRegion(-6, 136)?.en).toBe("Arafura Sea");
+    /* and the Andaman Sea ahead of the Bay of Bengal they overlap in */
+    expect(nearestMarineRegion(10, 96)?.en).toBe("Andaman Sea");
+    expect(nearestMarineRegion(15, 88)?.en).toBe("Bay of Bengal");
+  });
+
+  it("leaves the Mediterranean basin itself as the answer inside it", () => {
+    /* its sub-seas are deliberately not split out — see marine-regions.js */
+    expect(nearestMarineRegion(36, 15)?.en).toBe("Mediterranean Sea");
+    expect(nearestMarineRegion(43, 15)?.en).toBe("Mediterranean Sea");
+  });
+});
+
+describe("nearestMarineRegion — water kinds", () => {
+  const kindCases = [
+    ["ocean", 33.2, -41.5], // Atlantic
+    ["sea", 36, 15], // Mediterranean
+    ["gulf", 27, 51], // Persian Gulf
+    ["bay", 60, -85], // Hudson Bay
+    ["lake", 47.5, -87], // Lake Superior
+  ];
+  for (const [kind, lat, lon] of kindCases) {
+    it(`reports kind "${kind}" at (${lat}, ${lon})`, () => {
+      expect(nearestMarineRegion(lat, lon)?.kind).toBe(kind);
+    });
+  }
+
+  it("only ever reports a documented kind", () => {
+    const samples = [
+      [43, 15],
+      [12.5, 47],
+      [-70, -40],
+      [55, 30.5],
+      [0, -150],
+      [75, 150],
+    ];
+    for (const [lat, lon] of samples) {
+      const hit = nearestMarineRegion(lat, lon);
+      if (hit) expect(WATER_KINDS).toContain(hit.kind);
+    }
+  });
+
+  it("names the great lakes as lakes, never as seas", () => {
+    const lakes = [
+      ["Lake Superior", 47.5, -87],
+      ["Lake Michigan", 43.5, -87],
+      ["Lake Huron", 44.8, -82],
+      ["Lake Erie", 42, -81],
+      ["Lake Ontario", 43.7, -78],
+      ["Lake Baikal", 53.5, 107],
+      ["Lake Victoria", -1, 33],
+      ["Lake Titicaca", -15.8, -69.3],
+    ];
+    for (const [expected, lat, lon] of lakes) {
+      const hit = nearestMarineRegion(lat, lon);
+      expect(hit?.en).toBe(expected);
+      expect(hit?.kind).toBe("lake");
+    }
+  });
 });
 
 describe("nearestMarineRegion — invalid input", () => {

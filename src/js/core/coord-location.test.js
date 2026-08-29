@@ -33,6 +33,37 @@ describe("coordLocation", () => {
     expect(loc.region).toEqual({ en: "", fr: "" });
   });
 
+  it("carries the finer water kind alongside the marine name", () => {
+    /* `kind` stays "ocean" for every marine selection — the whole app keys
+       its marine branches off it — while `waterKind` carries the detail */
+    const atlantic = coordLocation(33.2, -41.5, {});
+    expect(atlantic.kind).toBe("ocean");
+    expect(atlantic.waterKind).toBe("ocean");
+
+    const mediterranean = coordLocation(36, 15, {});
+    expect(mediterranean.kind).toBe("ocean");
+    expect(mediterranean.waterKind).toBe("sea");
+
+    const hudson = coordLocation(60, -85, {});
+    expect(hudson.waterKind).toBe("bay");
+
+    const superior = coordLocation(47.5, -87, {});
+    expect(superior.name.en).toBe("Lake Superior");
+    expect(superior.waterKind).toBe("lake");
+  });
+
+  it("leaves waterKind null for a land location", () => {
+    expect(coordLocation(48.8566, 2.3522, {}).waterKind).toBeNull();
+    expect(coordLocation(43.2333, 0.0782, { name: { en: "Tarbes" } }).waterKind).toBeNull();
+  });
+
+  it("keeps the name pair strictly {en, fr} — the kind never leaks into it", () => {
+    expect(coordLocation(33.2, -41.5, {}).name).toEqual({
+      en: "Atlantic Ocean",
+      fr: "Océan Atlantique",
+    });
+  });
+
   it("still falls back to raw coordinates when even the ocean/sea guess comes up empty", () => {
     /* Paris, France — inland, and outside every named-sea box too (unlike a
        Pyrenees town such as Tarbes, which the generous Mediterranean box

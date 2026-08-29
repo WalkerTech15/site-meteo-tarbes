@@ -7,6 +7,7 @@ import { emit } from "../core/app-bus.js";
 import { closeThemeMenu } from "../features/settings.js";
 import { renderMap, updateMapLayerFades } from "../features/map.js";
 import { loadFavWeather } from "../features/favorites.js";
+import { loadComparison } from "./render-comparison.js";
 import { renderChart } from "./render-home.js";
 import { renderForecastPage } from "./render-forecast.js";
 
@@ -28,7 +29,11 @@ export function switchView(view) {
   closeSidebar();
   closeThemeMenu();
   if (view === "map" || view === "home") renderMap();
-  if (view === "favorites") loadFavWeather();
+  if (view === "favorites") {
+    loadFavWeather();
+    /* the comparison lives inside this view — see ui/render-comparison.js */
+    loadComparison();
+  }
   /* charts drawn while their view was hidden used a fallback width —
      redraw at the real container size once the view is visible. The map
      layer row was measured while #view-map was still hidden too (0 width),
