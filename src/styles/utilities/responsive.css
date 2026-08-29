@@ -107,6 +107,13 @@
   .search-kbd {
     display: none;
   }
+  /* Below the drawer breakpoint the sidebar (and its own #modeToggleSide,
+     always visible there — see layout/sidebar.css) is the reachable
+     display-mode control; the navbar copy would only crowd an already-tight
+     bar next to the burger and search button. */
+  #modeToggle {
+    display: none;
+  }
   .main {
     padding: var(--s-3) var(--s-2) var(--s-5);
   }

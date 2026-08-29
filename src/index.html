@@ -147,6 +147,23 @@
         </div>
 
         <div class="topnav-actions">
+          <!-- Simple / Detailed toggle -->
+          <div
+            class="seg-toggle"
+            role="radiogroup"
+            aria-label="Display mode"
+            data-i18n-aria="displayMode"
+            id="modeToggle"
+          >
+            <span class="seg-thumb" aria-hidden="true"></span>
+            <button role="radio" aria-checked="true" data-mode="simple" data-i18n="modeSimple">
+              Simple
+            </button>
+            <button role="radio" aria-checked="false" data-mode="detailed" data-i18n="modeDetailed">
+              Detailed
+            </button>
+          </div>
+
           <!-- Theme -->
           <div class="theme-wrap">
             <button

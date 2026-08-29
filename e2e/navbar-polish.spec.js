@@ -7,11 +7,13 @@
  * mobile-search.spec.js (mobile overlay) suites, which this file does not
  * duplicate.
  *
- * The Simple/Détaillé display-mode toggle used to be duplicated (one copy in
- * this navbar, one in the sidebar, shown/hidden by breakpoint) — it now
- * lives only in the sidebar (#modeToggleSide, always visible there), so the
- * selection/keyboard/i18n coverage below exercises that element instead of
- * a navbar control. */
+ * The Simple/Détaillé display-mode toggle renders TWICE and stays in sync:
+ * once in this navbar (#modeToggle, desktop-width only — see the 901/900px
+ * breakpoint tests below), and once in the sidebar (#modeToggleSide, always
+ * visible there, both as the permanent desktop rail and the mobile drawer).
+ * The selection/keyboard/i18n coverage below exercises the navbar copy,
+ * since that's this file's own scope; #modeToggleSide's equivalent behavior
+ * is covered in app.spec.js (tests 5, 62-64). */
 import { test, expect, installMocks } from "./mocks.js";
 
 async function freshAt(page, viewport) {
@@ -81,12 +83,12 @@ test.describe("navbar polish: no overlap or horizontal overflow", () => {
 });
 
 test.describe("navbar polish: the 901/900px drawer breakpoint", () => {
-  test("901px keeps the desktop grid — search inline, hamburger hidden, no mode toggle in the navbar", async ({
+  test("901px keeps the desktop grid — search inline, mode toggle visible, hamburger hidden", async ({
     page,
   }) => {
     await freshAt(page, { width: 901, height: 800 });
     await expect(page.locator("#burgerBtn")).toBeHidden();
-    await expect(page.locator("#modeToggle")).toHaveCount(0); /* no longer duplicated in the navbar */
+    await expect(page.locator("#modeToggle")).toBeVisible();
     await expect(page.locator(".search-wrap")).toBeVisible();
     const display = await page
       .locator(".topnav-inner")
@@ -94,12 +96,12 @@ test.describe("navbar polish: the 901/900px drawer breakpoint", () => {
     expect(display).toBe("grid");
   });
 
-  test("900px switches to the drawer layout — hamburger visible, no mode toggle in the navbar", async ({
+  test("900px switches to the drawer layout — hamburger visible, mode toggle hidden in the navbar", async ({
     page,
   }) => {
     await freshAt(page, { width: 900, height: 800 });
     await expect(page.locator("#burgerBtn")).toBeVisible();
-    await expect(page.locator("#modeToggle")).toHaveCount(0); /* no longer duplicated in the navbar */
+    await expect(page.locator("#modeToggle")).toBeHidden(); /* still present, just css-hidden */
     const display = await page
       .locator(".topnav-inner")
       .evaluate((el) => getComputedStyle(el).display);
@@ -107,15 +109,20 @@ test.describe("navbar polish: the 901/900px drawer breakpoint", () => {
 
     await page.locator("#burgerBtn").click();
     await expect(page.locator("#sidebar")).toHaveClass(/is-open/);
+    /* the sidebar's own copy is the reachable one at this width */
+    await expect(page.locator("#modeToggleSide")).toBeVisible();
   });
 });
 
 test.describe("navbar polish: consistent control heights", () => {
-  test("search field, theme and language buttons share one ~44px height", async ({ page }) => {
+  test("search field, mode toggle, theme and language buttons share one ~44px height", async ({
+    page,
+  }) => {
     await freshAt(page, { width: 1440, height: 900 });
     const heights = {};
     for (const [name, sel] of [
       ["search", ".search-bar"],
+      ["mode", "#modeToggle"],
       ["theme", "#themeBtn"],
       ["lang", "#langBtn"],
     ]) {
@@ -172,9 +179,9 @@ test.describe("navbar polish: Simple/Détaillé selection is clear without a hea
     page,
   }) => {
     await freshAt(page, { width: 1280, height: 800 });
-    const simple = page.locator('#modeToggleSide button[data-mode="simple"]');
-    const detailed = page.locator('#modeToggleSide button[data-mode="detailed"]');
-    const thumb = page.locator("#modeToggleSide .seg-thumb");
+    const simple = page.locator('#modeToggle button[data-mode="simple"]');
+    const detailed = page.locator('#modeToggle button[data-mode="detailed"]');
+    const thumb = page.locator("#modeToggle .seg-thumb");
 
     await expect(simple).toHaveAttribute("aria-checked", "true");
     const simpleWeight = await simple.evaluate((el) => getComputedStyle(el).fontWeight);
@@ -190,14 +197,24 @@ test.describe("navbar polish: Simple/Détaillé selection is clear without a hea
     await detailed.click();
     await expect(detailed).toHaveAttribute("aria-checked", "true");
     await expect(simple).toHaveAttribute("aria-checked", "false");
-    const detailedWeightAfter = await detailed.evaluate((el) => getComputedStyle(el).fontWeight);
-    const simpleWeightAfter = await simple.evaluate((el) => getComputedStyle(el).fontWeight);
-    expect(Number(detailedWeightAfter)).toBeGreaterThan(Number(simpleWeightAfter));
+    /* font-weight transitions over 0.25s (toggles.css) — poll instead of a
+       single read, so this doesn't race the transition's in-flight value. */
+    await expect
+      .poll(async () => {
+        const detailedWeightAfter = await detailed.evaluate((el) =>
+          Number(getComputedStyle(el).fontWeight),
+        );
+        const simpleWeightAfter = await simple.evaluate((el) =>
+          Number(getComputedStyle(el).fontWeight),
+        );
+        return detailedWeightAfter > simpleWeightAfter;
+      })
+      .toBe(true);
   });
 
   test("keeps Simple first, Détaillé second", async ({ page }) => {
     await freshAt(page, { width: 1280, height: 800 });
-    const labels = await page.locator("#modeToggleSide button").allTextContents();
+    const labels = await page.locator("#modeToggle button").allTextContents();
     expect(labels.map((s) => s.trim())).toEqual(["Simple", "Détaillé"]);
   });
 });
@@ -205,7 +222,7 @@ test.describe("navbar polish: Simple/Détaillé selection is clear without a hea
 test.describe("navbar polish: Simple/Détaillé keyboard operation", () => {
   test("is reachable and operable via Tab, Enter and Space", async ({ page }) => {
     await freshAt(page, { width: 1280, height: 800 });
-    const group = page.locator("#modeToggleSide");
+    const group = page.locator("#modeToggle");
     await expect(group).toHaveAttribute("role", "radiogroup");
     const simple = group.locator('button[data-mode="simple"]');
     const detailed = group.locator('button[data-mode="detailed"]');
@@ -233,7 +250,12 @@ test.describe("navbar polish: keyboard focus is visible", () => {
     await page.locator("#searchInput").focus();
     await expect(page.locator("#searchInput")).toBeFocused();
 
-    for (const sel of ["#modeToggleSide button[data-mode='detailed']", "#themeBtn", "#langBtn"]) {
+    for (const sel of [
+      "#modeToggle button[data-mode='detailed']",
+      "#modeToggleSide button[data-mode='detailed']",
+      "#themeBtn",
+      "#langBtn",
+    ]) {
       await page.locator(sel).focus();
       const outline = await page.locator(sel).evaluate((el) => {
         const cs = getComputedStyle(el);
@@ -319,13 +341,16 @@ test.describe("navbar polish: bilingual accessible labels", () => {
     await freshAt(page, { width: 1280, height: 800 });
     await expect(page.locator("#searchInput")).toHaveAttribute("aria-label", "Rechercher un lieu");
     await expect(page.locator("#themeBtn")).toHaveAttribute("aria-label", "Choisir le thème");
+    await expect(page.locator("#modeToggle")).toHaveAttribute("aria-label", "Mode d'affichage");
     await expect(page.locator("#modeToggleSide")).toHaveAttribute("aria-label", "Mode d'affichage");
     await expect(page.locator("#langBtn")).toHaveAttribute(
       "aria-label",
       "Changer de langue — actuellement Français",
     );
-    await expect(page.locator('#modeToggleSide button[data-mode="simple"]')).toHaveText("Simple");
-    await expect(page.locator('#modeToggleSide button[data-mode="detailed"]')).toHaveText("Détaillé");
+    for (const id of ["#modeToggle", "#modeToggleSide"]) {
+      await expect(page.locator(`${id} button[data-mode="simple"]`)).toHaveText("Simple");
+      await expect(page.locator(`${id} button[data-mode="detailed"]`)).toHaveText("Détaillé");
+    }
   });
 
   test("English", async ({ page }) => {
@@ -335,13 +360,16 @@ test.describe("navbar polish: bilingual accessible labels", () => {
 
     await expect(page.locator("#searchInput")).toHaveAttribute("aria-label", "Search location");
     await expect(page.locator("#themeBtn")).toHaveAttribute("aria-label", "Choose theme");
+    await expect(page.locator("#modeToggle")).toHaveAttribute("aria-label", "Display mode");
     await expect(page.locator("#modeToggleSide")).toHaveAttribute("aria-label", "Display mode");
     await expect(page.locator("#langBtn")).toHaveAttribute(
       "aria-label",
       "Change language — currently English",
     );
-    await expect(page.locator('#modeToggleSide button[data-mode="simple"]')).toHaveText("Simple");
-    await expect(page.locator('#modeToggleSide button[data-mode="detailed"]')).toHaveText("Detailed");
+    for (const id of ["#modeToggle", "#modeToggleSide"]) {
+      await expect(page.locator(`${id} button[data-mode="simple"]`)).toHaveText("Simple");
+      await expect(page.locator(`${id} button[data-mode="detailed"]`)).toHaveText("Detailed");
+    }
   });
 });
 
@@ -358,74 +386,122 @@ test.describe("navbar polish: reduced motion is respected", () => {
   });
 });
 
-/* Regression coverage for the navbar declutter: the Simple/Détaillé toggle
- * used to render TWICE — once in .topnav-actions, once in the sidebar's
- * .side-foot — with CSS hiding whichever one didn't match the current
- * breakpoint. It now exists exactly once (#modeToggleSide, in the sidebar),
- * at every width, so there is no duplicate control lurking in the DOM even
- * momentarily during a resize. */
-test.describe("navbar polish: exactly one Simple/Détaillé toggle, never duplicated", () => {
-  for (const [label, viewport] of [
-    ["desktop", { width: 1280, height: 800 }],
-    ["mobile (drawer)", { width: 375, height: 812 }],
-  ]) {
-    test(`only #modeToggleSide exists at ${label} width`, async ({ page }) => {
-      await freshAt(page, viewport);
-      await expect(page.locator("#modeToggle")).toHaveCount(0);
-      await expect(page.locator("#modeToggleSide")).toHaveCount(1);
-      /* exactly one radiogroup in the whole document carries this label,
-         in either language */
-      const groups = page.locator(
-        '[role="radiogroup"][aria-label="Display mode"], [role="radiogroup"][aria-label="Mode d\'affichage"]',
-      );
-      await expect(groups).toHaveCount(1);
-    });
-  }
-
-  test("the single sidebar control still works after resizing across the drawer breakpoint", async ({
+/* Two copies of the same Simple/Détaillé control — #modeToggle in this
+ * navbar, #modeToggleSide in the sidebar — that must always agree. Both
+ * exist in the DOM at every width; only visibility changes at the drawer
+ * breakpoint (#modeToggle css-hidden below it, #modeToggleSide always
+ * shown). Changing either one has to update BOTH controls and the actual
+ * body[data-mode] immediately — see features/settings.js's setMode, which
+ * syncs #modeToggle and #modeToggleSide from the same call. */
+test.describe("navbar polish: #modeToggle and #modeToggleSide stay in sync", () => {
+  test("both exist at every width; only the navbar copy's visibility changes at the drawer breakpoint", async ({
     page,
   }) => {
     await freshAt(page, { width: 1280, height: 800 });
+    await expect(page.locator("#modeToggle")).toHaveCount(1);
+    await expect(page.locator("#modeToggleSide")).toHaveCount(1);
+    await expect(page.locator("#modeToggle")).toBeVisible();
     await expect(page.locator("#modeToggleSide")).toBeVisible();
 
     await page.setViewportSize({ width: 375, height: 812 });
-    await expect(page.locator("#modeToggle")).toHaveCount(0);
+    await expect(page.locator("#modeToggle")).toHaveCount(1);
+    await expect(page.locator("#modeToggle")).toBeHidden();
+    await expect(page.locator("#modeToggleSide")).toBeVisible();
+  });
+
+  test("clicking the navbar toggle updates the sidebar toggle and the mode immediately", async ({
+    page,
+  }) => {
+    await freshAt(page, { width: 1280, height: 800 });
+    await page.locator('#modeToggle button[data-mode="detailed"]').click();
+
+    await expect(page.locator("body")).toHaveAttribute("data-mode", "detailed");
+    await expect(page.locator('#modeToggle button[data-mode="detailed"]')).toHaveAttribute(
+      "aria-checked",
+      "true",
+    );
+    await expect(page.locator('#modeToggleSide button[data-mode="detailed"]')).toHaveAttribute(
+      "aria-checked",
+      "true",
+    );
+    await expect(page.locator('#modeToggleSide button[data-mode="simple"]')).toHaveAttribute(
+      "aria-checked",
+      "false",
+    );
+  });
+
+  test("clicking the sidebar toggle updates the navbar toggle and the mode immediately", async ({
+    page,
+  }) => {
+    await freshAt(page, { width: 1280, height: 800 });
+    await page.locator('#modeToggleSide button[data-mode="detailed"]').click();
+
+    await expect(page.locator("body")).toHaveAttribute("data-mode", "detailed");
+    await expect(page.locator('#modeToggleSide button[data-mode="detailed"]')).toHaveAttribute(
+      "aria-checked",
+      "true",
+    );
+    await expect(page.locator('#modeToggle button[data-mode="detailed"]')).toHaveAttribute(
+      "aria-checked",
+      "true",
+    );
+    await expect(page.locator('#modeToggle button[data-mode="simple"]')).toHaveAttribute(
+      "aria-checked",
+      "false",
+    );
+  });
+
+  test("the mode chosen via the drawer at mobile width is reflected on the navbar toggle back at desktop width", async ({
+    page,
+  }) => {
+    await freshAt(page, { width: 1280, height: 800 });
+    await expect(page.locator("#modeToggle")).toBeVisible();
+
+    await page.setViewportSize({ width: 375, height: 812 });
     await page.locator("#burgerBtn").click();
     await page.locator('#modeToggleSide button[data-mode="detailed"]').click();
     await expect(page.locator("body")).toHaveAttribute("data-mode", "detailed");
 
     await page.setViewportSize({ width: 1280, height: 800 });
-    await expect(page.locator("#modeToggle")).toHaveCount(0);
-    await expect(page.locator('#modeToggleSide button[data-mode="detailed"]')).toHaveAttribute(
+    await expect(page.locator("#modeToggle")).toBeVisible();
+    await expect(page.locator('#modeToggle button[data-mode="detailed"]')).toHaveAttribute(
       "aria-checked",
       "true",
     );
   });
 });
 
-/* The navbar itself, after the mode toggle moved out: only the logo, the
- * search bar, and the theme/language buttons remain — all still present,
- * visible, and independently operable. */
-test.describe("navbar polish: remaining navbar controls stay accessible and usable", () => {
-  test("logo, search, theme and language are all present and the actions group holds nothing else", async ({
+/* The navbar with the mode toggle restored: logo, search, mode toggle, theme
+ * and language all present, visible, balanced, and independently usable. */
+test.describe("navbar polish: all navbar controls stay accessible and usable", () => {
+  test("logo, search, mode toggle, theme and language are all present, and the actions group holds exactly three controls", async ({
     page,
   }) => {
     await freshAt(page, { width: 1280, height: 800 });
     await expect(page.locator("#logoLink")).toBeVisible();
     await expect(page.locator("#searchInput")).toBeVisible();
+    await expect(page.locator("#modeToggle")).toBeVisible();
     await expect(page.locator("#themeBtn")).toBeVisible();
     await expect(page.locator("#langBtn")).toBeVisible();
 
-    /* the actions group is exactly theme + language now, not a third group */
+    /* the actions group is mode toggle + theme + language */
     const actionGroups = await page.locator(".topnav-actions > *").evaluateAll((els) => els.length);
-    expect(actionGroups).toBe(2);
+    expect(actionGroups).toBe(3);
   });
 
-  test("theme and language buttons are reachable by keyboard and operable in sequence", async ({
+  test("mode toggle, theme and language buttons are reachable by keyboard and operable in sequence", async ({
     page,
   }) => {
     await freshAt(page, { width: 1280, height: 800 });
     await page.locator("#searchInput").focus();
+
+    await page.keyboard.press("Tab");
+    await expect(page.locator('#modeToggle button[data-mode="simple"]')).toBeFocused();
+    await page.keyboard.press("Tab");
+    await expect(page.locator('#modeToggle button[data-mode="detailed"]')).toBeFocused();
+    await page.keyboard.press("Enter");
+    await expect(page.locator("body")).toHaveAttribute("data-mode", "detailed");
+
     await page.keyboard.press("Tab");
     await expect(page.locator("#themeBtn")).toBeFocused();
     await page.keyboard.press("Tab");

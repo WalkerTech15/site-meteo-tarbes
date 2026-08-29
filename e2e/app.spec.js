@@ -120,6 +120,9 @@ test.describe("settings page", () => {
   test("62. every display-mode control uses the same Simple-then-Détaillé order", async ({
     app,
   }) => {
+    const headerOrder = await app
+      .locator("#modeToggle button")
+      .evaluateAll((els) => els.map((el) => el.dataset.mode));
     const sideOrder = await app
       .locator("#modeToggleSide button")
       .evaluateAll((els) => els.map((el) => el.dataset.mode));
@@ -128,6 +131,7 @@ test.describe("settings page", () => {
       .locator("#modeTiles .set-tile")
       .evaluateAll((els) => els.map((el) => el.dataset.mode));
 
+    expect(headerOrder).toEqual(["simple", "detailed"]);
     expect(sideOrder).toEqual(["simple", "detailed"]);
     expect(settingsOrder).toEqual(["simple", "detailed"]);
   });
@@ -139,6 +143,10 @@ test.describe("settings page", () => {
     await app.locator('#modeTiles .set-tile[data-mode="detailed"]').click();
 
     await expect(app.locator("body")).toHaveAttribute("data-mode", "detailed");
+    await expect(app.locator('#modeToggle button[data-mode="detailed"]')).toHaveAttribute(
+      "aria-checked",
+      "true",
+    );
     await expect(app.locator('#modeToggleSide button[data-mode="detailed"]')).toHaveAttribute(
       "aria-checked",
       "true",
@@ -166,6 +174,10 @@ test.describe("settings page", () => {
     await app.reload();
     await expect(app.locator("#heroCityName")).not.toBeEmpty();
     await expect(app.locator("body")).toHaveAttribute("data-mode", "detailed");
+    await expect(app.locator('#modeToggle button[data-mode="detailed"]')).toHaveAttribute(
+      "aria-checked",
+      "true",
+    );
     await expect(app.locator('#modeToggleSide button[data-mode="detailed"]')).toHaveAttribute(
       "aria-checked",
       "true",

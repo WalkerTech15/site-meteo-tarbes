@@ -208,7 +208,9 @@ test.describe("existing header/sidebar controls still work at both breakpoints",
       await page.locator('#themeMenu button[data-theme="dark"]').click();
       await expect(page.locator("body")).toHaveAttribute("data-theme", "dark");
 
-      /* the display-mode toggle now lives only in the sidebar, at every width */
+      /* the sidebar's copy (#modeToggleSide) is reachable at every width —
+         the navbar's own copy (#modeToggle) is css-hidden below 901px, see
+         navbar-polish.spec.js for its own coverage */
       await page.locator('#modeToggleSide button[data-mode="detailed"]').click();
       await expect(page.locator("body")).toHaveAttribute("data-mode", "detailed");
     });
@@ -253,10 +255,10 @@ test.describe("sidebar/mobile navigation item order", () => {
       expect(new Set(await navItemViews(page)).size).toBe(6); /* no duplicated view */
       expect(await navItemLabels(page)).toEqual(EXPECTED_LABELS_FR);
 
-      /* the top header still carries only the logo, search, theme and
-         language controls — navigation never migrated up there */
+      /* the top header still carries only the logo, search, mode toggle,
+         theme and language controls — navigation never migrated up there */
       await expect(page.locator(".topnav .side-item")).toHaveCount(0);
-      await expect(page.locator(".topnav-actions > *")).toHaveCount(2);
+      await expect(page.locator(".topnav-actions > *")).toHaveCount(3);
     });
   }
 
