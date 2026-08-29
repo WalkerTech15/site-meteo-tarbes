@@ -185,6 +185,11 @@
   font-weight: 500;
   opacity: 0.92;
 }
+/* A country selection has nothing to put here (see render-home.js) — collapse
+   instead of leaving an empty line's worth of margin under the city name. */
+.hero-region:empty {
+  display: none;
+}
 
 .hero-fav-btn {
   display: grid;

@@ -208,6 +208,29 @@ describe("flagsHtml / regionKeyFor for a directly-selected Canadian province", (
   });
 });
 
+/* An ocean/sea pick (core/coord-location.js) — and any other location a
+   geocoder gave no country for — carries cc: "" rather than a real ISO code.
+   flagHtml("") used to fall through to its "unrecognised code" placeholder,
+   rendering a bare "?" badge next to the location name: worse than showing
+   no flag at all for a place that genuinely has no country. */
+describe("flagsHtml for a location with no country code (ocean/sea, unnamed coordinate)", () => {
+  const ATLANTIC_OCEAN = {
+    kind: "ocean",
+    cc: "",
+    name: { en: "Atlantic Ocean", fr: "Océan Atlantique" },
+    region: { en: "", fr: "" },
+    country: { en: "", fr: "" },
+  };
+
+  it("renders no flag wrap at all, never a '?' placeholder badge", () => {
+    state.lang = "en";
+    const html = flagsHtml(ATLANTIC_OCEAN);
+    expect(html).not.toContain("flag-txt");
+    expect(html).not.toContain("?");
+    expect(html.match(/location-flag-wrap/g)).toBeNull();
+  });
+});
+
 /* The Settings → Time card's whole contract: 12/24-hour choice, the optional
    seconds, and the selected city's own IANA zone rather than the visitor's —
    see features/settings.js's setClockFormat/setClockSeconds. */

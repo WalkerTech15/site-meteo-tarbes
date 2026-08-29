@@ -159,8 +159,15 @@ export function flagsHtml(loc, variant = "") {
   const cc = (loc.cc || "").toUpperCase();
   const wrap = (inner) => `<span class="location-flag-wrap">${inner}</span>`;
   const wraps = [];
-  const cSrc = countryFlagSrc(cc);
-  wraps.push(wrap(cSrc ? flagImgTag(cSrc, flagAlt(locCountry(loc) || cc)) : flagHtml(cc)));
+  /* No country code at all (an open-ocean/sea pick, or a bare-coordinate
+     fallback with nothing a geocoder could name) means there is no country
+     to show a flag FOR — flagHtml("") would otherwise fall through to its
+     "unrecognised code" placeholder and render a bare "?" badge, which is
+     worse than no flag. */
+  if (cc) {
+    const cSrc = countryFlagSrc(cc);
+    wraps.push(wrap(cSrc ? flagImgTag(cSrc, flagAlt(locCountry(loc) || cc)) : flagHtml(cc)));
+  }
   const key = regionKeyFor(loc);
   if (key) {
     const rSrc = regionFlagSrc(key);

@@ -657,9 +657,9 @@ test.describe("geographic identity box", () => {
       expect(flag.height).toBeGreaterThan(0);
     }
     const countryFlag = (app) =>
-      app.locator(
-        "#mapWeatherPanel .geo-identity-row > .geo-chip > img.flag-img.geo-chip-flag",
-      ).first();
+      app
+        .locator("#mapWeatherPanel .geo-identity-row > .geo-chip > img.flag-img.geo-chip-flag")
+        .first();
 
     // France
     await searchAndSelect(app, TARBES_LABEL);
@@ -891,6 +891,19 @@ test.describe("flag sizing consistency (country vs state/province)", () => {
     expect(Math.round(country.height)).toBe(Math.round(state.height));
     assertUndistorted(country);
     assertUndistorted(state);
+  });
+
+  test("the Home hero shows the country before the state/region, in that order", async ({
+    app,
+  }) => {
+    await app.locator('.explore-card[data-loc="losangeles"] .explore-open').click();
+    /* default test locale is French (see setLang usage elsewhere in this file) */
+    const text = await app.locator(".hero-region").innerText();
+    const countryIdx = text.indexOf("États-Unis");
+    const regionIdx = text.indexOf("Californie");
+    expect(countryIdx).toBeGreaterThan(-1);
+    expect(regionIdx).toBeGreaterThan(-1);
+    expect(countryIdx).toBeLessThan(regionIdx);
   });
 
   test("New York's popular-place card no longer force-stretches its flag pair to a 4:3 box (object-fit: fill regression)", async ({
@@ -2048,9 +2061,7 @@ test.describe("language menu accessibility", () => {
     await expect(page.locator("#sidebar")).toHaveAttribute("aria-hidden", "false");
   });
 
-  test("lists Français first, English second, with French selected by default", async ({
-    app,
-  }) => {
+  test("lists Français first, English second, with French selected by default", async ({ app }) => {
     const buttons = app.locator("#langMenu button");
     const order = await buttons.evaluateAll((els) => els.map((el) => el.dataset.lang));
     expect(order).toEqual(["fr", "en"]);
@@ -2061,8 +2072,14 @@ test.describe("language menu accessibility", () => {
     expect(labels).toEqual(["Français", "English"]);
 
     /* flags, roles and aria-checked are preserved on the reordered items */
-    await expect(app.locator('#langMenu button[data-lang="fr"]')).toHaveAttribute("role", "menuitemradio");
-    await expect(app.locator('#langMenu button[data-lang="en"]')).toHaveAttribute("role", "menuitemradio");
+    await expect(app.locator('#langMenu button[data-lang="fr"]')).toHaveAttribute(
+      "role",
+      "menuitemradio",
+    );
+    await expect(app.locator('#langMenu button[data-lang="en"]')).toHaveAttribute(
+      "role",
+      "menuitemradio",
+    );
     await expect(app.locator('#langMenu button[data-lang="fr"] [data-flag]')).toHaveCount(1);
     await expect(app.locator('#langMenu button[data-lang="en"] [data-flag]')).toHaveCount(1);
 
