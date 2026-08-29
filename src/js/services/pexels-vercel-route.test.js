@@ -221,12 +221,68 @@ describe("api/pexels.js — query= (generic search, unchanged behavior)", () => 
     expect(res.body.photo.photographer).toBe("Ada Lovelace");
   });
 
-  it("200s {photo:null} when the search has no results", async () => {
+  /* "Request multiple candidates instead of accepting only the first
+     result": the browser ranks these itself (rankPexelsCandidates in
+     photo-api.js) against the location's identity. */
+  it("requests several candidates and returns the full ranked-candidate pool as `photos`", async () => {
+    const fetchSpy = vi.fn(async (url) => {
+      expect(url).toContain("per_page=8");
+      expect(url).toContain("orientation=landscape");
+      return jsonResponse(200, {
+        photos: [
+          {
+            src: { large: "https://images.pexels.com/1.jpg" },
+            photographer: "A",
+            url: "https://www.pexels.com/photo/1/",
+            alt: "Photo one",
+          },
+          {
+            src: { large: "https://images.pexels.com/2.jpg" },
+            photographer: "B",
+            url: "https://www.pexels.com/photo/2/",
+            alt: "Photo two",
+          },
+        ],
+      });
+    });
+    globalThis.fetch = fetchSpy;
+
+    const res = fakeRes();
+    await handler(fakeReq("GET", { query: "Tarbes Occitanie France cityscape" }), res);
+
+    expect(fetchSpy).toHaveBeenCalledTimes(1);
+    expect(res.statusCode).toBe(200);
+    expect(res.body.photos).toHaveLength(2);
+    expect(res.body.photos.map((p) => p.photographer)).toEqual(["A", "B"]);
+    expect(res.body.photo).toEqual(res.body.photos[0]); // `photo` stays photos[0], for back-compat
+  });
+
+  it("drops a candidate with no usable image size from the `photos` array", async () => {
+    globalThis.fetch = vi.fn(async () =>
+      jsonResponse(200, {
+        photos: [
+          { src: {}, photographer: "no-size" },
+          {
+            src: { large: "https://images.pexels.com/ok.jpg" },
+            photographer: "ok",
+            url: "https://www.pexels.com/photo/ok/",
+            alt: "",
+          },
+        ],
+      }),
+    );
+    const res = fakeRes();
+    await handler(fakeReq("GET", { query: "Tarbes Occitanie France cityscape" }), res);
+    expect(res.body.photos).toHaveLength(1);
+    expect(res.body.photos[0].photographer).toBe("ok");
+  });
+
+  it("200s {photo:null, photos:[]} when the search has no results", async () => {
     globalThis.fetch = vi.fn(async () => jsonResponse(200, { photos: [] }));
     const res = fakeRes();
     await handler(fakeReq("GET", { query: "nowhere at all" }), res);
     expect(res.statusCode).toBe(200);
-    expect(res.body).toEqual({ photo: null });
+    expect(res.body).toEqual({ photo: null, photos: [] });
   });
 
   it("429s rate_limited when Pexels rate-limits the request", async () => {

@@ -22,6 +22,9 @@ const UPSTREAM_TIMEOUT_MS = 8000;
 /* Pexels photo IDs are positive integers. Bounding the digit count keeps an
    absurdly long string from ever reaching the upstream URL. */
 const ID_PATTERN = /^[1-9][0-9]{0,15}$/;
+/* Mirrors CANDIDATE_COUNT in api/pexels.js / public/api/pexels.php — the
+   client ranks these itself (rankPexelsCandidates in photo-api.js). */
+const CANDIDATE_COUNT = 8;
 
 function sendJson(res, status, payload) {
   res.statusCode = status;
@@ -118,7 +121,7 @@ function pexelsDevProxy(apiKey) {
       new URLSearchParams({
         query,
         orientation: "landscape",
-        per_page: "1",
+        per_page: String(CANDIDATE_COUNT),
         size: "medium",
       });
 
@@ -134,8 +137,8 @@ function pexelsDevProxy(apiKey) {
       if (!r.ok) return sendJson(res, 502, { error: "upstream_error" });
 
       const data = await r.json();
-      const photo = (data.photos || [])[0];
-      return sendJson(res, 200, { photo: photo ? toPayload(photo) : null });
+      const photos = (data.photos || []).map(toPayload).filter(Boolean);
+      return sendJson(res, 200, { photo: photos[0] || null, photos });
     } catch {
       /* Network failure or timeout. The message is deliberately not forwarded —
          the browser only needs "no photo". */

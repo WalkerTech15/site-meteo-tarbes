@@ -247,6 +247,15 @@ test.describe("settings page", () => {
   test("70. settings radio tiles can be activated from the keyboard", async ({ app }) => {
     await goToSettings(app);
     const detailed = app.locator('#modeTiles .set-tile[data-mode="detailed"]');
+    /* switchView() (ui/navigation.js) sets `hidden = false` synchronously but
+       only adds the `.is-visible` class — the thing that actually flips
+       `.view` from `display:none` to `display:block` (layout/main.css) — in a
+       requestAnimationFrame callback one frame later. locator.focus() only
+       waits for the element to be ATTACHED, not visible, so calling it inside
+       that one-frame window is a silent no-op on a still-display:none
+       element: nothing throws, but focus never actually moves. Waiting for
+       real visibility first (which DOES poll/retry) closes that race. */
+    await expect(detailed).toBeVisible();
     await detailed.focus();
     await expect(detailed).toBeFocused();
     await app.keyboard.press("Enter");

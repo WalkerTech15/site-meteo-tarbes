@@ -3,7 +3,16 @@
  * water itself, and attribution/server-side key protection hold in both
  * cases. See src/js/services/photo-api.js (pexelsQuery, relevanceKeywords,
  * isRelevantPhoto) and src/js/core/marine-regions.js. */
-import { test, expect, installMocks, json, GEOCODE_LABEL, CLICK_OCEAN } from "./mocks.js";
+import {
+  test,
+  expect,
+  installMocks,
+  json,
+  GEOCODE_LABEL,
+  CLICK_OCEAN,
+  wikimediaPhotoPage,
+  WIKIMEDIA_THUMB_URL,
+} from "./mocks.js";
 
 /* A query-aware stand-in for the proxy: unlike the fixed installMocks()
  * default, this answers differently depending on the `query=` the app sent,
@@ -150,5 +159,189 @@ test.describe("location photos — oceans and seas", () => {
     const photo = page.locator("#mapWeatherPanel .map-panel-photo");
     await expect(photo.locator("img.loc-photo-img")).toHaveCount(0);
     await expect(photo.locator("a.loc-credit")).toHaveCount(0);
+  });
+
+  test("Wikimedia is also searched for the ocean itself when Pexels has nothing — never a city", async ({
+    page,
+  }) => {
+    const { photoProxy } = queryAwarePhotoProxy(() => null);
+    const wikimediaQueries = [];
+    const wikimediaProxy = (route) => {
+      const url = new URL(route.request().url());
+      if (url.searchParams.get("generator") === "search") {
+        wikimediaQueries.push(url.searchParams.get("gsrsearch"));
+      }
+      return route.fulfill(json({ query: { pages: [] } }));
+    };
+    await installMocks(page, { photoProxy, wikimediaProxy });
+    await openMapAtOcean(page);
+    await clickMapCentre(page);
+
+    await expect(page.locator("#mapWeatherPanel .map-panel-location h2")).toHaveText(
+      "Océan Atlantique",
+    );
+    await expect.poll(() => wikimediaQueries.some((q) => q && q.includes("Atlantic Ocean"))).toBe(
+      true,
+    );
+    expect(wikimediaQueries.some((q) => q && q.toLowerCase().includes("cityscape"))).toBe(false);
+    /* still a graceful gradient/emoji fallback, never a false city photo */
+    const photo = page.locator("#mapWeatherPanel .map-panel-photo");
+    await expect(photo.locator("img.loc-photo-img")).toHaveCount(0);
+  });
+});
+
+/* A Wikimedia route mock that answers differently by `generator=` — geosearch
+   vs. text search — mirroring how resolveWikimediaPhoto (photo-api.js) tries
+   coordinate geosearch first for a granular place, then falls back to text
+   search. `geo` defaults to empty so a test only has to describe the branch
+   it cares about. */
+function splitWikimediaProxy({ geo = null, search = null } = {}) {
+  const calls = { geo: 0, search: 0 };
+  const wikimediaProxy = (route) => {
+    const generator = new URL(route.request().url()).searchParams.get("generator");
+    if (generator === "geosearch") {
+      calls.geo++;
+      return route.fulfill(json(geo || { query: { pages: [] } }));
+    }
+    calls.search++;
+    return route.fulfill(json(search || { query: { pages: [] } }));
+  };
+  return { wikimediaProxy, calls };
+}
+
+test.describe("location photos — hybrid strategy: Wikimedia fallback, attribution, licensing", () => {
+  test("Wikimedia supplies the photo when Pexels has nothing relevant, with license and attribution shown", async ({
+    page,
+  }) => {
+    const { photoProxy } = queryAwarePhotoProxy(() => null); // Pexels: nothing, ever
+    const { wikimediaProxy } = splitWikimediaProxy({
+      search: wikimediaPhotoPage({
+        title: "Reykjavik-harbour",
+        alt: `A view of ${GEOCODE_LABEL}, Iceland at dusk`,
+        photographer: "A Commons Contributor",
+        license: "CC BY-SA 4.0",
+      }),
+    });
+    await installMocks(page, { photoProxy, wikimediaProxy });
+    await page.goto("/");
+    await expect(page.locator("#heroCityName")).not.toBeEmpty();
+
+    await page.locator("#searchInput").fill(GEOCODE_LABEL);
+    await page.locator("#searchResults .search-item").first().click();
+    await expect(page.locator("#heroCityName")).toContainText(GEOCODE_LABEL);
+
+    await expect(page.locator("#heroLandmark .has-photo")).toHaveCount(1);
+    await expect(page.locator("#heroLandmark img.loc-photo-img")).toHaveAttribute(
+      "src",
+      WIKIMEDIA_THUMB_URL,
+    );
+    const credit = page.locator("#heroInner .loc-credit");
+    await expect(credit).toBeVisible();
+    await expect(credit).toHaveText("Wikimedia Commons ↗");
+    /* the license travels with the credit, and the description page — never
+       the raw upload.wikimedia.org thumbnail — is what the link opens */
+    await expect(credit).toHaveAttribute("title", /CC BY-SA 4\.0/);
+    await expect(credit).toHaveAttribute("href", /commons\.wikimedia\.org\/wiki\/File:/);
+  });
+
+  test("tries coordinate geosearch before falling back to text search, for a granular place", async ({
+    page,
+  }) => {
+    const { photoProxy } = queryAwarePhotoProxy(() => null);
+    const { wikimediaProxy, calls } = splitWikimediaProxy({
+      search: wikimediaPhotoPage({ title: "found-by-text", alt: `${GEOCODE_LABEL} Iceland` }),
+    });
+    await installMocks(page, { photoProxy, wikimediaProxy });
+    await page.goto("/");
+    await page.locator("#searchInput").fill(GEOCODE_LABEL);
+    await page.locator("#searchResults .search-item").first().click();
+    await expect(page.locator("#heroLandmark .has-photo")).toHaveCount(1);
+
+    expect(calls.geo).toBeGreaterThan(0); // geosearch was tried first…
+    expect(calls.search).toBeGreaterThan(0); // …and text search only because it came up empty
+  });
+
+  test("rejects a Wikimedia text-search result that doesn't name the place either", async ({
+    page,
+  }) => {
+    const { photoProxy } = queryAwarePhotoProxy(() => null);
+    const { wikimediaProxy } = splitWikimediaProxy({
+      search: wikimediaPhotoPage({ title: "unrelated", alt: "A parked bicycle on a wet street" }),
+    });
+    await installMocks(page, { photoProxy, wikimediaProxy });
+    await page.goto("/");
+    await page.locator("#searchInput").fill(GEOCODE_LABEL);
+    await page.locator("#searchResults .search-item").first().click();
+    await expect(page.locator("#heroCityName")).toContainText(GEOCODE_LABEL);
+
+    await expect(page.locator("#heroLandmark .has-photo")).toHaveCount(0);
+    await expect(page.locator("#heroInner .loc-credit")).toHaveCount(0);
+  });
+
+  test("rejects a Wikimedia candidate with an unclear/unrecognised license", async ({ page }) => {
+    const { photoProxy } = queryAwarePhotoProxy(() => null);
+    const { wikimediaProxy } = splitWikimediaProxy({
+      search: wikimediaPhotoPage({
+        title: "unclear-license",
+        alt: `${GEOCODE_LABEL} Iceland`,
+        license: "All rights reserved",
+      }),
+    });
+    await installMocks(page, { photoProxy, wikimediaProxy });
+    await page.goto("/");
+    await page.locator("#searchInput").fill(GEOCODE_LABEL);
+    await page.locator("#searchResults .search-item").first().click();
+    await expect(page.locator("#heroCityName")).toContainText(GEOCODE_LABEL);
+
+    await expect(page.locator("#heroLandmark .has-photo")).toHaveCount(0);
+  });
+
+  test("both Pexels and Wikimedia failing outright still degrades to the gradient/emoji fallback", async ({
+    page,
+  }) => {
+    const errors = [];
+    page.on("pageerror", (e) => errors.push(String(e)));
+    await installMocks(page, {
+      photoProxy: (route) => route.fulfill({ status: 502, contentType: "application/json", body: "{}" }),
+      wikimediaProxy: (route) =>
+        route.fulfill({ status: 502, contentType: "application/json", body: "{}" }),
+    });
+    await page.goto("/");
+    await page.locator("#searchInput").fill(GEOCODE_LABEL);
+    await page.locator("#searchResults .search-item").first().click();
+    await expect(page.locator("#heroCityName")).toContainText(GEOCODE_LABEL);
+
+    await expect(page.locator("#heroLandmark .has-photo")).toHaveCount(0);
+    await expect(page.locator("#heroLandmark .loc-photo-fallback")).toBeVisible();
+    await expect(page.locator("#heroInner .loc-credit")).toHaveCount(0);
+    /* no unhandled rejection / console error from either failed lookup */
+    await page.waitForTimeout(300);
+    expect(errors).toEqual([]);
+  });
+
+  test("Pexels ranks a candidate that names the city over one that only matches generically", async ({
+    page,
+  }) => {
+    const weak = {
+      src: { medium: PIXEL, large: PIXEL },
+      photographer: "Weak Match",
+      link: "https://www.pexels.com/photo/weak/",
+      alt: "A generic landscape somewhere in Iceland",
+    };
+    const strong = {
+      src: { medium: PIXEL, large: PIXEL },
+      photographer: "Strong Match",
+      link: "https://www.pexels.com/photo/strong/",
+      alt: `${GEOCODE_LABEL} harbour at sunrise`,
+    };
+    const photoProxy = (route) => route.fulfill(json({ photo: weak, photos: [weak, strong] }));
+    await installMocks(page, { photoProxy });
+    await page.goto("/");
+    await page.locator("#searchInput").fill(GEOCODE_LABEL);
+    await page.locator("#searchResults .search-item").first().click();
+    await expect(page.locator("#heroLandmark .has-photo")).toHaveCount(1);
+
+    const credit = page.locator("#heroInner .loc-credit");
+    await expect(credit).toHaveAttribute("href", "https://www.pexels.com/photo/strong/");
   });
 });

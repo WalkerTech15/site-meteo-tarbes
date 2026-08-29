@@ -10,14 +10,20 @@ import { fileURLToPath } from "node:url";
 import {
   fetchPexelsPhoto,
   fetchPexelsPhotoById,
+  fetchPexelsPhotoCandidates,
+  fetchWikimediaPhoto,
   pexelsQuery,
+  wikimediaQuery,
   relevanceKeywords,
   isRelevantPhoto,
+  rankPexelsCandidates,
+  rankWikimediaCandidates,
   resolveLocationImage,
   __resetPhotoCacheForTests,
 } from "./photo-api.js";
 import { state } from "../core/state.js";
 import { LOCATIONS } from "../data/locations.js";
+import { COUNTRY_FLAG_CODES } from "../data/country-flag-codes.js";
 
 const PROXY_PATH = "api/pexels";
 
@@ -620,6 +626,362 @@ describe("resolveLocationImage — ocean/sea fallback glyph", () => {
 
   it("still shows the generic city glyph for an ordinary unknown place", () => {
     expect(resolveLocationImage({ kind: "city", name: { en: "Somewhere" } })).toBe("🏙️");
+  });
+});
+
+/* "Request multiple candidates instead of accepting only the first result":
+ * the proxy now answers a query lookup with a `photos` array (see
+ * api/pexels.js); fetchPexelsPhotoCandidates reads that array under its own
+ * cache, entirely separate from fetchPexelsPhoto's single-photo cache. */
+describe("fetchPexelsPhotoCandidates — multi-candidate proxy contract", () => {
+  it("maps every entry of the proxy's `photos` array onto the photo shape", async () => {
+    const calls = stubFetch(() =>
+      jsonResponse(200, {
+        photo: { src: { large: "https://images.pexels.com/1.jpg" }, photographer: "A", link: "" },
+        photos: [
+          {
+            src: { large: "https://images.pexels.com/1.jpg" },
+            photographer: "A",
+            link: "",
+            alt: "a",
+          },
+          {
+            src: { large: "https://images.pexels.com/2.jpg" },
+            photographer: "B",
+            link: "",
+            alt: "b",
+          },
+          {
+            src: { large: "https://images.pexels.com/3.jpg" },
+            photographer: "C",
+            link: "",
+            alt: "c",
+          },
+        ],
+      }),
+    );
+
+    const candidates = await fetchPexelsPhotoCandidates("Reykjavik Iceland cityscape");
+
+    expect(calls).toHaveLength(1);
+    expect(candidates).toHaveLength(3);
+    expect(candidates.map((c) => c.photographer)).toEqual(["A", "B", "C"]);
+  });
+
+  it("falls back to a one-item pool from `photo` when `photos` is absent", async () => {
+    stubFetch(() =>
+      jsonResponse(200, {
+        photo: { src: { large: "https://images.pexels.com/1.jpg" }, photographer: "A", link: "" },
+      }),
+    );
+    const candidates = await fetchPexelsPhotoCandidates("anywhere at all cityscape");
+    expect(candidates).toHaveLength(1);
+  });
+
+  it("resolves to an empty array (never throws) for every proxy failure mode", async () => {
+    for (const [status, body] of [
+      [400, { error: "invalid_query" }],
+      [429, { error: "rate_limited" }],
+      [502, { error: "upstream_error" }],
+      [503, { error: "unavailable" }],
+    ]) {
+      __resetPhotoCacheForTests();
+      stubFetch(() => jsonResponse(status, body));
+      await expect(fetchPexelsPhotoCandidates("Paris France cityscape")).resolves.toEqual([]);
+    }
+  });
+
+  it("caches the candidate pool separately from the single-photo cache", async () => {
+    const calls = stubFetch(() =>
+      jsonResponse(200, {
+        photo: null,
+        photos: [
+          { src: { large: "https://images.pexels.com/1.jpg" }, photographer: "A", link: "" },
+        ],
+      }),
+    );
+    await fetchPexelsPhotoCandidates("Lyon France cityscape");
+    await fetchPexelsPhotoCandidates("Lyon France cityscape");
+    await fetchPexelsPhoto("Lyon France cityscape"); // distinct cache — still a fresh request
+    expect(calls).toHaveLength(2);
+  });
+
+  it("does not call the proxy for an empty query", async () => {
+    const calls = stubFetch(() => jsonResponse(200, { photo: null, photos: [] }));
+    await expect(fetchPexelsPhotoCandidates("")).resolves.toEqual([]);
+    expect(calls).toHaveLength(0);
+  });
+});
+
+describe("rankPexelsCandidates — ranking, not just accepting the first result", () => {
+  const TARBES = {
+    kind: "city",
+    name: { en: "Tarbes" },
+    region: { en: "Occitanie" },
+    country: { en: "France" },
+  };
+
+  it("prefers the candidate whose text names the place itself over one that only matches the region", () => {
+    const genericRegion = { src: "r.jpg", alt: "Countryside in Occitanie", photographer: "X" };
+    const namesThePlace = {
+      src: "p.jpg",
+      alt: "Aerial view of Tarbes at sunset",
+      photographer: "X",
+    };
+    const best = rankPexelsCandidates(TARBES, [genericRegion, namesThePlace]);
+    expect(best).toBe(namesThePlace);
+  });
+
+  it("ignores candidate order — the best match wins even if listed last", () => {
+    const weak = { src: "1.jpg", alt: "France countryside", photographer: "X" };
+    const strong = { src: "2.jpg", alt: "Tarbes town square, France", photographer: "X" };
+    expect(rankPexelsCandidates(TARBES, [weak, strong])).toBe(strong);
+    expect(rankPexelsCandidates(TARBES, [strong, weak])).toBe(strong);
+  });
+
+  it("never returns a candidate that fails the relevance check, even if it's the only one", () => {
+    const unrelated = { src: "x.jpg", alt: "A cup of coffee", photographer: "Nobody" };
+    expect(rankPexelsCandidates(TARBES, [unrelated])).toBeNull();
+  });
+
+  it("returns null for an empty or missing candidate pool", () => {
+    expect(rankPexelsCandidates(TARBES, [])).toBeNull();
+    expect(rankPexelsCandidates(TARBES, null)).toBeNull();
+    expect(rankPexelsCandidates(TARBES, undefined)).toBeNull();
+  });
+
+  it("drops candidates with no usable src before ranking", () => {
+    const noSrc = { alt: "Tarbes France", photographer: "X" };
+    const withSrc = { src: "ok.jpg", alt: "Tarbes France", photographer: "X" };
+    expect(rankPexelsCandidates(TARBES, [noSrc, withSrc])).toBe(withSrc);
+  });
+});
+
+/* Wikimedia's search targets file titles/categories, not stock-photo copy —
+ * no "cityscape"/"landscape travel" suffix (see the doc comment on
+ * wikimediaQuery itself), otherwise the same name+region+country shape as
+ * pexelsQuery, for the same disambiguation reason. */
+describe("wikimediaQuery — Commons-appropriate query construction", () => {
+  it("qualifies a city with region and country, no stock-photo suffix", () => {
+    const loc = {
+      kind: "city",
+      name: { en: "Tarbes" },
+      region: { en: "Occitanie" },
+      country: { en: "France" },
+    };
+    expect(wikimediaQuery(loc)).toBe("Tarbes Occitanie France");
+    expect(wikimediaQuery(loc)).not.toMatch(/cityscape|landscape travel|streets/i);
+  });
+
+  it("is just the name for a country", () => {
+    expect(wikimediaQuery({ kind: "country", name: { en: "Japan" } })).toBe("Japan");
+  });
+
+  it("is just the name for an ocean/sea, never a city-style query", () => {
+    expect(wikimediaQuery({ kind: "ocean", name: { en: "Atlantic Ocean" } })).toBe(
+      "Atlantic Ocean",
+    );
+  });
+
+  it("returns an empty string for an unusable location", () => {
+    expect(wikimediaQuery(null)).toBe("");
+    expect(wikimediaQuery({ kind: "city", name: {} })).toBe("");
+  });
+});
+
+describe("rankWikimediaCandidates — coordinate trust vs. text relevance", () => {
+  const TARBES = {
+    kind: "city",
+    name: { en: "Tarbes" },
+    region: { en: "Occitanie" },
+    country: { en: "France" },
+  };
+
+  it("trusts a geosearch candidate even when its text doesn't obviously name the place", () => {
+    const nearby = {
+      src: "x.jpg",
+      alt: "Old stone bridge",
+      photographer: "X",
+      width: 1200,
+      height: 800,
+    };
+    expect(rankWikimediaCandidates(TARBES, [nearby], { trustCoordinates: true })).toBe(nearby);
+  });
+
+  it("still applies the relevance filter to a text-search candidate", () => {
+    const unrelated = { src: "x.jpg", alt: "A parked bicycle", photographer: "X" };
+    expect(rankWikimediaCandidates(TARBES, [unrelated], { trustCoordinates: false })).toBeNull();
+  });
+
+  it("prefers a landscape-oriented candidate over a portrait one", () => {
+    const portrait = {
+      src: "p.jpg",
+      alt: "Tarbes France",
+      photographer: "X",
+      width: 600,
+      height: 1200,
+    };
+    const landscape = {
+      src: "l.jpg",
+      alt: "Tarbes France",
+      photographer: "X",
+      width: 1200,
+      height: 600,
+    };
+    expect(rankWikimediaCandidates(TARBES, [portrait, landscape])).toBe(landscape);
+  });
+
+  it("returns null for an empty pool", () => {
+    expect(rankWikimediaCandidates(TARBES, [])).toBeNull();
+  });
+});
+
+describe("fetchWikimediaPhoto — geosearch-first, text-search fallback, cached", () => {
+  it("tries geosearch first for a granular place with coordinates, and skips text search on a hit", async () => {
+    const calls = stubFetch(() =>
+      jsonResponse(200, {
+        query: {
+          pages: [
+            {
+              title: "File:Tarbes.jpg",
+              coordinates: [{ lat: 43.23, lon: 0.08 }],
+              imageinfo: [
+                {
+                  thumburl: "https://upload.wikimedia.org/thumb/tarbes.jpg",
+                  descriptionurl: "https://commons.wikimedia.org/wiki/File:Tarbes.jpg",
+                  extmetadata: {
+                    LicenseShortName: { value: "CC BY-SA 4.0" },
+                    Artist: { value: "Jane Doe" },
+                    ImageDescription: { value: "A square in Tarbes" },
+                  },
+                },
+              ],
+            },
+          ],
+        },
+      }),
+    );
+
+    const loc = { kind: "city", name: { en: "Tarbes" }, lat: 43.23, lon: 0.08 };
+    const photo = await fetchWikimediaPhoto(loc);
+
+    expect(photo).toMatchObject({ source: "wikimedia", photographer: "Jane Doe" });
+    expect(calls).toHaveLength(1); // geosearch alone was enough — no text-search fallback fired
+    expect(new URL(calls[0].url).searchParams.get("generator")).toBe("geosearch");
+  });
+
+  it("falls back to text search when geosearch finds nothing", async () => {
+    let call = 0;
+    const calls = stubFetch((url) => {
+      call++;
+      const generator = new URL(url).searchParams.get("generator");
+      if (generator === "geosearch") return jsonResponse(200, { query: { pages: [] } }); // empty
+      return jsonResponse(200, {
+        query: {
+          pages: [
+            {
+              title: "File:Japan.jpg",
+              imageinfo: [
+                {
+                  thumburl: "https://upload.wikimedia.org/thumb/japan.jpg",
+                  descriptionurl: "https://commons.wikimedia.org/wiki/File:Japan.jpg",
+                  extmetadata: {
+                    LicenseShortName: { value: "CC0" },
+                    Artist: { value: "J. Photographer" },
+                    ImageDescription: { value: "A landscape in Japan" },
+                  },
+                },
+              ],
+            },
+          ],
+        },
+      });
+    });
+
+    const photo = await fetchWikimediaPhoto({ kind: "country", name: { en: "Japan" } });
+
+    expect(photo).toMatchObject({ source: "wikimedia", photographer: "J. Photographer" });
+    expect(calls).toHaveLength(1); // country never attempts geosearch at all — straight to text search
+    expect(new URL(calls[0].url).searchParams.get("generator")).toBe("search");
+    expect(call).toBe(1);
+  });
+
+  it("resolves to null (never throws) when both geosearch and text search find nothing", async () => {
+    stubFetch(() => jsonResponse(200, { query: { pages: [] } }));
+    await expect(
+      fetchWikimediaPhoto({ kind: "city", name: { en: "Nowhereville" }, lat: 1, lon: 1 }),
+    ).resolves.toBeNull();
+  });
+
+  it("resolves to null for an unusable location, without calling fetch", async () => {
+    const calls = stubFetch(() => jsonResponse(200, { query: { pages: [] } }));
+    await expect(fetchWikimediaPhoto(null)).resolves.toBeNull();
+    await expect(fetchWikimediaPhoto({ kind: "city", name: {} })).resolves.toBeNull();
+    expect(calls).toHaveLength(0);
+  });
+
+  it("caches by location identity so re-selecting the same place doesn't re-query", async () => {
+    const calls = stubFetch(() => jsonResponse(200, { query: { pages: [] } }));
+    const loc = { kind: "country", name: { en: "Japan" } };
+    await fetchWikimediaPhoto(loc);
+    await fetchWikimediaPhoto(loc);
+    expect(calls).toHaveLength(1);
+  });
+});
+
+/* "Audit all country codes in the WeatherSphere location and flag data" /
+ * "Ensure every country has a valid photo-search strategy" — every code in
+ * the flag manifest (public/assets/flags/countries/, see
+ * data/country-flag-codes.js) must, once turned into a country-shaped
+ * location, produce a valid, non-empty, well-formed query for BOTH sources
+ * and never crash — the generic name+kind pipeline needs no per-country
+ * lookup table to cover the ~250 entries in that set. */
+describe("global country coverage — every flag-data country code has a valid photo-search path", () => {
+  it("covers a substantial, real set of country/territory codes", () => {
+    expect(COUNTRY_FLAG_CODES.size).toBeGreaterThan(200);
+  });
+
+  for (const code of COUNTRY_FLAG_CODES) {
+    it(`${code}: produces a valid Pexels and Wikimedia query, never throws`, () => {
+      const loc = {
+        kind: "country",
+        cc: code.toUpperCase(),
+        name: { en: code.toUpperCase(), fr: code.toUpperCase() },
+        region: { en: "" },
+        country: { en: code.toUpperCase() },
+      };
+      const pQuery = pexelsQuery(loc);
+      const wQuery = wikimediaQuery(loc);
+      expect(pQuery.length).toBeGreaterThan(0);
+      expect(wQuery.length).toBeGreaterThan(0);
+      expect(pQuery.startsWith(code.toUpperCase())).toBe(true);
+      expect(wQuery).toBe(code.toUpperCase());
+      /* relevance/ranking must never throw for any of these either */
+      expect(() => relevanceKeywords(loc)).not.toThrow();
+      expect(() => isRelevantPhoto(loc, { alt: "", photographer: "" })).not.toThrow();
+    });
+  }
+});
+
+describe("server proxies agree on the multi-candidate contract", () => {
+  const read = (relPath) => readFileSync(fileURLToPath(new URL(relPath, import.meta.url)), "utf8");
+
+  it("api/pexels.js requests more than one candidate and returns a `photos` array", () => {
+    const src = read("../../../api/pexels.js");
+    expect(src).toMatch(/CANDIDATE_COUNT\s*=\s*8/);
+    expect(src).toMatch(/\{\s*photo:\s*photos\[0\]\s*\|\|\s*null,\s*photos\s*\}/);
+  });
+
+  it("vite.config.js's dev proxy mirrors the same candidate count and `photos` field", () => {
+    const src = read("../../../vite.config.js");
+    expect(src).toMatch(/CANDIDATE_COUNT\s*=\s*8/);
+    expect(src).toMatch(/\{\s*photo:\s*photos\[0\]\s*\|\|\s*null,\s*photos\s*\}/);
+  });
+
+  it("public/api/pexels.php mirrors the same candidate count and `photos` field", () => {
+    const src = read("../../../public/api/pexels.php");
+    expect(src).toMatch(/CANDIDATE_COUNT\s*=\s*8/);
+    expect(src).toMatch(/'photos'\s*=>\s*\$photos/);
   });
 });
 

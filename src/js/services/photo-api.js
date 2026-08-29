@@ -1,11 +1,20 @@
 /* Location visuals: curated landmark image → country flag → emoji fallback,
-   with an optional real photo fetched from Pexels layered on top once it
-   loads (never blocking the initial render, never causing layout shift). */
+   with an optional real photo layered on top once it loads (never blocking
+   the initial render, never causing layout shift). The real photo is a
+   hybrid of two sources — see fetchBestPhoto below:
+     1. Pexels, ranked across several candidates, for attractive
+        city/town/landscape/ocean photography (the same-origin proxy keeps
+        the API key server-side — see PEXELS_PROXY_URL in core/config.js).
+     2. Wikimedia Commons, tried only when Pexels has nothing sufficiently
+        relevant, for exact landmarks/geography Pexels' stock-photo library
+        often lacks — see services/wikimedia-api.js. Commons is public and
+        keyless, so it is called directly, no proxy involved. */
 import { state } from "../core/state.js";
 import { PEXELS_PROXY_URL, FETCH_TIMEOUT_MS } from "../core/config.js";
 import { flagHtml } from "../data/flags.js";
 import { locCountry } from "../core/location.js";
 import { t } from "../core/i18n.js";
+import { wikimediaGeosearch, wikimediaSearch } from "./wikimedia-api.js";
 
 export function gradBg(loc) {
   return `background:linear-gradient(145deg, ${loc.grad[0]}, ${loc.grad[1]})`;
@@ -57,11 +66,20 @@ export function bumpPhotoToken() {
   photoToken++;
 }
 
+const CANDIDATE_CACHE = new Map(); // query → Photo[] (Pexels' multi-candidate pool)
+const CANDIDATE_IN_FLIGHT = new Map();
+const WIKIMEDIA_CACHE = new Map(); // "geo:lat,lon" | "q:<query>" → Photo | null
+const WIKIMEDIA_IN_FLIGHT = new Map();
+
 /* Test seam only: the cache is intentionally process-lifetime in the app, but
    each unit test needs to start from empty. */
 export function __resetPhotoCacheForTests() {
   PHOTO_CACHE.clear();
   IN_FLIGHT.clear();
+  CANDIDATE_CACHE.clear();
+  CANDIDATE_IN_FLIGHT.clear();
+  WIKIMEDIA_CACHE.clear();
+  WIKIMEDIA_IN_FLIGHT.clear();
 }
 
 /* Small enough that a wide "cityscape" shot would mostly show empty
@@ -105,6 +123,23 @@ export function pexelsQuery(loc) {
 
   const suffix = SMALL_PLACE_KINDS.has(loc.kind) ? "streets architecture" : "cityscape";
   return [name, region, country, suffix].filter(Boolean).join(" ");
+}
+
+/* Wikimedia Commons' search indexes file titles, categories and descriptions
+   — encyclopaedic metadata, not photography-marketplace copy — so unlike
+   pexelsQuery this never appends a stock-photo suffix ("cityscape",
+   "landscape travel"): "Tarbes Occitanie France cityscape" would only ever
+   miss a file actually titled/categorised under the plain place name. Same
+   name+region+country qualification otherwise, for the same reason (avoid
+   confusing same-named places in different countries). */
+export function wikimediaQuery(loc) {
+  if (!loc) return "";
+  const name = (loc.name && (loc.name.en || loc.name.fr)) || "";
+  if (!name) return "";
+  if (loc.kind === "ocean" || loc.kind === "country") return name;
+  const region = (loc.region && loc.region.en) || "";
+  const country = (loc.country && loc.country.en) || locCountry(loc) || "";
+  return [name, region, country].filter(Boolean).join(" ");
 }
 
 /* ── Relevance filtering ──────────────────────────────────────────────────
@@ -195,6 +230,60 @@ export function isRelevantPhoto(loc, photo) {
   return tokens.some((tok) => haystack.includes(tok));
 }
 
+/* ── Ranking multiple candidates ──────────────────────────────────────────
+   Pexels' own search ranking is a decent prior but not authoritative — this
+   picks the best of the (up to 8) candidates the proxy now returns, rather
+   than trusting its first result blindly. Only ever chosen from the subset
+   that already passes isRelevantPhoto (this is a RANKING step among already-
+   accepted candidates, not a second, looser filter); an empty subset returns
+   null, exactly like "no photo". Orientation is not re-checked here: every
+   candidate was already requested with orientation=landscape server-side
+   (api/pexels.js), so "prefer landscape" is satisfied upstream. */
+export function rankPexelsCandidates(loc, candidates) {
+  const pool = (Array.isArray(candidates) ? candidates : []).filter(
+    (p) => p && p.src && isRelevantPhoto(loc, p),
+  );
+  if (pool.length === 0) return null;
+  const name = (loc.name && (loc.name.en || loc.name.fr)) || "";
+  const nameTokens = new Set(significantWords(name));
+  const otherTokens = relevanceKeywords(loc).filter((tok) => !nameTokens.has(tok));
+  /* The exact place name mentioned in a photo's alt/photographer text is a
+     much stronger signal than its (coarser) region/country, which is why it
+     is weighted higher rather than treated as just one more token. */
+  const score = (photo) => {
+    const hay = normalizeForMatch(
+      `${photo.alt || ""} ${photo.photographer || ""} ${photo.title || ""}`,
+    );
+    let s = 0;
+    for (const tok of nameTokens) if (hay.includes(tok)) s += 3;
+    for (const tok of otherTokens) if (hay.includes(tok)) s += 1;
+    return s;
+  };
+  return pool.reduce((best, p) => (score(p) > score(best) ? p : best), pool[0]);
+}
+
+/* Wikimedia equivalent. `trustCoordinates` is set for a geosearch result: the
+   candidate was already selected because Commons placed it within a few
+   kilometres of the location's own coordinates (see GEOSEARCH_KINDS below),
+   which is itself strong evidence of relevance even when its title/
+   description happens to be terse or in a language relevanceKeywords doesn't
+   tokenize — so it is trusted rather than re-filtered by text. A text-search
+   result (trustCoordinates: false — the country/region path, or a granular
+   place whose geosearch came up empty) carries no such guarantee and is held
+   to the same isRelevantPhoto check a Pexels text result gets, since Photo
+   objects from both sources share the same {alt, photographer} shape. */
+export function rankWikimediaCandidates(loc, candidates, { trustCoordinates = false } = {}) {
+  const list = (Array.isArray(candidates) ? candidates : []).filter((c) => c && c.src);
+  const pool = trustCoordinates ? list : list.filter((c) => isRelevantPhoto(loc, c));
+  if (pool.length === 0) return null;
+  /* Stable sort: landscape orientation first, Commons' own order (distance
+     for geosearch, search relevance for text search) as the tiebreaker. */
+  return [...pool].sort((a, b) => {
+    const landscape = (p) => (p.width && p.height ? (p.width >= p.height ? 0 : 1) : 0);
+    return landscape(a) - landscape(b);
+  })[0];
+}
+
 /* Asks the SAME-ORIGIN proxy for a photo — never Pexels directly, because that
    would require shipping the Pexels key to the browser. The proxy holds the key
    server-side and answers with a narrow, already-validated shape:
@@ -264,6 +353,133 @@ async function requestPhoto(cacheKey, url) {
   }
 }
 
+/* "Request multiple candidates instead of accepting only the first result":
+   the same proxy, but reading the `photos` array (up to 8, added alongside
+   the original single `photo` field — see api/pexels.js) instead of just
+   `photos[0]`. rankPexelsCandidates then picks the best of these against the
+   location's own identity. Same negative-caching/dedup discipline as
+   fetchPexelsPhoto, under its own cache so the two never collide. */
+export function fetchPexelsPhotoCandidates(query) {
+  if (!query) return Promise.resolve([]);
+  return dedupedFetchList(
+    query,
+    `${PEXELS_PROXY_URL}?query=${encodeURIComponent(query)}`,
+    CANDIDATE_CACHE,
+    CANDIDATE_IN_FLIGHT,
+    requestPhotoList,
+  );
+}
+
+function dedupedFetchList(cacheKey, url, cache, inFlight, run) {
+  if (cache.has(cacheKey)) return Promise.resolve(cache.get(cacheKey));
+  const pending = inFlight.get(cacheKey);
+  if (pending) return pending;
+  const p = run(cacheKey, url, cache).finally(() => inFlight.delete(cacheKey));
+  inFlight.set(cacheKey, p);
+  return p;
+}
+
+function toCandidateShape(p) {
+  const sizes = (p && p.src) || {};
+  const src = sizes.large || sizes.medium || sizes.large2x || "";
+  return src
+    ? { src, sizes, photographer: p.photographer || "", link: p.link || "", alt: p.alt || "" }
+    : null;
+}
+
+async function requestPhotoList(cacheKey, url, cache) {
+  try {
+    const r = await fetch(url, {
+      headers: { Accept: "application/json" },
+      signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
+    });
+    if (!r.ok) throw new Error("proxy " + r.status);
+    const d = await r.json();
+    // Older/hypothetical proxy responses carrying only `photo` still work —
+    // a one-item pool is a degenerate but valid candidate list.
+    const raw = Array.isArray(d?.photos) ? d.photos : d?.photo ? [d.photo] : [];
+    const out = raw.map(toCandidateShape).filter(Boolean);
+    cache.set(cacheKey, out);
+    return out;
+  } catch {
+    cache.set(cacheKey, []); // negative cache — don't hammer a failing query
+    return [];
+  }
+}
+
+/* Only these kinds have coordinates precise enough for a useful ~10km
+   Commons geosearch (see wikimediaGeosearch's GEOSEARCH_RADIUS_M) — a
+   country or region's single representative lat/lon is its capital or
+   centroid, not "the country", so geosearch there would return one arbitrary
+   nearby photo rather than anything representative; those kinds go straight
+   to a text search instead (see resolveWikimediaPhoto). */
+const GEOSEARCH_KINDS = new Set(["city", "town", "village", "address", "poi", "ocean"]);
+
+/* Wikimedia Commons lookup: geosearch first (when eligible — precise
+   coordinates back it with real proximity evidence), then a text search as
+   the fallback every kind gets. Cached by location identity so re-selecting
+   the same place never re-queries. */
+export function fetchWikimediaPhoto(loc) {
+  const cacheKey = wikimediaCacheKey(loc);
+  if (!cacheKey) return Promise.resolve(null);
+  if (WIKIMEDIA_CACHE.has(cacheKey)) return Promise.resolve(WIKIMEDIA_CACHE.get(cacheKey));
+  const pending = WIKIMEDIA_IN_FLIGHT.get(cacheKey);
+  if (pending) return pending;
+  const run = resolveWikimediaPhoto(loc, cacheKey).finally(() =>
+    WIKIMEDIA_IN_FLIGHT.delete(cacheKey),
+  );
+  WIKIMEDIA_IN_FLIGHT.set(cacheKey, run);
+  return run;
+}
+
+function wikimediaCacheKey(loc) {
+  if (!loc) return "";
+  if (GEOSEARCH_KINDS.has(loc.kind) && Number.isFinite(loc.lat) && Number.isFinite(loc.lon)) {
+    return `geo:${loc.lat.toFixed(3)},${loc.lon.toFixed(3)}`;
+  }
+  const q = wikimediaQuery(loc);
+  return q ? `q:${q}` : "";
+}
+
+async function resolveWikimediaPhoto(loc, cacheKey) {
+  let best = null;
+  try {
+    if (cacheKey.startsWith("geo:")) {
+      const geo = await wikimediaGeosearch(loc.lat, loc.lon);
+      best = rankWikimediaCandidates(loc, geo, { trustCoordinates: true });
+    }
+    if (!best) {
+      const text = await wikimediaSearch(wikimediaQuery(loc));
+      best = rankWikimediaCandidates(loc, text, { trustCoordinates: false });
+    }
+  } catch {
+    best = null;
+  }
+  WIKIMEDIA_CACHE.set(cacheKey, best);
+  return best;
+}
+
+/* The hybrid entry point: Pexels' ranked pool first (attractive stock
+   photography), Wikimedia only when Pexels has nothing sufficiently relevant
+   (exact-landmark/geography coverage Pexels' library often lacks). Either
+   step failing outright (network error, proxy down) falls through to the
+   next rather than aborting the whole lookup — the gradient/emoji fallback
+   is always the last resort, never a thrown error. */
+async function fetchBestPhoto(loc) {
+  try {
+    const candidates = await fetchPexelsPhotoCandidates(pexelsQuery(loc));
+    const ranked = rankPexelsCandidates(loc, candidates);
+    if (ranked) return ranked;
+  } catch {
+    /* fall through to Wikimedia */
+  }
+  try {
+    return await fetchWikimediaPhoto(loc);
+  } catch {
+    return null;
+  }
+}
+
 /* Fixed-ratio container: gradient + SVG/emoji fallback act as the skeleton; a
    real photo fades in on top only once loaded, so there is never a layout shift. */
 export function locPhotoHtml(loc, cls = "") {
@@ -294,13 +510,20 @@ function renderPhotoCredit(host, photo, extraClass = "") {
   host.querySelector(":scope > .loc-credit")?.remove();
   /* the URL comes from a third-party API — only ever follow a real https link */
   if (!photo.photographer || !/^https:\/\//i.test(photo.link || "")) return;
-  const label = t("photoCredit").replace("{photographer}", photo.photographer);
+  const isWikimedia = photo.source === "wikimedia";
+  /* Commons requires the license to travel with the credit; Pexels' terms
+     don't call for one, so its short "Pexels ↗" label is unchanged. */
+  const label = isWikimedia
+    ? t("photoCreditWikimedia")
+        .replace("{photographer}", photo.photographer)
+        .replace("{license}", photo.license || "")
+    : t("photoCredit").replace("{photographer}", photo.photographer);
   const a = document.createElement("a");
   a.className = `loc-credit ${extraClass}`.trim();
   a.href = photo.link;
   a.target = "_blank";
   a.rel = "noopener noreferrer";
-  a.textContent = "Pexels ↗";
+  a.textContent = isWikimedia ? "Wikimedia Commons ↗" : "Pexels ↗";
   a.setAttribute("aria-label", label);
   a.title = label;
   host.dataset.credit = label;
@@ -323,7 +546,10 @@ export async function hydrateLocPhoto(el, loc, opts = {}) {
   /* `photo` is null for local/curated images — that's what suppresses the credit */
   const swap = (src, photo) => {
     if (stale() || !src) return done();
-    const srcset = photo ? pexelsSrcset(photo.sizes) : "";
+    /* Wikimedia only ever supplies one usable width (see wikimedia-api.js) —
+       a fabricated "940w"/"1880w" srcset for it would mislabel the real
+       thumbnail size, so it skips straight to a plain img.src. */
+    const srcset = photo && photo.source !== "wikimedia" ? pexelsSrcset(photo.sizes) : "";
     const pre = new Image();
     /* preload through the same srcset/sizes the real <img> will use, so the
        candidate the browser picks is already cached when we swap it in */
@@ -367,17 +593,19 @@ export async function hydrateLocPhoto(el, loc, opts = {}) {
   const byId = !!(loc.landmark && loc.landmark.pexelsId);
   let photo;
   try {
-    photo = byId
-      ? await fetchPexelsPhotoById(loc.landmark.pexelsId)
-      : await fetchPexelsPhoto(pexelsQuery(loc));
+    photo = byId ? await fetchPexelsPhotoById(loc.landmark.pexelsId) : await fetchBestPhoto(loc);
   } catch {
     return done();
   }
   if (stale()) return;
-  /* A by-ID photo is a manually reviewed, exact match — never re-checked.
-     A text-search result is Pexels' best guess at an arbitrary, uncurated
-     query, so it is held to the relevance filter above before being shown;
-     failing it is treated exactly like Pexels returning no photo at all. */
-  if (photo && photo.src && (byId || isRelevantPhoto(loc, photo))) swap(photo.src, photo);
+  /* A by-ID photo is a manually reviewed, exact match — never re-checked. A
+     Wikimedia result was already filtered by fetchBestPhoto/resolveWikimedia-
+     Photo (coordinate trust or its own relevance check) and never re-checked
+     here either. A Pexels candidate from fetchBestPhoto was already filtered
+     by rankPexelsCandidates — this re-check is cheap and just confirms it,
+     never rejects a genuinely different photo. Anything failing it is
+     treated exactly like "no photo found at all". */
+  if (photo && photo.src && (byId || photo.source === "wikimedia" || isRelevantPhoto(loc, photo)))
+    swap(photo.src, photo);
   else done(); // keep gradient/SVG fallback
 }

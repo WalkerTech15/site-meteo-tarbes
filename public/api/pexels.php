@@ -25,8 +25,11 @@
  *
  * RESPONSE CONTRACT (shared with the Vite dev middleware in vite.config.js)
  * ------------------------------------------------------------------------
- *   200 {"photo": {"src": {...}, "photographer": "...", "link": "...", "alt": "..."}}
- *   200 {"photo": null}                  no match for this query
+ *   200 {"photo": {"src": {...}, "photographer": "...", "link": "...", "alt": "..."},
+ *        "photos": [{...}, ...]}         up to 8 ranked candidates (query lookup only);
+ *                                         "photo" is just photos[0], kept for callers
+ *                                         that only ever wanted a single result
+ *   200 {"photo": null, "photos": []}    no match for this query
  *   400 {"error": "invalid_query"}
  *   405 {"error": "method_not_allowed"}
  *   429 {"error": "rate_limited"}
@@ -77,6 +80,10 @@ const QUERY_MIN_LENGTH  = 2;
 const QUERY_MAX_LENGTH  = 120;
 const CONNECT_TIMEOUT_S = 4;
 const TOTAL_TIMEOUT_S   = 8;
+/* Mirrors CANDIDATE_COUNT in api/pexels.js / vite.config.js — the client
+   ranks these itself (rankPexelsCandidates in photo-api.js) rather than
+   trusting Pexels' own top result alone. */
+const CANDIDATE_COUNT   = 8;
 
 /* Rate limiting: per client IP, sliding window. Deliberately conservative and
    fail-open — on shared hosting a locked or unwritable temp directory must
@@ -276,7 +283,7 @@ function fetch_from_pexels(string $query, string $apiKey): array
     $url = PEXELS_ENDPOINT . '?' . http_build_query([
         'query'       => $query,
         'orientation' => 'landscape',
-        'per_page'    => 1,
+        'per_page'    => CANDIDATE_COUNT,
         'size'        => 'medium',
     ], '', '&', PHP_QUERY_RFC3986);
 
@@ -373,34 +380,36 @@ if ($status !== 200 || !is_array($data)) {
     respond(502, ['error' => 'upstream_error']);
 }
 
-$photo = $data['photos'][0] ?? null;
-if (!is_array($photo)) {
-    respond(200, ['photo' => null]); // valid query, simply no match
-}
+$rawPhotos = is_array($data['photos'] ?? null) ? $data['photos'] : [];
 
 /* Re-project onto our own shape. Only these fields cross back to the browser;
    everything else Pexels returns (ids, avg colours, upstream URLs we don't use)
-   is dropped rather than forwarded blindly. */
-$src = is_array($photo['src'] ?? null) ? $photo['src'] : [];
-$pick = static function (array $src, string $key): ?string {
-    $value = $src[$key] ?? null;
+   is dropped rather than forwarded blindly. Returns null for anything without
+   a usable https image or link, exactly like the by-ID branch above. */
+$toPayload = static function ($photo): ?array {
+    if (!is_array($photo)) {
+        return null;
+    }
+    $src = is_array($photo['src'] ?? null) ? $photo['src'] : [];
+    $pick = static function (array $src, string $key): ?string {
+        $value = $src[$key] ?? null;
 
-    return is_string($value) && str_starts_with($value, 'https://') ? $value : null;
-};
+        return is_string($value) && str_starts_with($value, 'https://') ? $value : null;
+    };
 
-$sizes = array_filter([
-    'medium'  => $pick($src, 'medium'),
-    'large'   => $pick($src, 'large'),
-    'large2x' => $pick($src, 'large2x'),
-], static fn(?string $v): bool => $v !== null);
+    $sizes = array_filter([
+        'medium'  => $pick($src, 'medium'),
+        'large'   => $pick($src, 'large'),
+        'large2x' => $pick($src, 'large2x'),
+    ], static fn(?string $v): bool => $v !== null);
 
-if ($sizes === []) {
-    respond(200, ['photo' => null]);
-}
+    if ($sizes === []) {
+        return null;
+    }
 
-$link = $photo['url'] ?? '';
-respond(200, [
-    'photo' => [
+    $link = $photo['url'] ?? '';
+
+    return [
         'src'          => $sizes,
         'photographer' => is_string($photo['photographer'] ?? null)
             ? ws_substr($photo['photographer'], 120)
@@ -411,5 +420,15 @@ respond(200, [
         'alt'          => is_string($photo['alt'] ?? null)
             ? ws_substr($photo['alt'], 200)
             : '',
-    ],
+    ];
+};
+
+$photos = array_values(array_filter(array_map($toPayload, $rawPhotos)));
+
+/* `photo` (first candidate) kept for anything relying on the old
+   single-photo shape; `photos` is the new ranked-candidate pool the client
+   picks the best match from (see rankPexelsCandidates in photo-api.js). */
+respond(200, [
+    'photo'  => $photos[0] ?? null,
+    'photos' => $photos,
 ]);

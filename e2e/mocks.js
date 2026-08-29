@@ -383,11 +383,16 @@ export const PEXELS_LINK = "https://www.pexels.com/photo/test-12345/";
 export const PEXELS_ALT = "A city skyline at dusk";
 /* 1×1 transparent GIF — a real, instantly-decodable image so the <img> load
    handler fires and the fade/has-photo path is genuinely exercised. */
-const PIXEL = "data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7";
+const PIXEL_GIF_BASE64 = "R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7";
+const PIXEL = `data:image/gif;base64,${PIXEL_GIF_BASE64}`;
+/* Same 1×1 GIF, as raw bytes — for serving a real cross-origin image request
+   (Wikimedia thumbnails, unlike Pexels' data: URI, are loaded over the
+   network) rather than embedding it inline. */
+const PIXEL_BYTES = Buffer.from(PIXEL_GIF_BASE64, "base64");
 
 /* The browser now talks to the SAME-ORIGIN proxy (/api/pexels), never to
    Pexels — the key lives on the server. So this is the proxy's response shape,
-   not Pexels': {"photo": {...}} | {"photo": null}.
+   not Pexels': {"photo": {...}, "photos": [...]} | {"photo": null, "photos": []}.
    `query` — present only for a text search, never a by-ID lookup — is echoed
    into the alt text so the mocked photo is realistically relevant to
    WHATEVER place asked for it (a real Pexels caption for a matching photo
@@ -396,14 +401,62 @@ const PIXEL = "data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAA
    checks exactly this field, so a test that wants to exercise a REJECTION
    passes its own query-aware `photoProxy` override instead (see
    e2e/location-photos.spec.js) — this default stays a "passes relevance"
-   fixture, matching how the rest of the suite already uses it. */
+   fixture, matching how the rest of the suite already uses it. `photos`
+   mirrors `photo` as a one-item pool, matching the real multi-candidate
+   contract closely enough that rankPexelsCandidates has something to rank. */
 export function photoProxyPayload(query) {
+  const photo = {
+    src: { medium: PIXEL, large: PIXEL, large2x: PIXEL },
+    photographer: PEXELS_PHOTOGRAPHER,
+    link: PEXELS_LINK,
+    alt: query ? `${PEXELS_ALT} — ${query}` : PEXELS_ALT,
+  };
+  return { photo, photos: [photo] };
+}
+
+/* Wikimedia Commons is called DIRECTLY from the browser (public, keyless API
+   — see services/wikimedia-api.js), never through a same-origin proxy, so it
+   is matched by its real cross-origin host rather than a local path like the
+   Pexels routes below. Empty by default: Pexels resolves first in the hybrid
+   chain (fetchBestPhoto in photo-api.js) for nearly every existing test, so
+   this only matters when a test explicitly wants the Wikimedia fallback —
+   but it must still exist for EVERY test, or a location Pexels has nothing
+   for (any `photoProxy: () => ({photo:null})` override) would fall through
+   to a real, unmocked commons.wikimedia.org request and get caught — and
+   aborted with a console warning — by the catch-all above. */
+function wikimediaEmptyPage() {
+  return { query: { pages: [] } };
+}
+
+/* A real image request (not a data: URI): Wikimedia thumbnails are loaded
+   straight from upload.wikimedia.org by the browser, so — unlike Pexels,
+   whose PIXEL data: URI needs no network — the mocked candidate's thumburl
+   must be a real https URL, served by the route registered in installMocks
+   below, or the <img> would try to hit the live internet. */
+export const WIKIMEDIA_THUMB_URL = "https://upload.wikimedia.org/mock-thumb.jpg";
+
+export function wikimediaPhotoPage({ title, alt, photographer, license = "CC0", lat, lon } = {}) {
   return {
-    photo: {
-      src: { medium: PIXEL, large: PIXEL, large2x: PIXEL },
-      photographer: PEXELS_PHOTOGRAPHER,
-      link: PEXELS_LINK,
-      alt: query ? `${PEXELS_ALT} — ${query}` : PEXELS_ALT,
+    query: {
+      pages: [
+        {
+          title: `File:${title || "photo"}.jpg`,
+          ...(Number.isFinite(lat) && Number.isFinite(lon) ? { coordinates: [{ lat, lon }] } : {}),
+          imageinfo: [
+            {
+              thumburl: WIKIMEDIA_THUMB_URL,
+              thumbwidth: 1280,
+              thumbheight: 800,
+              descriptionurl: `https://commons.wikimedia.org/wiki/File:${title || "photo"}.jpg`,
+              extmetadata: {
+                LicenseShortName: { value: license },
+                Artist: { value: photographer || "A Commons Contributor" },
+                ImageDescription: { value: alt || title || "" },
+              },
+            },
+          ],
+        },
+      ],
     },
   };
 }
@@ -488,7 +541,7 @@ export const json = (body) => ({
 /* ── Installer ─────────────────────────────────────────────────────────── */
 
 export async function installMocks(page, overrides = {}) {
-  const { weatherStatus = 200, photoProxy, reverseDelayMs } = overrides;
+  const { weatherStatus = 200, photoProxy, wikimediaProxy, reverseDelayMs } = overrides;
   /* "calm" by default. Pass a function to vary the weather per request — the
      URL carries the coordinates, which is how a test gives two cities two
      different forecasts. */
@@ -599,6 +652,22 @@ export async function installMocks(page, overrides = {}) {
     console.warn("[e2e] BLOCKED direct browser call to api.pexels.com");
     return route.abort();
   });
+
+  /* Wikimedia Commons — the second half of the hybrid photo strategy — IS
+     called directly from the browser (it's public and keyless, unlike
+     Pexels; see services/wikimedia-api.js), so it is mocked like any other
+     cross-origin dependency rather than intercepted-and-blocked. Empty by
+     default: see the comment on wikimediaEmptyPage/wikimediaPhotoPage above
+     for why every test needs this registered even when it never expects a
+     Wikimedia photo to actually appear. */
+  await page.route("**://commons.wikimedia.org/**", (route) => {
+    if (typeof wikimediaProxy === "function") return wikimediaProxy(route);
+    return route.fulfill(json(wikimediaEmptyPage()));
+  });
+  /* The real image bytes behind a mocked Wikimedia candidate's thumburl. */
+  await page.route(`${WIKIMEDIA_THUMB_URL}*`, (route) =>
+    route.fulfill({ status: 200, contentType: "image/gif", body: PIXEL_BYTES }),
+  );
 }
 
 /* `app` fixture: mocks installed, storage clean, home view rendered. */
