@@ -83,24 +83,6 @@ export function renderHero() {
       ? `<span aria-hidden="true">·</span> ${esc(loc.landmark[state.lang] || loc.landmark.en)}`
       : "";
   const localTime = localTimeStr(wx.timezone);
-  /* A country-kind location's own `region` field is its CONTINENT (see
-     data/locations.js), never a real state/province/region within it — the
-     same reason locHierarchyLabel() and the explore card's country line
-     (both above) show only the bare name for a country. Reusing
-     locCountry/locRegion here for a country would repeat the H1's own name
-     next to its continent ("France · Europe"), so this line is built from
-     parts and simply omitted for a country instead. .hero-region:empty
-     collapses to zero height (home.css) so no gap is left behind. */
-  const heroRegionInner =
-    loc.kind === "country"
-      ? ""
-      : [
-          flagsHtml(loc),
-          [esc(locCountry(loc)), esc(locRegion(loc))].filter(Boolean).join(" · "),
-          landmarkLine,
-        ]
-          .filter(Boolean)
-          .join(" ");
 
   $("#heroInner").innerHTML = `
     <div class="hero-top">
@@ -114,7 +96,7 @@ export function renderHero() {
           <svg viewBox="0 0 24 24" width="19" height="19" fill="${fav ? "currentColor" : "none"}" stroke="currentColor" stroke-width="1.9" stroke-linejoin="round"><path d="m12 3 2.7 5.6 6.3.9-4.5 4.4 1 6.1L12 17l-5.5 3 1-6.1L3 9.5l6.3-.9L12 3z"/></svg>
         </button>
       </h1>
-      <p class="hero-region">${heroRegionInner}</p>
+      <p class="hero-region">${esc(locRegion(loc))} ${locRegion(loc) ? "·" : ""} ${loc.kind === "country" ? "" : flagsHtml(loc) + " "}${esc(locCountry(loc))} ${landmarkLine}</p>
     </div>
     <div class="hero-main">
       <div class="hero-now">
