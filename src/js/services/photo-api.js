@@ -797,9 +797,49 @@ export function prefetchLocPhoto(loc) {
   else fetchBestPhoto(loc);
 }
 
+/* Resolves once `el` is within half a viewport of being scrolled into view.
+   Secondary photos — the Explore carousel, the Favorites grid, nearby places
+   — all render below the fold, and hydrating them on render meant every one
+   of their lookups and image downloads competed with the hero for bandwidth
+   during the LCP window. Waiting means an off-screen card costs nothing at
+   all until it is approached. Resolves immediately where
+   IntersectionObserver is unavailable, so the previous eager behaviour is
+   the fallback, never a card that stays blank. */
+function whenPhotoNearViewport(el) {
+  if (typeof IntersectionObserver !== "function") return Promise.resolve();
+  return new Promise((resolve) => {
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (!entries.some((entry) => entry.isIntersecting)) return;
+        observer.disconnect();
+        resolve();
+      },
+      /* A fixed 300 px lead, not a viewport percentage: a percentage large
+         enough to matter on a phone covers the whole of a desktop page and
+         defers nothing. This also makes the horizontally-scrolling Explore
+         carousel lazy sideways — a card parked off to the right does not
+         intersect, so it costs nothing until it is scrolled to. */
+      { rootMargin: "300px" },
+    );
+    observer.observe(el);
+  });
+}
+
 export async function hydrateLocPhoto(el, loc, opts = {}) {
   if (!el || !loc) return;
+  /* Captured BEFORE the visibility wait below, not after: for a race-guarded
+     visual (the hero, the map detail panel) the token is what makes a
+     superseded selection's swap a no-op. Reading it after the wait would
+     hand a card that scrolled into view later the CURRENT token, and a
+     lookup started for a location the user has already navigated away from
+     would then be treated as fresh and painted. */
   const token = photoToken;
+  /* The hero is the LCP candidate and must never wait for anything; every
+     other photo defers until it is approached (opts.priority is set only by
+     the hero — see ui/render-home.js). A curated/local image is a plain
+     attribute swap with no network cost, so it is not deferred either. */
+  const isLocalImage = Boolean((loc.landmark && loc.landmark.img) || loc.img);
+  if (!opts.priority && !isLocalImage) await whenPhotoNearViewport(el);
   const creditHost = opts.creditHost || el;
   const sizesAttr = opts.sizes || PEXELS_SIZES_ATTR;
   /* The token guards the ONE visual that tracks the selected location (hero,

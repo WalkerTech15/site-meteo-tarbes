@@ -423,7 +423,15 @@ export function renderMapInfo() {
     },
   });
 
-  hydrateLocPhoto($(".map-panel-photo", panel), state.loc, { creditClass: "map-panel-credit" });
+  /* The panel is min(350px, …) wide and the photo 132px tall, so the default
+     720px `sizes` had the browser pick Pexels' 1880w candidate for a
+     thumbnail — several times the pixels this box can show. Matches the
+     panel's own width rule in styles/views/map.css (full-bleed once the
+     panel becomes the mobile bottom sheet at ≤820px). */
+  hydrateLocPhoto($(".map-panel-photo", panel), state.loc, {
+    creditClass: "map-panel-credit",
+    sizes: "(max-width: 820px) 100vw, 350px",
+  });
 
   $("#mapFavoriteBtn").addEventListener("click", () => {
     toggleFavorite();

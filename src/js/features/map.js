@@ -5,7 +5,6 @@
    MapLibre is an npm dependency, dynamically imported the first time a map
    actually needs to render, so its ~200KB JS chunk never blocks the initial
    page load. */
-import "@maptiler/sdk/dist/maptiler-sdk.css";
 import { state } from "../core/state.js";
 import { $, $$ } from "../core/dom.js";
 import { esc } from "../core/dom.js";
@@ -32,10 +31,21 @@ import {
 import { normalizeOffset, availableOffsets } from "./map-timeline.js";
 import { renderWeatherOverlayUI } from "../ui/render-map-weather.js";
 
+/* The SDK's stylesheet is imported HERE, inside the dynamic import, rather
+   than statically at the top of this module. features/map.js is reachable
+   from main.js through ui/navigation.js, so a static CSS import put
+   maptiler-sdk.css (~101 KB, 409 selectors — over half the whole stylesheet)
+   into the render-blocking bundle for every visitor, including those who
+   never open a map. Awaited together with the SDK itself, so the controls it
+   styles cannot paint before it lands; Vite emits it as the SDK chunk's own
+   async stylesheet. */
 let maplibreglPromise = null;
 function loadMapLibre() {
   if (!maplibreglPromise)
-    maplibreglPromise = import("@maptiler/sdk").then((sdk) => {
+    maplibreglPromise = Promise.all([
+      import("@maptiler/sdk"),
+      import("@maptiler/sdk/dist/maptiler-sdk.css"),
+    ]).then(([sdk]) => {
       sdk.config.apiKey = MAPTILER_KEY;
       return sdk;
     });
@@ -472,7 +482,16 @@ async function updateMap(id) {
     el.classList.add("is-loading");
     if (!CREATING[id]) {
       /* Only the Home preview's own first creation waits a tick — the Map
-         page (id "worldMap") is always an explicit visit and never deferred. */
+         page (id "worldMap") is always an explicit visit and never deferred.
+
+         Deliberately still idle()-gated rather than gated on scrolling into
+         view: the preview is a rendered part of the homepage that other
+         behaviour depends on (it re-measures on a Simple/Détaillé switch and
+         on window resize, both of which can happen before anyone scrolls to
+         it), so withholding the map until it is approached would change what
+         the page IS, not just when it loads. idle() already keeps the SDK
+         out of the first-paint and LCP window, which is what this deferral
+         is for. */
       const kickoff = id === "homeMap" ? idle() : Promise.resolve();
       CREATING[id] = kickoff
         .then(() => createMapInstance(id, el, cfg))
