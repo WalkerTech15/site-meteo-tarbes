@@ -92,7 +92,14 @@ function fieldTokens(value) {
    Weights live in SCORE_WEIGHTS below rather than here, so this stays a
    plain description of the place. */
 export function locationTokens(loc) {
-  if (!loc) return { name: new Set(), alias: new Set(), region: new Set(), country: new Set() };
+  if (!loc)
+    return {
+      name: new Set(),
+      alias: new Set(),
+      landmark: new Set(),
+      region: new Set(),
+      country: new Set(),
+    };
   const name = fieldTokens(loc.name);
   /* Curated entries (data/locations.js) carry hand-written aliases —
      alternate spellings, transliterations and common short forms ("nyc",
@@ -104,11 +111,28 @@ export function locationTokens(loc) {
       .flatMap(significantWords)
       .filter((tok) => !name.has(tok)),
   );
-  const region = new Set([...fieldTokens(loc.region)].filter((tok) => !name.has(tok)));
-  const country = new Set(
-    [...fieldTokens(loc.country)].filter((tok) => !name.has(tok) && !region.has(tok)),
+  /* A curated entry's landmark ({emoji, en, fr} — data/locations.js) is a
+     real, hand-reviewed monument name, never one invented from the city.
+     pexelsQuery deliberately keeps it OUT of the search text (it biased the
+     results toward the same few famous monuments), but for RANKING it is
+     strong evidence: between two photos of Paris, the one whose description
+     names the Eiffel Tower is the more representative choice. Scored below
+     the place's own name so a landmark match can never outweigh naming the
+     place itself. */
+  const landmark = new Set(
+    localizedVariants(loc.landmark)
+      .flatMap(significantWords)
+      .filter((tok) => !name.has(tok) && !alias.has(tok)),
   );
-  return { name, alias, region, country };
+  const region = new Set(
+    [...fieldTokens(loc.region)].filter((tok) => !name.has(tok) && !landmark.has(tok)),
+  );
+  const country = new Set(
+    [...fieldTokens(loc.country)].filter(
+      (tok) => !name.has(tok) && !region.has(tok) && !landmark.has(tok),
+    ),
+  );
+  return { name, alias, landmark, region, country };
 }
 
 /* The searchable text a candidate carries. Wikimedia supplies a real file
@@ -205,6 +229,10 @@ export const SCORE_WEIGHTS = {
   exactName: 6,
   nameToken: 3,
   aliasToken: 2,
+  /* Between the alias and the region tiers: naming the place's own landmark
+     identifies it better than naming the region it sits in, but less than
+     naming the place itself. */
+  landmarkToken: 2,
   regionToken: 1,
   countryToken: 1,
 };
@@ -244,6 +272,7 @@ export function scorePhotoForLocation(loc, photo) {
   for (const [group, weight] of [
     [tokens.name, SCORE_WEIGHTS.nameToken],
     [tokens.alias, SCORE_WEIGHTS.aliasToken],
+    [tokens.landmark, SCORE_WEIGHTS.landmarkToken],
     [tokens.region, SCORE_WEIGHTS.regionToken],
     [tokens.country, SCORE_WEIGHTS.countryToken],
   ]) {
@@ -262,6 +291,72 @@ export function scorePhotoForLocation(loc, photo) {
 
   const confidence = textMatched ? "text" : proximity > 0 ? "coordinate" : "none";
   return { score, confidence };
+}
+
+/**
+ * Does this candidate clearly show a DIFFERENT well-known place?
+ *
+ * The relevance filter asks "does anything here name my place?"; this asks
+ * the complementary question, which a token check cannot: a photo captioned
+ * "Sunset over the Golden Gate Bridge, San Francisco" mentions neither
+ * Tarbes nor Occitanie, but it is not merely unconfirmed — it is positively
+ * about somewhere else. Stock libraries answer a thin query with exactly
+ * this kind of famous-city photo, so without the rule the "no photo" outcome
+ * (gradient fallback) silently loses to a beautiful, wrong one.
+ *
+ * `vocabulary` is injected rather than imported so this module stays pure and
+ * data-free; services/photo-api.js builds it from the curated location list,
+ * so the only names treated as "somewhere else" are real places the app
+ * already knows — nothing is invented, and an unknown town can never be
+ * mistaken for a conflict.
+ *
+ * Deliberately one-sided: a conflict is ignored the moment the candidate
+ * ALSO names the location itself (or its own landmark). "Eiffel Tower,
+ * Paris" is the right photo for Paris even though "Eiffel Tower" is a
+ * famous-landmark term, and a photo naming two places genuinely may show
+ * both.
+ *
+ * @param {object} loc
+ * @param {object} photo
+ * @param {Map<string, string>} vocabulary  token → owning place id
+ * @returns {boolean} true when the photo should be rejected outright
+ */
+export function namesConflictingPlace(loc, photo, vocabulary) {
+  if (!loc || !photo || !vocabulary || vocabulary.size === 0) return false;
+  const hay = photoHaystack(photo);
+  if (!hay) return false;
+
+  const tokens = locationTokens(loc);
+  /* Anything the location legitimately answers to. Region and country are
+     included so a photo of another town in the SAME region is not called a
+     conflict — it is a weaker match, which ranking already handles. */
+  const own = new Set([
+    ...tokens.name,
+    ...tokens.alias,
+    ...tokens.landmark,
+    ...tokens.region,
+    ...tokens.country,
+  ]);
+  /* The place's own identity present → never a conflict, whatever else the
+     caption mentions. */
+  for (const tok of own) if (hay.includes(tok)) return false;
+  for (const variant of localizedVariants(loc.name)) {
+    const phrase = normalizeForMatch(variant);
+    if (phrase.length >= 3 && hay.includes(phrase)) return false;
+  }
+
+  const ownId = loc.id ? String(loc.id) : "";
+  for (const [token, owner] of vocabulary) {
+    /* A token claimed by more than one curated place identifies neither, so
+       it is no evidence of anything (photo-api.js drops these when building
+       the map; honouring a falsy owner here keeps the rule correct for any
+       vocabulary). */
+    if (!owner) continue;
+    if (owner === ownId) continue; /* the location's own curated entry */
+    if (own.has(token)) continue; /* shared word, e.g. a common region name */
+    if (hay.includes(token)) return true;
+  }
+  return false;
 }
 
 /**

@@ -19,6 +19,9 @@ import {
   rankPexelsCandidates,
   rankWikimediaCandidates,
   resolveLocationImage,
+  fetchBestPhoto,
+  areaFallbackTargets,
+  bumpPhotoToken,
   __resetPhotoCacheForTests,
 } from "./photo-api.js";
 import { state } from "../core/state.js";
@@ -1009,5 +1012,342 @@ describe(".htaccess — Hostinger rewrite from the browser route to the PHP file
     const rewriteLines = htaccess.split("\n").filter((l) => /^\s*RewriteRule/.test(l));
     expect(rewriteLines).toHaveLength(1);
     expect(rewriteLines[0]).toContain("^api/pexels$");
+  });
+});
+
+/* ── Fallback chain, ranking and the area fallback ────────────────────────
+   The order the whole feature turns on (see fetchBestPhoto):
+     1. curated exact image        (hydrateLocPhoto, before the chain)
+     2. verified Commons geosearch — coordinate-accurate, so it goes first
+     3. verified Pexels            — attractive and representative
+     3b. Commons text search       — exact geography Pexels often lacks
+     4. verified region → country  — labelled honestly as the AREA's photo
+     5. gradient/emoji             — represented here by a null return */
+
+/* A Commons page in the shape toCandidate() accepts: open license, named
+   artist, https description page, real thumbnail. */
+function commonsPage(title, { lat = null, lon = null, description = "" } = {}) {
+  return {
+    title: `File:${title}.jpg`,
+    imageinfo: [
+      {
+        thumburl: `https://upload.wikimedia.org/${encodeURIComponent(title)}.jpg`,
+        descriptionurl: `https://commons.wikimedia.org/wiki/File:${encodeURIComponent(title)}.jpg`,
+        thumbwidth: 1280,
+        thumbheight: 850,
+        extmetadata: {
+          LicenseShortName: { value: "CC BY-SA 4.0" },
+          Artist: { value: "A Photographer" },
+          ImageDescription: { value: description || title },
+        },
+      },
+    ],
+    coordinates: lat === null ? undefined : [{ lat, lon }],
+  };
+}
+
+const pexelsPhoto = (alt, extra = {}) => ({
+  alt,
+  photographer: "P. Shooter",
+  url: "https://www.pexels.com/photo/x-1",
+  width: 1600,
+  height: 900,
+  src: { medium: "https://images.pexels.com/m.jpg", large: "https://images.pexels.com/l.jpg" },
+  ...extra,
+});
+
+/* The AREA query is the region/country template ("<Area> <country> landscape
+   travel"); a town's own query legitimately contains its region name too
+   ("Tarbes Occitania France streets architecture"), so matching on the region
+   word alone would make the town's own request look like the area's. */
+const isAreaQuery = (q) => q.startsWith("Occitania") || q.startsWith("France");
+const isAreaCall = (c) =>
+  c.url.includes(PROXY_PATH) &&
+  isAreaQuery(new URL(c.url, "http://local").searchParams.get("query") || "");
+
+/* Routes one stubbed fetch per provider, so a test states what each source
+   answers instead of matching URLs by hand. "fail" = a 500 from that source. */
+function stubProviders({ pexels = [], geo = [], text = [], areaPexels = null } = {}) {
+  return stubFetch((url) => {
+    if (url.includes(PROXY_PATH)) {
+      const query = new URL(url, "http://local").searchParams.get("query") || "";
+      if (areaPexels && areaPexels.match(query)) {
+        return jsonResponse(200, { photos: areaPexels.photos });
+      }
+      if (areaPexels) return jsonResponse(200, { photos: [] });
+      if (pexels === "fail") return jsonResponse(500, {});
+      return jsonResponse(200, { photos: pexels });
+    }
+    const generator = new URL(url).searchParams.get("generator");
+    const pages = generator === "geosearch" ? geo : text;
+    if (pages === "fail") return jsonResponse(500, {});
+    return jsonResponse(200, { query: { pages } });
+  });
+}
+
+const town = (over = {}) => ({
+  id: "mt-tarbes",
+  kind: "town",
+  cc: "FR",
+  lat: 43.2333,
+  lon: 0.0782,
+  name: { en: "Tarbes", fr: "Tarbes" },
+  region: { en: "Occitania", fr: "Occitanie" },
+  country: { en: "France", fr: "France" },
+  aliases: [],
+  landmark: null,
+  ...over,
+});
+
+describe("fetchBestPhoto — fallback order", () => {
+  it("prefers a coordinate-verified Commons geosearch result over a Pexels one", async () => {
+    const calls = stubProviders({
+      pexels: [pexelsPhoto("Tarbes town centre")],
+      geo: [commonsPage("Tarbes cathedral", { lat: 43.2333, lon: 0.0782 })],
+    });
+    const photo = await fetchBestPhoto(town());
+    expect(photo.source).toBe("wikimedia");
+    /* Pexels is never even asked — geosearch already answered accurately */
+    expect(calls.some((c) => c.url.includes(PROXY_PATH))).toBe(false);
+  });
+
+  it("falls through to Pexels when geosearch finds nothing", async () => {
+    stubProviders({ pexels: [pexelsPhoto("Tarbes Occitanie rooftops")], geo: [] });
+    const photo = await fetchBestPhoto(town());
+    expect(photo.source).not.toBe("wikimedia");
+    expect(photo.alt).toBe("Tarbes Occitanie rooftops");
+  });
+
+  it("falls through to a Commons text search when Pexels has nothing relevant", async () => {
+    stubProviders({ pexels: [], geo: [], text: [commonsPage("Tarbes Occitanie")] });
+    expect((await fetchBestPhoto(town())).source).toBe("wikimedia");
+  });
+
+  it("returns null when every provider answers empty, so the gradient stays", async () => {
+    stubProviders({ pexels: [], geo: [], text: [] });
+    expect(await fetchBestPhoto(town())).toBeNull();
+  });
+
+  it("survives every provider failing outright", async () => {
+    stubProviders({ pexels: "fail", geo: "fail", text: "fail" });
+    expect(await fetchBestPhoto(town())).toBeNull();
+  });
+});
+
+describe("area fallback — an honest region/country image for a small town", () => {
+  it("labels a region photo as the region's, never the town's", async () => {
+    stubProviders({
+      geo: [],
+      text: [],
+      areaPexels: { match: isAreaQuery, photos: [pexelsPhoto("Occitania countryside")] },
+    });
+    const photo = await fetchBestPhoto(town());
+    expect(photo).toBeTruthy();
+    expect(photo.approximate).toBe(true);
+    expect(photo.approximateOf).toBe("Occitania");
+  });
+
+  it("offers region before country, and nothing for a country, region or sea", () => {
+    expect(areaFallbackTargets(town()).map((a) => a.name)).toEqual(["Occitania", "France"]);
+    expect(areaFallbackTargets({ kind: "country", name: { en: "France" } })).toEqual([]);
+    expect(areaFallbackTargets({ kind: "region", name: { en: "Occitania" } })).toEqual([]);
+    expect(
+      areaFallbackTargets({ kind: "ocean", waterKind: "sea", name: { en: "Mediterranean Sea" } }),
+    ).toEqual([]);
+  });
+
+  it("shares one area lookup across towns in the same region", async () => {
+    const calls = stubProviders({
+      geo: [],
+      text: [],
+      areaPexels: { match: isAreaQuery, photos: [pexelsPhoto("Occitania hills")] },
+    });
+    await fetchBestPhoto(town());
+    const afterFirst = calls.filter((c) => isAreaCall(c)).length;
+    expect(afterFirst).toBeGreaterThan(0);
+    await fetchBestPhoto(town({ id: "b", lat: 43.6, lon: 1.44, name: { en: "Auch", fr: "Auch" } }));
+    /* the second town reuses the cached Occitania photo — no second request */
+    expect(calls.filter((c) => isAreaCall(c)).length).toBe(afterFirst);
+  });
+
+  it("does not mutate the shared cached area photo when labelling it", async () => {
+    stubProviders({
+      geo: [],
+      text: [],
+      areaPexels: { match: isAreaQuery, photos: [pexelsPhoto("Occitania hills")] },
+    });
+    const a = await fetchBestPhoto(town());
+    const b = await fetchBestPhoto(town({ id: "b", name: { en: "Auch", fr: "Auch" } }));
+    expect(a.approximateOf).toBe("Occitania");
+    expect(b.approximateOf).toBe("Occitania");
+    expect(a).not.toBe(b); /* each caller gets its own labelled copy */
+  });
+});
+
+describe("rejecting photos that clearly show somewhere else", () => {
+  it("rejects a famous landmark belonging to another city", () => {
+    expect(isRelevantPhoto(town(), pexelsPhoto("The Eiffel Tower in Paris at dusk"))).toBe(false);
+    expect(isRelevantPhoto(town(), pexelsPhoto("Golden Gate Bridge, San Francisco"))).toBe(false);
+  });
+
+  it("keeps a photo that names the place itself, even beside another place", () => {
+    expect(isRelevantPhoto(town(), pexelsPhoto("Tarbes seen from the Paris road"))).toBe(true);
+  });
+
+  it("keeps a curated location's own landmark photo", () => {
+    const paris = LOCATIONS.find((l) => l.id === "paris");
+    expect(isRelevantPhoto(paris, pexelsPhoto("The Eiffel Tower in Paris at dusk"))).toBe(true);
+  });
+
+  it("never treats an ordinary unknown town as a conflict", () => {
+    expect(isRelevantPhoto(town(), pexelsPhoto("A quiet street in Tarbes"))).toBe(true);
+    expect(isRelevantPhoto(town(), pexelsPhoto("Rolling hills in Occitania"))).toBe(true);
+  });
+});
+
+describe("worldwide coverage — a representative place per continent", () => {
+  const places = [
+    ["France", { kind: "city", name: { en: "Paris" }, country: { en: "France" } }, "Paris"],
+    [
+      "United States",
+      {
+        kind: "city",
+        name: { en: "Austin" },
+        region: { en: "Texas" },
+        country: { en: "United States" },
+      },
+      "Austin",
+    ],
+    [
+      "Canada",
+      {
+        kind: "city",
+        name: { en: "Montreal" },
+        region: { en: "Quebec" },
+        country: { en: "Canada" },
+      },
+      "Montreal",
+    ],
+    ["Japan", { kind: "city", name: { en: "Kyoto" }, country: { en: "Japan" } }, "Kyoto"],
+    ["Australia", { kind: "city", name: { en: "Perth" }, country: { en: "Australia" } }, "Perth"],
+    ["Brazil", { kind: "city", name: { en: "Recife" }, country: { en: "Brazil" } }, "Recife"],
+    ["India", { kind: "city", name: { en: "Jaipur" }, country: { en: "India" } }, "Jaipur"],
+  ];
+
+  for (const [label, loc, expected] of places) {
+    it(`builds a qualified query naming the place for ${label}`, () => {
+      const q = pexelsQuery({ aliases: [], landmark: null, region: {}, country: {}, ...loc });
+      expect(q).toContain(expected);
+      expect(q.trim()).not.toBe("");
+    });
+  }
+
+  it("accepts a correctly-named photo and rejects a wrong-city one for each", () => {
+    for (const [, loc, expected] of places) {
+      const full = { aliases: [], landmark: null, region: {}, country: {}, ...loc };
+      expect(isRelevantPhoto(full, pexelsPhoto(`A view of ${expected}`))).toBe(true);
+      expect(isRelevantPhoto(full, pexelsPhoto("The Eiffel Tower in Paris"))).toBe(
+        expected === "Paris",
+      );
+    }
+  });
+});
+
+describe("oceans and seas", () => {
+  const sea = (name, waterKind) => ({
+    id: `map-sea-${name}`,
+    kind: "ocean",
+    waterKind,
+    lat: 36,
+    lon: 15,
+    name: { en: name, fr: name },
+    region: { en: "", fr: "" },
+    country: { en: "", fr: "" },
+    aliases: [],
+    landmark: null,
+  });
+
+  it("searches for the body of water itself, with marine phrasing", () => {
+    expect(pexelsQuery(sea("Pacific Ocean", "ocean"))).toBe("Pacific Ocean aerial seascape");
+    expect(pexelsQuery(sea("Mediterranean Sea", "sea"))).toBe("Mediterranean Sea aerial seascape");
+    expect(pexelsQuery(sea("Gulf of Mexico", "gulf"))).toBe("Gulf of Mexico coast seascape");
+  });
+
+  it("uses a coordinate-verified Commons result for a sea when one exists", async () => {
+    stubProviders({ geo: [commonsPage("Mediterranean Sea coast", { lat: 36, lon: 15 })] });
+    expect((await fetchBestPhoto(sea("Mediterranean Sea", "sea"))).source).toBe("wikimedia");
+  });
+
+  it("never falls back to a region or country image for open water", () => {
+    expect(areaFallbackTargets(sea("Pacific Ocean", "ocean"))).toEqual([]);
+  });
+});
+
+describe("caching and stale-request protection", () => {
+  it("serves a repeated lookup from cache without a second request", async () => {
+    const calls = stubProviders({ pexels: [pexelsPhoto("Tarbes rooftops")], geo: [] });
+    await fetchBestPhoto(town());
+    const first = calls.length;
+    expect(first).toBeGreaterThan(0);
+    await fetchBestPhoto(town());
+    expect(calls.length).toBe(first);
+  });
+
+  it("negative-caches an empty result so a dead query is not retried", async () => {
+    const calls = stubProviders({ pexels: [], geo: [], text: [] });
+    await fetchBestPhoto(town());
+    const first = calls.length;
+    await fetchBestPhoto(town());
+    expect(calls.length).toBe(first);
+  });
+
+  /* The DOM half of stale protection (hydrateLocPhoto's photoToken guard,
+     which suppresses a superseded swap) needs a real document and is covered
+     in e2e/location-photos.spec.js — the unit environment is "node". What is
+     testable here is the half underneath it: two locations resolved back to
+     back must never receive each other's photo, whatever order they land in. */
+  it("keeps rapid lookups for different locations separate", async () => {
+    stubFetch((url) => {
+      if (url.includes(PROXY_PATH)) {
+        const q = new URL(url, "http://local").searchParams.get("query") || "";
+        const who = q.includes("Tarbes") ? "Tarbes" : q.includes("Auch") ? "Auch" : "";
+        return jsonResponse(200, { photos: who ? [pexelsPhoto(`${who} rooftops`)] : [] });
+      }
+      return jsonResponse(200, { query: { pages: [] } });
+    });
+    const [a, b] = await Promise.all([
+      fetchBestPhoto(town()),
+      fetchBestPhoto(town({ id: "b", lat: 43.6, lon: 0.58, name: { en: "Auch", fr: "Auch" } })),
+    ]);
+    expect(a.alt).toBe("Tarbes rooftops");
+    expect(b.alt).toBe("Auch rooftops");
+  });
+
+  it("exposes the token the render layer uses to discard a superseded swap", () => {
+    expect(typeof bumpPhotoToken).toBe("function");
+    expect(() => bumpPhotoToken()).not.toThrow();
+  });
+});
+
+describe("landmark evidence in the relevance filter", () => {
+  const sf = LOCATIONS.find((l) => l.id === "sanfrancisco");
+
+  it("accepts a photo of the place's own curated landmark that never names the city", () => {
+    /* A genuine Golden Gate Bridge photo IS a photo of San Francisco; before
+       landmark words were included it was filtered out for not spelling the
+       city's name, and the hero fell back to the gradient. */
+    expect(sf).toBeTruthy();
+    expect(relevanceKeywords(sf)).toContain("golden");
+    expect(isRelevantPhoto(sf, pexelsPhoto("The Golden Gate at dawn"))).toBe(true);
+  });
+
+  it("still rejects another city's landmark", () => {
+    expect(isRelevantPhoto(sf, pexelsPhoto("The Eiffel Tower in Paris"))).toBe(false);
+  });
+
+  it("adds nothing for a location with no curated landmark", () => {
+    expect(relevanceKeywords(town())).toEqual(
+      expect.arrayContaining(["tarbes", "occitania", "france"]),
+    );
   });
 });

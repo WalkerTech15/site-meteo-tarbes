@@ -180,9 +180,9 @@ test.describe("location photos — oceans and seas", () => {
     await expect(page.locator("#mapWeatherPanel .map-panel-location h2")).toHaveText(
       "Océan Atlantique",
     );
-    await expect.poll(() => wikimediaQueries.some((q) => q && q.includes("Atlantic Ocean"))).toBe(
-      true,
-    );
+    await expect
+      .poll(() => wikimediaQueries.some((q) => q && q.includes("Atlantic Ocean")))
+      .toBe(true);
     expect(wikimediaQueries.some((q) => q && q.toLowerCase().includes("cityscape"))).toBe(false);
     /* still a graceful gradient/emoji fallback, never a false city photo */
     const photo = page.locator("#mapWeatherPanel .map-panel-photo");
@@ -302,7 +302,8 @@ test.describe("location photos — hybrid strategy: Wikimedia fallback, attribut
     const errors = [];
     page.on("pageerror", (e) => errors.push(String(e)));
     await installMocks(page, {
-      photoProxy: (route) => route.fulfill({ status: 502, contentType: "application/json", body: "{}" }),
+      photoProxy: (route) =>
+        route.fulfill({ status: 502, contentType: "application/json", body: "{}" }),
       wikimediaProxy: (route) =>
         route.fulfill({ status: 502, contentType: "application/json", body: "{}" }),
     });
@@ -343,5 +344,165 @@ test.describe("location photos — hybrid strategy: Wikimedia fallback, attribut
 
     const credit = page.locator("#heroInner .loc-credit");
     await expect(credit).toHaveAttribute("href", "https://www.pexels.com/photo/strong/");
+  });
+});
+
+/* ── Fallback order, honest area labelling, attribution and staleness ─────
+   The service-level rules are unit-tested (photo-api.test.js); these cover
+   the parts that only exist in a real browser: which element ends up
+   showing what, the credit's visible text and accessible name, and the
+   photoToken guard that stops a superseded lookup repainting the hero. */
+
+/* Reykjavik, as the geocoding fixture returns it (see e2e/mocks.js):
+   Capital Region, Iceland. */
+const AREA_REGION = "Capital Region";
+
+test.describe("location photos — fallback order and honest labelling", () => {
+  test("a coordinate-verified Wikimedia photo is preferred over a Pexels one", async ({ page }) => {
+    const pexelsQueries = [];
+    const { photoProxy } = (() => ({
+      photoProxy: (route) => {
+        const q = new URL(route.request().url()).searchParams.get("query");
+        if (q) pexelsQueries.push(q);
+        return route.fulfill(
+          json({ photo: pexelsPhoto({ alt: `${GEOCODE_LABEL} Iceland cityscape`, id: "px" }) }),
+        );
+      },
+    }))();
+    await installMocks(page, {
+      photoProxy,
+      /* geosearch answers with a real, licensed, coordinate-tagged file */
+      wikimediaProxy: (route) => {
+        const generator = new URL(route.request().url()).searchParams.get("generator");
+        return route.fulfill(
+          json(
+            generator === "geosearch"
+              ? wikimediaPhotoPage({
+                  title: `${GEOCODE_LABEL} harbour`,
+                  license: "CC BY-SA 4.0",
+                  lat: 64.1355,
+                  lon: -21.8954,
+                })
+              : { query: { pages: [] } },
+          ),
+        );
+      },
+    });
+    await page.goto("/");
+    await expect(page.locator("#heroCityName")).not.toBeEmpty();
+
+    await page.locator("#searchInput").fill(GEOCODE_LABEL);
+    await page.locator("#searchResults .search-item").first().click();
+    await expect(page.locator("#heroCityName")).toContainText(GEOCODE_LABEL);
+
+    await expect(page.locator("#heroLandmark .has-photo")).toHaveCount(1);
+    const credit = page.locator("#heroInner .loc-credit");
+    await expect(credit).toHaveText("Wikimedia Commons ↗");
+    /* Commons requires the licence to travel with the credit */
+    await expect(credit).toHaveAttribute("aria-label", /CC BY-SA/i);
+    /* Pexels was never consulted — geosearch already answered accurately */
+    expect(pexelsQueries).toHaveLength(0);
+  });
+
+  test("an area fallback is labelled as the area's photo, never the town's", async ({ page }) => {
+    /* nothing for the city itself; only the region query is answered */
+    const { photoProxy } = queryAwarePhotoProxy((query) =>
+      query && query.startsWith(AREA_REGION)
+        ? pexelsPhoto({ alt: `${AREA_REGION} landscape`, id: "area" })
+        : null,
+    );
+    await installMocks(page, { photoProxy });
+    await page.goto("/");
+    await expect(page.locator("#heroCityName")).not.toBeEmpty();
+
+    await page.locator("#searchInput").fill(GEOCODE_LABEL);
+    await page.locator("#searchResults .search-item").first().click();
+    await expect(page.locator("#heroCityName")).toContainText(GEOCODE_LABEL);
+
+    await expect(page.locator("#heroLandmark .has-photo")).toHaveCount(1);
+    const credit = page.locator("#heroInner .loc-credit");
+    /* the visible credit names the area, so the image never reads as the
+       city's own; the accessible name spells the caveat out in full */
+    await expect(credit).toHaveText(`${AREA_REGION} · Pexels ↗`);
+    await expect(credit).toHaveAttribute("data-approximate", "true");
+    await expect(credit).toHaveAttribute("aria-label", new RegExp(AREA_REGION));
+    /* default interface language is French (see e2e/mocks.js) */
+    await expect(credit).toHaveAttribute("aria-label", /et non du lieu lui-m/i);
+  });
+
+  test("attribution stays a real, safe outbound link", async ({ page }) => {
+    const { photoProxy } = queryAwarePhotoProxy((query) =>
+      query ? pexelsPhoto({ alt: `${GEOCODE_LABEL} Iceland cityscape`, id: "lnk" }) : null,
+    );
+    await installMocks(page, { photoProxy });
+    await page.goto("/");
+    await page.locator("#searchInput").fill(GEOCODE_LABEL);
+    await page.locator("#searchResults .search-item").first().click();
+    await expect(page.locator("#heroLandmark .has-photo")).toHaveCount(1);
+
+    const credit = page.locator("#heroInner .loc-credit");
+    await expect(credit).toHaveAttribute("href", /^https:\/\/www\.pexels\.com\//);
+    await expect(credit).toHaveAttribute("rel", /noopener/);
+    await expect(credit).toHaveAttribute("target", "_blank");
+    /* the photo carries the provider's own description as its alt text */
+    await expect(page.locator("#heroLandmark img.loc-photo-img")).toHaveAttribute(
+      "alt",
+      new RegExp(GEOCODE_LABEL),
+    );
+  });
+
+  test("rapid location changes never leave the previous location's photo on screen", async ({
+    page,
+  }) => {
+    /* each city resolves to a photo naming only itself, so a stale swap is
+       immediately visible in the alt text */
+    const { photoProxy } = queryAwarePhotoProxy((query) => {
+      if (!query) return null;
+      if (query.includes(GEOCODE_LABEL))
+        return pexelsPhoto({ alt: `${GEOCODE_LABEL} view`, id: "a" });
+      if (query.includes("Paris")) return pexelsPhoto({ alt: "Paris view", id: "b" });
+      return null;
+    });
+    await installMocks(page, { photoProxy });
+    await page.goto("/");
+    await expect(page.locator("#heroCityName")).not.toBeEmpty();
+
+    await page.locator("#searchInput").fill(GEOCODE_LABEL);
+    await page.locator("#searchResults .search-item").first().click();
+    await expect(page.locator("#heroCityName")).toContainText(GEOCODE_LABEL);
+    await expect(page.locator("#heroLandmark .has-photo")).toHaveCount(1);
+
+    /* switch straight to a curated city and let it settle */
+    await page.locator("#searchInput").fill("Paris");
+    await page.locator("#searchResults .search-item").first().click();
+    await expect(page.locator("#heroCityName")).toContainText("Paris");
+
+    /* Paris may legitimately end up with no photo (a curated landmark with no
+       reviewed image stays on the gradient), so what matters is that nothing
+       from the PREVIOUS city survived the switch — neither its image nor its
+       credit. */
+    await expect(page.locator("#heroLandmark img.loc-photo-img")).toHaveCount(0);
+    await expect(page.locator("#heroInner .loc-credit")).toHaveCount(0);
+    await expect(page.locator("#heroLandmark")).not.toContainText(GEOCODE_LABEL);
+  });
+
+  test("the photo and its credit render without overflow at a 390px viewport", async ({ page }) => {
+    const { photoProxy } = queryAwarePhotoProxy((query) =>
+      query ? pexelsPhoto({ alt: `${GEOCODE_LABEL} Iceland cityscape`, id: "m" }) : null,
+    );
+    await page.setViewportSize({ width: 390, height: 844 });
+    await installMocks(page, { photoProxy });
+    await page.goto("/");
+    /* at this width the inline search bar is replaced by a button */
+    await page.locator("#mobileSearchBtn").click();
+    await page.locator("#searchInput").fill(GEOCODE_LABEL);
+    await page.locator("#searchResults .search-item").first().click();
+    await expect(page.locator("#heroLandmark .has-photo")).toHaveCount(1);
+
+    await expect(page.locator("#heroInner .loc-credit")).toBeVisible();
+    const overflow = await page.evaluate(
+      () => document.documentElement.scrollWidth - document.documentElement.clientWidth,
+    );
+    expect(overflow).toBeLessThanOrEqual(0);
   });
 });

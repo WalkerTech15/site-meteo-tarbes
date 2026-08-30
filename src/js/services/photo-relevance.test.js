@@ -14,6 +14,7 @@ import {
   scorePhotoForLocation,
   pickBestPhoto,
   isMarineKind,
+  namesConflictingPlace,
 } from "./photo-relevance.js";
 
 const TARBES = {
@@ -273,5 +274,122 @@ describe("isMarineKind", () => {
     expect(isMarineKind("city")).toBe(false);
     expect(isMarineKind("country")).toBe(false);
     expect(isMarineKind(undefined)).toBe(false);
+  });
+});
+
+/* ── Landmark ranking + the "shows somewhere else" rule ───────────────── */
+
+const withLandmark = {
+  id: "sf",
+  kind: "city",
+  name: { en: "San Francisco", fr: "San Francisco" },
+  region: { en: "California", fr: "Californie" },
+  country: { en: "United States", fr: "États-Unis" },
+  aliases: ["sfo"],
+  landmark: { emoji: "🌉", en: "Golden Gate Bridge", fr: "Pont du Golden Gate" },
+  lat: 37.7749,
+  lon: -122.4194,
+};
+
+const shot = (alt, extra = {}) => ({ alt, src: "https://x/y.jpg", ...extra });
+
+describe("locationTokens — landmark tier", () => {
+  it("collects the curated landmark's own words, in both languages", () => {
+    const t = locationTokens(withLandmark);
+    expect(t.landmark.has("golden")).toBe(true);
+    expect(t.landmark.has("gate")).toBe(true);
+    expect(t.landmark.has("bridge")).toBe(true);
+    expect(t.landmark.has("pont")).toBe(true);
+  });
+
+  it("never double-counts a word the name or an alias already covers", () => {
+    const t = locationTokens({
+      ...withLandmark,
+      landmark: { en: "San Francisco Bay", fr: "Baie de San Francisco" },
+    });
+    for (const tok of t.name) expect(t.landmark.has(tok)).toBe(false);
+    for (const tok of t.alias) expect(t.landmark.has(tok)).toBe(false);
+  });
+
+  it("is empty for a location with no curated landmark", () => {
+    expect(locationTokens({ ...withLandmark, landmark: null }).landmark.size).toBe(0);
+    expect(locationTokens(null).landmark.size).toBe(0);
+  });
+});
+
+describe("scorePhotoForLocation — landmark evidence", () => {
+  it("ranks a photo naming the place's own landmark above a generic one", () => {
+    const named = scorePhotoForLocation(withLandmark, shot("The Golden Gate Bridge at sunrise"));
+    const generic = scorePhotoForLocation(withLandmark, shot("A bridge somewhere"));
+    expect(named.score).toBeGreaterThan(generic.score);
+    expect(named.confidence).toBe("text");
+  });
+
+  it("still ranks naming the place itself above naming only its landmark", () => {
+    const place = scorePhotoForLocation(withLandmark, shot("Downtown San Francisco"));
+    const landmarkOnly = scorePhotoForLocation(withLandmark, shot("Golden Gate at dusk"));
+    expect(place.score).toBeGreaterThan(landmarkOnly.score);
+  });
+});
+
+describe("namesConflictingPlace", () => {
+  /* token → owning place id, the shape services/photo-api.js builds from the
+     curated location list. */
+  const vocab = new Map([
+    ["paris", "paris"],
+    ["eiffel", "paris"],
+    ["tower", "paris"],
+    ["tokyo", "tokyo"],
+    ["kyoto", "kyoto"],
+  ]);
+  const tarbes = {
+    id: "mt-tarbes",
+    kind: "town",
+    name: { en: "Tarbes", fr: "Tarbes" },
+    region: { en: "Occitania", fr: "Occitanie" },
+    country: { en: "France", fr: "France" },
+    aliases: [],
+    landmark: null,
+  };
+
+  it("rejects a photo that names a different known place", () => {
+    expect(namesConflictingPlace(tarbes, shot("The Eiffel Tower in Paris"), vocab)).toBe(true);
+    expect(namesConflictingPlace(tarbes, shot("Neon signs in Tokyo"), vocab)).toBe(true);
+  });
+
+  it("accepts a photo that also names the location itself", () => {
+    expect(namesConflictingPlace(tarbes, shot("Tarbes, on the road to Paris"), vocab)).toBe(false);
+  });
+
+  it("accepts a photo naming the location's own region or country", () => {
+    expect(namesConflictingPlace(tarbes, shot("Occitania farmland"), vocab)).toBe(false);
+    expect(namesConflictingPlace(tarbes, shot("Rural France"), vocab)).toBe(false);
+  });
+
+  it("never flags a place against its own curated entry", () => {
+    const paris = {
+      id: "paris",
+      kind: "city",
+      name: { en: "Paris", fr: "Paris" },
+      region: {},
+      country: { en: "France" },
+      aliases: [],
+      landmark: { en: "Eiffel Tower", fr: "Tour Eiffel" },
+    };
+    expect(namesConflictingPlace(paris, shot("The Eiffel Tower"), vocab)).toBe(false);
+  });
+
+  it("says nothing when there is no text, no vocabulary, or no photo", () => {
+    expect(namesConflictingPlace(tarbes, shot(""), vocab)).toBe(false);
+    expect(namesConflictingPlace(tarbes, shot("Anywhere"), new Map())).toBe(false);
+    expect(namesConflictingPlace(tarbes, null, vocab)).toBe(false);
+    expect(namesConflictingPlace(null, shot("Paris"), vocab)).toBe(false);
+  });
+
+  it("ignores a token two curated places share, which identifies neither", () => {
+    /* photo-api drops such tokens when building the map; an empty owner is
+       treated as "not a conflict" here too, belt and braces. */
+    const ambiguous = new Map([["springfield", ""]]);
+    expect(namesConflictingPlace(tarbes, shot("Springfield main street"), ambiguous)).toBe(false);
   });
 });

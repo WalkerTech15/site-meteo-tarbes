@@ -1,14 +1,29 @@
 /* Location visuals: curated landmark image → country flag → emoji fallback,
    with an optional real photo layered on top once it loads (never blocking
-   the initial render, never causing layout shift). The real photo is a
-   hybrid of two sources — see fetchBestPhoto below:
-     1. Pexels, ranked across several candidates, for attractive
-        city/town/landscape/ocean photography (the same-origin proxy keeps
-        the API key server-side — see PEXELS_PROXY_URL in core/config.js).
-     2. Wikimedia Commons, tried only when Pexels has nothing sufficiently
-        relevant, for exact landmarks/geography Pexels' stock-photo library
-        often lacks — see services/wikimedia-api.js. Commons is public and
-        keyless, so it is called directly, no proxy involved. */
+   the initial render, never causing layout shift).
+
+   The real photo comes from a chain of sources ordered by how well each can
+   PROVE the picture shows this place, not by how attractive it is — see
+   fetchBestPhoto:
+
+     1. the curated exact image (a reviewed Pexels id, or a local file),
+        resolved before the chain runs at all — hydrateLocPhoto;
+     2. Wikimedia Commons GEOSEARCH: candidates chosen by proximity to the
+        location's own coordinates, which no caption can fake, so this is the
+        most accurate source available and runs first;
+     3. Pexels, ranked across several candidates, for attractive and
+        representative city/town/landscape/ocean photography (the same-origin
+        proxy keeps the API key server-side — PEXELS_PROXY_URL in
+        core/config.js);
+     3b. a Commons TEXT search, for exact geography Pexels' stock library
+        often lacks — text-matched rather than coordinate-verified, so it
+        sits behind the ranked Pexels pool;
+     4. a verified photo of the surrounding region, then country, labelled
+        honestly as the AREA's photo rather than the place's;
+     5. the gradient/emoji fallback.
+
+   Commons is public and keyless, so it is called directly — no proxy
+   involved (services/wikimedia-api.js). */
 import { state } from "../core/state.js";
 import { PEXELS_PROXY_URL, FETCH_TIMEOUT_MS } from "../core/config.js";
 import { flagHtml } from "../data/flags.js";
@@ -20,7 +35,10 @@ import {
   significantWords,
   pickBestPhoto,
   isMarineKind,
+  namesConflictingPlace,
 } from "./photo-relevance.js";
+import { LOCATIONS } from "../data/locations.js";
+import { isOffline } from "./offline.js";
 
 export function gradBg(loc) {
   return `background:linear-gradient(145deg, ${loc.grad[0]}, ${loc.grad[1]})`;
@@ -86,6 +104,8 @@ export function __resetPhotoCacheForTests() {
   CANDIDATE_IN_FLIGHT.clear();
   WIKIMEDIA_CACHE.clear();
   WIKIMEDIA_IN_FLIGHT.clear();
+  AREA_CACHE.clear();
+  AREA_IN_FLIGHT.clear();
 }
 
 /* Small enough that a wide "cityscape" shot would mostly show empty
@@ -192,20 +212,27 @@ export function wikimediaQuery(loc) {
    is checked against its own name only — its region is just its continent
    ("Europe"), which would let almost any European photo pass. An ocean/sea
    is checked against its own (already fully qualifying) name. Everything
-   else is checked against name + region + country, any one of which is
-   enough — region/country are a coarser but still meaningful signal for
-   smaller places Pexels rarely names precisely. */
+   else is checked against name + region + country + its curated landmark,
+   any one of which is enough — region/country are a coarser but still
+   meaningful signal for smaller places Pexels rarely names precisely, and a
+   curated landmark is a hand-reviewed monument that genuinely belongs to
+   this place (data/locations.js), so a photo captioned "Golden Gate Bridge
+   at dawn" IS a photo of San Francisco and must not be filtered out for
+   never spelling the city's name. Only curated entries have one; nothing is
+   inferred from a city name. */
 export function relevanceKeywords(loc) {
   if (!loc) return [];
   const name = (loc.name && (loc.name.en || loc.name.fr)) || "";
   if (loc.kind === "country" || isMarineKind(loc.kind)) return significantWords(name);
   const region = (loc.region && loc.region.en) || "";
   const country = (loc.country && loc.country.en) || locCountry(loc) || "";
+  const landmark = (loc.landmark && (loc.landmark.en || loc.landmark.fr)) || "";
   return [
     ...new Set([
       ...significantWords(name),
       ...significantWords(region),
       ...significantWords(country),
+      ...significantWords(landmark),
     ]),
   ];
 }
@@ -218,11 +245,47 @@ export function relevanceKeywords(loc) {
    feature whose whole fallback chain already exists to catch true misses. */
 export function isRelevantPhoto(loc, photo) {
   if (!photo) return false;
+  /* Positive evidence that the photo is of somewhere ELSE outranks the
+     lenient "can't confirm, so keep it" rule below — a famous-city stock
+     photo answering a thin query is the one case where "unconfirmed" really
+     does mean "wrong". See namesConflictingPlace. */
+  if (namesConflictingPlace(loc, photo, conflictVocabulary())) return false;
   const tokens = relevanceKeywords(loc);
   if (tokens.length === 0) return true;
   const haystack = normalizeForMatch(`${photo.alt || ""} ${photo.photographer || ""}`);
   if (!haystack.trim()) return true;
   return tokens.some((tok) => haystack.includes(tok));
+}
+
+/* token → the curated location id that owns it, built once from the curated
+   list (data/locations.js) and its hand-reviewed landmark names. These are
+   exactly the places a stock library is most likely to return by mistake, so
+   they are the ones worth recognising; nothing is invented here, and a place
+   NOT in this list is simply never treated as a conflict.
+
+   Region and country words are deliberately excluded: "France" or "Texas"
+   appearing in a caption says nothing about which town is pictured, and
+   treating them as conflicts would reject correct photos of their own
+   towns. */
+let CONFLICT_VOCAB = null;
+function conflictVocabulary() {
+  if (CONFLICT_VOCAB) return CONFLICT_VOCAB;
+  const vocab = new Map();
+  for (const loc of LOCATIONS) {
+    const id = String(loc.id || "");
+    const terms = [loc.name?.en, loc.name?.fr, loc.landmark?.en, loc.landmark?.fr];
+    for (const term of terms) {
+      for (const tok of significantWords(term)) {
+        /* First writer wins, and a token claimed by two different curated
+           places is dropped entirely: it cannot identify either of them. */
+        if (vocab.has(tok) && vocab.get(tok) !== id) vocab.set(tok, "");
+        else if (!vocab.has(tok)) vocab.set(tok, id);
+      }
+    }
+  }
+  for (const [tok, owner] of [...vocab]) if (!owner) vocab.delete(tok);
+  CONFLICT_VOCAB = vocab;
+  return CONFLICT_VOCAB;
 }
 
 /* ── Ranking multiple candidates ──────────────────────────────────────────
@@ -462,22 +525,194 @@ async function resolveWikimediaPhoto(loc, cacheKey) {
   return best;
 }
 
+/* Step 2 of the fallback chain on its own: the coordinate-verified half of
+   Commons, with no text-search leg. Split out so the chain can put Pexels
+   BETWEEN Commons' two legs (see fetchBestPhoto) — geosearch is the most
+   accurate source available and now runs first, while a Commons TEXT search
+   is a weaker signal than a ranked Pexels pool and stays behind it. */
+async function wikimediaGeoPhoto(loc) {
+  if (!GEOSEARCH_KINDS.has(loc.kind)) return null;
+  if (!Number.isFinite(loc.lat) || !Number.isFinite(loc.lon)) return null;
+  const cacheKey = `geo:${loc.lat.toFixed(3)},${loc.lon.toFixed(3)}`;
+  if (WIKIMEDIA_CACHE.has(cacheKey)) return WIKIMEDIA_CACHE.get(cacheKey);
+  const pending = WIKIMEDIA_IN_FLIGHT.get(cacheKey);
+  if (pending) return pending;
+  const run = (async () => {
+    let best = null;
+    try {
+      best = rankWikimediaCandidates(loc, await wikimediaGeosearch(loc.lat, loc.lon), {
+        trustCoordinates: true,
+      });
+    } catch {
+      best = null;
+    }
+    WIKIMEDIA_CACHE.set(cacheKey, best);
+    return best;
+  })().finally(() => WIKIMEDIA_IN_FLIGHT.delete(cacheKey));
+  WIKIMEDIA_IN_FLIGHT.set(cacheKey, run);
+  return run;
+}
+
+/* Step 3b on its own: the Commons TEXT search, with its own `q:` cache key.
+   It must not go through fetchWikimediaPhoto here — that helper is
+   geosearch-first and keyed by coordinate, so for a geosearch-eligible place
+   it would read back the `geo:` null that step 2 has just cached and answer
+   "nothing" without ever running a text search. */
+async function wikimediaTextPhoto(loc) {
+  const q = wikimediaQuery(loc);
+  if (!q) return null;
+  const cacheKey = `q:${q}`;
+  if (WIKIMEDIA_CACHE.has(cacheKey)) return WIKIMEDIA_CACHE.get(cacheKey);
+  const pending = WIKIMEDIA_IN_FLIGHT.get(cacheKey);
+  if (pending) return pending;
+  const run = (async () => {
+    let best = null;
+    try {
+      best = rankWikimediaCandidates(loc, await wikimediaSearch(q), { trustCoordinates: false });
+    } catch {
+      best = null;
+    }
+    WIKIMEDIA_CACHE.set(cacheKey, best);
+    return best;
+  })().finally(() => WIKIMEDIA_IN_FLIGHT.delete(cacheKey));
+  WIKIMEDIA_IN_FLIGHT.set(cacheKey, run);
+  return run;
+}
+
+/* Step 4: a photo of the surrounding AREA when nothing shows the place
+   itself — the honest answer for a small town Pexels and Commons have never
+   photographed. The region is tried before the country (Occitanie says more
+   about Tarbes than France does), and the result is marked `approximate`
+   with the area it actually shows, so the credit can say so rather than
+   implying the photo is of the town. Never used for a country or an
+   ocean/sea: those ARE the area, so there is nothing coarser to fall back to
+   and an unrelated national photo would be pure decoration.
+
+   Keyed by the AREA, not the location, so every town in Occitanie shares one
+   lookup — the repeated-search speed-up this level of the chain can offer. */
+const AREA_CACHE = new Map();
+const AREA_IN_FLIGHT = new Map();
+
+export function areaFallbackTargets(loc) {
+  if (!loc || loc.kind === "country" || isMarineKind(loc.kind)) return [];
+  if (REGION_KINDS.has(loc.kind)) return [];
+  const out = [];
+  const region = (loc.region && (loc.region.en || loc.region.fr)) || "";
+  const country = (loc.country && (loc.country.en || loc.country.fr)) || locCountry(loc) || "";
+  if (region) out.push({ kind: "region", name: region, country });
+  if (country) out.push({ kind: "country", name: country, country: "" });
+  return out;
+}
+
+/* The area as a location-shaped object, so the existing query builder,
+   filter and ranker all apply unchanged — an area photo is held to exactly
+   the same evidence bar as an exact one, which is what "verified regional or
+   country image" requires. */
+function areaLocation(target) {
+  return {
+    id: `area-${target.kind}-${target.name}`,
+    kind: target.kind === "country" ? "country" : "region",
+    name: { en: target.name, fr: target.name },
+    region: { en: "", fr: "" },
+    country: { en: target.country, fr: target.country },
+    aliases: [],
+    landmark: null,
+    lat: null,
+    lon: null,
+  };
+}
+
+async function fetchAreaPhoto(loc) {
+  for (const target of areaFallbackTargets(loc)) {
+    const key = `${target.kind}:${normalizeForMatch(target.name)}`;
+    let photo;
+    if (AREA_CACHE.has(key)) photo = AREA_CACHE.get(key);
+    else if (AREA_IN_FLIGHT.has(key)) photo = await AREA_IN_FLIGHT.get(key);
+    else {
+      const areaLoc = areaLocation(target);
+      const run = (async () => {
+        let best = null;
+        try {
+          best = rankPexelsCandidates(
+            areaLoc,
+            await fetchPexelsPhotoCandidates(pexelsQuery(areaLoc)),
+          );
+        } catch {
+          best = null;
+        }
+        if (!best) {
+          try {
+            best = rankWikimediaCandidates(
+              areaLoc,
+              await wikimediaSearch(wikimediaQuery(areaLoc)),
+              {
+                trustCoordinates: false,
+              },
+            );
+          } catch {
+            best = null;
+          }
+        }
+        AREA_CACHE.set(key, best);
+        return best;
+      })().finally(() => AREA_IN_FLIGHT.delete(key));
+      AREA_IN_FLIGHT.set(key, run);
+      photo = await run;
+    }
+    /* Marked, never mutated: the cached area photo is shared by every town in
+       the area, so the label travels on a copy. */
+    if (photo) return { ...photo, approximate: true, approximateOf: target.name };
+  }
+  return null;
+}
+
 /* The hybrid entry point: Pexels' ranked pool first (attractive stock
    photography), Wikimedia only when Pexels has nothing sufficiently relevant
    (exact-landmark/geography coverage Pexels' library often lacks). Either
    step failing outright (network error, proxy down) falls through to the
    next rather than aborting the whole lookup — the gradient/emoji fallback
    is always the last resort, never a thrown error. */
-async function fetchBestPhoto(loc) {
+export async function fetchBestPhoto(loc) {
+  /* No network at all while offline: every step below would fail and be
+     negative-cached, which would then suppress the real lookup for the rest
+     of the session once connectivity returned. The gradient/emoji fallback
+     is the correct offline visual. */
+  if (isOffline()) return null;
+
+  /* 2. Commons geosearch — the most accurate source available, because the
+     candidate is chosen by proximity to the location's own coordinates
+     rather than by matching words. Ahead of Pexels on purpose: a beautiful
+     stock photo of the wrong place is the failure this pipeline exists to
+     avoid, and coordinates cannot be fooled by a caption.
+     (Step 1, the curated exact image, is handled before this is ever
+     called — see hydrateLocPhoto/prefetchLocPhoto.) */
   try {
-    const candidates = await fetchPexelsPhotoCandidates(pexelsQuery(loc));
-    const ranked = rankPexelsCandidates(loc, candidates);
+    const geo = await wikimediaGeoPhoto(loc);
+    if (geo) return geo;
+  } catch {
+    /* fall through */
+  }
+  /* 3. Pexels' ranked pool — the strongest source for attractive,
+     representative city/town/landscape photography. */
+  try {
+    const ranked = rankPexelsCandidates(loc, await fetchPexelsPhotoCandidates(pexelsQuery(loc)));
     if (ranked) return ranked;
   } catch {
-    /* fall through to Wikimedia */
+    /* fall through */
   }
+  /* 3b. Commons text search — exact geography Pexels' library often lacks
+     (a named sea, a village), but text-matched rather than coordinate-
+     verified, so it sits behind the ranked Pexels pool. */
   try {
-    return await fetchWikimediaPhoto(loc);
+    const text = await wikimediaTextPhoto(loc);
+    if (text) return text;
+  } catch {
+    /* fall through */
+  }
+  /* 4. A verified photo of the surrounding region, then country, labelled
+     honestly as being of the area rather than the place. */
+  try {
+    return await fetchAreaPhoto(loc);
   } catch {
     return null;
   }
@@ -516,17 +751,26 @@ function renderPhotoCredit(host, photo, extraClass = "") {
   const isWikimedia = photo.source === "wikimedia";
   /* Commons requires the license to travel with the credit; Pexels' terms
      don't call for one, so its short "Pexels ↗" label is unchanged. */
-  const label = isWikimedia
+  const base = isWikimedia
     ? t("photoCreditWikimedia")
         .replace("{photographer}", photo.photographer)
         .replace("{license}", photo.license || "")
     : t("photoCredit").replace("{photographer}", photo.photographer);
+  /* An area fallback (step 4) must never read as a photo OF the place. The
+     area name is prefixed to the visible credit and spelled out in full in
+     the accessible name, so neither a sighted nor a screen-reader user is
+     told this is something it is not. */
+  const label = photo.approximate
+    ? `${t("photoApproximate").replace("{area}", photo.approximateOf || "")} — ${base}`
+    : base;
   const a = document.createElement("a");
   a.className = `loc-credit ${extraClass}`.trim();
   a.href = photo.link;
   a.target = "_blank";
   a.rel = "noopener noreferrer";
-  a.textContent = isWikimedia ? "Wikimedia Commons ↗" : "Pexels ↗";
+  const source = isWikimedia ? "Wikimedia Commons ↗" : "Pexels ↗";
+  a.textContent = photo.approximate ? `${photo.approximateOf} · ${source}` : source;
+  if (photo.approximate) a.dataset.approximate = "true";
   a.setAttribute("aria-label", label);
   a.title = label;
   host.dataset.credit = label;
@@ -634,7 +878,13 @@ export async function hydrateLocPhoto(el, loc, opts = {}) {
      by rankPexelsCandidates — this re-check is cheap and just confirms it,
      never rejects a genuinely different photo. Anything failing it is
      treated exactly like "no photo found at all". */
-  if (photo && photo.src && (byId || photo.source === "wikimedia" || isRelevantPhoto(loc, photo)))
-    swap(photo.src, photo);
+  /* An area fallback is deliberately exempt: it was already held to the full
+     filter+ranking bar against the AREA it depicts (fetchAreaPhoto), and
+     re-checking it against the town would reject it for the very reason it
+     exists — it does not name the town. It is labelled as the area's photo,
+     not passed off as the town's. */
+  const verified =
+    byId || photo?.approximate || photo?.source === "wikimedia" || isRelevantPhoto(loc, photo);
+  if (photo && photo.src && verified) swap(photo.src, photo);
   else done(); // keep gradient/SVG fallback
 }
