@@ -8,28 +8,37 @@
 
      1. the curated exact image (a reviewed Pexels id, or a local file),
         resolved before the chain runs at all — hydrateLocPhoto;
-     2. Wikimedia Commons GEOSEARCH: candidates chosen by proximity to the
-        location's own coordinates, which no caption can fake, so this is the
-        most accurate source available and runs first;
-     3. Pexels, ranked across several candidates, for attractive and
+     2. GOOGLE PLACES: a photo filed against the place ENTITY itself, matched
+        by Place ID, administrative type and coordinate proximity rather than
+        by caption words. The strongest claim any provider makes, so it runs
+        first (services/places-api.js, via its own same-origin proxy);
+     3. Wikimedia Commons GEOSEARCH: candidates chosen by proximity to the
+        location's own coordinates, which no caption can fake;
+     4. a Commons TEXT search, for exact geography stock libraries lack — a
+        named sea, a village, a monument;
+     5. Pexels, ranked across several candidates, for attractive and
         representative city/town/landscape/ocean photography (the same-origin
         proxy keeps the API key server-side — PEXELS_PROXY_URL in
         core/config.js);
-     3b. a Commons TEXT search, for exact geography Pexels' stock library
-        often lacks — text-matched rather than coordinate-verified, so it
-        sits behind the ranked Pexels pool;
-     4. a verified photo of the surrounding region, then country, labelled
+     6. a verified photo of the surrounding region, then country, labelled
         honestly as the AREA's photo rather than the place's;
-     5. the gradient/emoji fallback.
+     7. the gradient/emoji fallback.
+
+   Steps 3–5 are ordered by evidence, not by beauty: Commons names places
+   encyclopaedically and Pexels' library is stock photography, so a Commons
+   text match is a stronger statement about WHICH place is pictured than a
+   Pexels relevance rank is.
 
    Commons is public and keyless, so it is called directly — no proxy
-   involved (services/wikimedia-api.js). */
+   involved (services/wikimedia-api.js). Google and Pexels both require a
+   server-side key and each has its own proxy. */
 import { state } from "../core/state.js";
 import { PEXELS_PROXY_URL, FETCH_TIMEOUT_MS } from "../core/config.js";
 import { flagHtml } from "../data/flags.js";
 import { locCountry } from "../core/location.js";
 import { t } from "../core/i18n.js";
 import { wikimediaGeosearch, wikimediaSearch } from "./wikimedia-api.js";
+import { fetchGooglePlacePhoto, __resetPlacesCacheForTests } from "./places-api.js";
 import {
   normalizeForMatch,
   significantWords,
@@ -106,6 +115,7 @@ export function __resetPhotoCacheForTests() {
   WIKIMEDIA_IN_FLIGHT.clear();
   AREA_CACHE.clear();
   AREA_IN_FLIGHT.clear();
+  __resetPlacesCacheForTests();
 }
 
 /* Small enough that a wide "cityscape" shot would mostly show empty
@@ -679,37 +689,49 @@ export async function fetchBestPhoto(loc) {
      is the correct offline visual. */
   if (isOffline()) return null;
 
-  /* 2. Commons geosearch — the most accurate source available, because the
-     candidate is chosen by proximity to the location's own coordinates
-     rather than by matching words. Ahead of Pexels on purpose: a beautiful
-     stock photo of the wrong place is the failure this pipeline exists to
-     avoid, and coordinates cannot be fooled by a caption.
-     (Step 1, the curated exact image, is handled before this is ever
+  /* 2. Google Places — a photo attached to the place ENTITY, accepted only
+     when the returned place is the right administrative kind AND either
+     carries the location's own name or sits on its coordinates. Ahead of
+     everything else because that is identity evidence, not caption
+     evidence. Returns null for oceans and seas, which Google has no entity
+     for. (Step 1, the curated exact image, is handled before this is ever
      called — see hydrateLocPhoto/prefetchLocPhoto.) */
+  try {
+    const google = await fetchGooglePlacePhoto(loc);
+    if (google) return google;
+  } catch {
+    /* fall through */
+  }
+  /* 3. Commons geosearch — candidates chosen by proximity to the location's
+     own coordinates rather than by matching words. A beautiful stock photo
+     of the wrong place is the failure this pipeline exists to avoid, and
+     coordinates cannot be fooled by a caption. */
   try {
     const geo = await wikimediaGeoPhoto(loc);
     if (geo) return geo;
   } catch {
     /* fall through */
   }
-  /* 3. Pexels' ranked pool — the strongest source for attractive,
-     representative city/town/landscape photography. */
-  try {
-    const ranked = rankPexelsCandidates(loc, await fetchPexelsPhotoCandidates(pexelsQuery(loc)));
-    if (ranked) return ranked;
-  } catch {
-    /* fall through */
-  }
-  /* 3b. Commons text search — exact geography Pexels' library often lacks
-     (a named sea, a village), but text-matched rather than coordinate-
-     verified, so it sits behind the ranked Pexels pool. */
+  /* 4. Commons text search — exact geography stock libraries often lack (a
+     named sea, a village, a monument). Text-matched rather than coordinate-
+     verified, but Commons titles and categories name PLACES, where a stock
+     caption names a mood, so this is still the stronger of the two
+     text-based sources. */
   try {
     const text = await wikimediaTextPhoto(loc);
     if (text) return text;
   } catch {
     /* fall through */
   }
-  /* 4. A verified photo of the surrounding region, then country, labelled
+  /* 5. Pexels' ranked pool — the last source that can show the place itself,
+     and the one most likely to be merely evocative, so it goes last. */
+  try {
+    const ranked = rankPexelsCandidates(loc, await fetchPexelsPhotoCandidates(pexelsQuery(loc)));
+    if (ranked) return ranked;
+  } catch {
+    /* fall through */
+  }
+  /* 6. A verified photo of the surrounding region, then country, labelled
      honestly as being of the area rather than the place. */
   try {
     return await fetchAreaPhoto(loc);
@@ -749,13 +771,18 @@ function renderPhotoCredit(host, photo, extraClass = "") {
   /* the URL comes from a third-party API — only ever follow a real https link */
   if (!photo.photographer || !/^https:\/\//i.test(photo.link || "")) return;
   const isWikimedia = photo.source === "wikimedia";
-  /* Commons requires the license to travel with the credit; Pexels' terms
-     don't call for one, so its short "Pexels ↗" label is unchanged. */
-  const base = isWikimedia
-    ? t("photoCreditWikimedia")
-        .replace("{photographer}", photo.photographer)
-        .replace("{license}", photo.license || "")
-    : t("photoCredit").replace("{photographer}", photo.photographer);
+  const isGoogle = photo.source === "google";
+  /* Commons requires the license to travel with the credit; Google requires
+     the contributor's authorAttribution AND an identification of Google as
+     the source; Pexels' terms call for neither, so its short "Pexels ↗"
+     label is unchanged. */
+  const base = isGoogle
+    ? t("photoCreditGoogle").replace("{photographer}", photo.photographer)
+    : isWikimedia
+      ? t("photoCreditWikimedia")
+          .replace("{photographer}", photo.photographer)
+          .replace("{license}", photo.license || "")
+      : t("photoCredit").replace("{photographer}", photo.photographer);
   /* An area fallback (step 4) must never read as a photo OF the place. The
      area name is prefixed to the visible credit and spelled out in full in
      the accessible name, so neither a sighted nor a screen-reader user is
@@ -768,9 +795,19 @@ function renderPhotoCredit(host, photo, extraClass = "") {
   a.href = photo.link;
   a.target = "_blank";
   a.rel = "noopener noreferrer";
-  const source = isWikimedia ? "Wikimedia Commons ↗" : "Pexels ↗";
+  /* Google's attribution policy requires BOTH the contributor's name and
+     Google itself to be visible next to the photo — not merely reachable
+     through the tooltip, which is where the other two providers put the
+     photographer. So the Google label carries the contributor's name in the
+     visible text, where the Pexels/Commons labels carry only the source. */
+  const source = isGoogle
+    ? `${photo.photographer} · Google ↗`
+    : isWikimedia
+      ? "Wikimedia Commons ↗"
+      : "Pexels ↗";
   a.textContent = photo.approximate ? `${photo.approximateOf} · ${source}` : source;
   if (photo.approximate) a.dataset.approximate = "true";
+  if (photo.source) a.dataset.provider = photo.source;
   a.setAttribute("aria-label", label);
   a.title = label;
   host.dataset.credit = label;
@@ -853,10 +890,12 @@ export async function hydrateLocPhoto(el, loc, opts = {}) {
   /* `photo` is null for local/curated images — that's what suppresses the credit */
   const swap = (src, photo) => {
     if (stale() || !src) return done();
-    /* Wikimedia only ever supplies one usable width (see wikimedia-api.js) —
-       a fabricated "940w"/"1880w" srcset for it would mislabel the real
-       thumbnail size, so it skips straight to a plain img.src. */
-    const srcset = photo && photo.source !== "wikimedia" ? pexelsSrcset(photo.sizes) : "";
+    /* Only Pexels publishes two known widths. Wikimedia returns a single
+       thumbnail (see wikimedia-api.js) and Google's media endpoint returns a
+       single rendition at the width we asked for, so a fabricated
+       "940w"/"1880w" srcset would mislabel both — they skip straight to a
+       plain img.src. */
+    const srcset = photo && !photo.source ? pexelsSrcset(photo.sizes) : "";
     const pre = new Image();
     /* Only the hero passes opts.priority: it's the LCP candidate on Home, so
        it should win the browser's fetch scheduler over everything else still
@@ -923,8 +962,16 @@ export async function hydrateLocPhoto(el, loc, opts = {}) {
      re-checking it against the town would reject it for the very reason it
      exists — it does not name the town. It is labelled as the area's photo,
      not passed off as the town's. */
+  /* A Google Places result is exempt for a stronger reason still: it was
+     accepted on the place ENTITY's id/type/coordinates (services/places-api.js),
+     and re-checking its caption words here would reject a correct photo of a
+     town whose Google display name is spelled differently. */
   const verified =
-    byId || photo?.approximate || photo?.source === "wikimedia" || isRelevantPhoto(loc, photo);
+    byId ||
+    photo?.approximate ||
+    photo?.source === "wikimedia" ||
+    photo?.source === "google" ||
+    isRelevantPhoto(loc, photo);
   if (photo && photo.src && verified) swap(photo.src, photo);
   else done(); // keep gradient/SVG fallback
 }

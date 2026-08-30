@@ -142,8 +142,9 @@ everything works with both blank (the app falls back to demo weather and a
 gradient/emoji visual instead of a real photo).
 
 ```
-VITE_MAPTILER_KEY=   # map tiles + geocoding  — https://cloud.maptiler.com/account/keys/
-PEXELS_API_KEY=      # optional location photos — https://www.pexels.com/api/
+VITE_MAPTILER_KEY=       # map tiles + geocoding  — https://cloud.maptiler.com/account/keys/
+PEXELS_API_KEY=          # optional location photos — https://www.pexels.com/api/
+GOOGLE_PLACES_API_KEY=   # optional, most accurate photos — https://console.cloud.google.com/
 ```
 
 ### The prefix is the security boundary
@@ -232,6 +233,73 @@ gradient/emoji fallback. No server detail is ever displayed.
 
 Leaving `PEXELS_API_KEY` blank is fully supported — the proxy answers 503 and
 the app shows its fallback visuals.
+
+#### `GOOGLE_PLACES_API_KEY` — server-side only
+
+Also unprefixed, for the same reason plus two more: Places API (New)
+authenticates with an `X-Goog-Api-Key` **header**, which a browser cannot send
+without publishing the key, and **every Places call is billed** — a leaked key
+is someone else's spending on your account.
+
+It follows exactly the Pexels arrangement: one browser route (`/api/places`,
+see `GOOGLE_PLACES_PROXY_URL` in `src/js/core/config.js`), three server
+implementations (`api/places.js` on Vercel, `public/api/places.php` on
+Apache via the same `mod_rewrite` pattern, a Vite middleware in dev), one
+contract.
+
+Two operations share the route, so a location costs two upstream calls rather
+than one per candidate:
+
+| Request                              | Response                                             |
+| ------------------------------------ | ---------------------------------------------------- |
+| `?query=…&lat=&lon=&lang=`           | `{"places":[…]}` — place **metadata only**, no image |
+| `?photo=places/<id>/photos/<ref>&w=` | `{"photo":{"src":…}}` — one short-lived signed URI   |
+
+Errors mirror the Pexels proxy (`400 invalid_query` / `invalid_photo`, `404`,
+`405`, `429`, `502`, `503`) and mean the same single thing to the UI: no
+Google photo, fall through to the next provider.
+
+**Set the key up correctly in Google Cloud Console:** enable _Places API
+(New)_, then restrict the key to that API and to your **server's IP address**.
+Do _not_ use an HTTP-referrer restriction — this is a server-to-server call
+and referrer restrictions do not apply to it.
+
+**Licensing.** Google Maps Platform allows only _temporary_ caching of Places
+content, and a resolved photo URI is a short-lived signed URL that must not be
+persisted or re-published. So the app:
+
+- answers the photo-resolve response `no-store` in all three proxies;
+- caches candidates and resolved URIs **in memory only**, under short TTLs
+  (`services/places-api.js`) — never `localStorage`;
+- names `googleusercontent.com` / `ggpht.com` and `/api/places` in the service
+  worker's `NEVER_CACHE_HOSTS` deny-list, checked _before_ the photo
+  allow-list, so no Google photo is ever written to Cache Storage;
+- refuses to display any Google photo it cannot attribute, and renders the
+  contributor's name and Google visibly next to the image.
+
+Leaving `GOOGLE_PLACES_API_KEY` blank is fully supported — the proxy answers
+503, the client stops asking for the rest of the session, and the photo chain
+falls straight through to Wikimedia and Pexels exactly as before.
+
+#### The photo provider chain
+
+Ordered by how well each source can **prove** the picture shows the selected
+place, not by how attractive it is (`services/photo-api.js`, `fetchBestPhoto`):
+
+1. **Curated verified image** — a reviewed Pexels ID or a local file
+2. **Google Places** — a photo filed against the place _entity_, matched on
+   Place ID → administrative type → coordinate proximity
+3. **Wikimedia Commons geosearch** — chosen by proximity to the location's own
+   coordinates, which no caption can fake
+4. **Wikimedia Commons text search** — encyclopaedic place naming
+5. **Pexels** — ranked across several candidates
+6. Region, then country, photo — labelled honestly as the _area's_, not the
+   place's
+7. The neutral gradient/emoji fallback
+
+A step that finds nothing sufficiently relevant, or fails outright, falls
+through to the next. Nothing is ever displayed merely because a result
+existed.
 
 `.env.local` is git-ignored (see `.gitignore`); only `.env.local.example`
 (placeholders, no real values) is committed.

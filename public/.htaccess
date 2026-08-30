@@ -15,6 +15,9 @@ DirectoryIndex index.html
 <IfModule mod_rewrite.c>
   RewriteEngine On
   RewriteRule ^api/pexels$ api/pexels.php [L]
+  # Same arrangement for the Google Places proxy (GOOGLE_PLACES_PROXY_URL in
+  # src/js/core/config.js) — one browser route, three server implementations.
+  RewriteRule ^api/places$ api/places.php [L]
 </IfModule>
 
 # Do not serve local secret files if they are ever uploaded by mistake.
@@ -31,7 +34,7 @@ DirectoryIndex index.html
 # The Pexels proxy must never be cached at the edge with its query string
 # stripped, and it sets its own Cache-Control per response.
 <IfModule mod_headers.c>
-  <FilesMatch "^pexels\.php$">
+  <FilesMatch "^(pexels|places)\.php$">
     Header always set X-Content-Type-Options "nosniff"
     Header always unset Access-Control-Allow-Origin
   </FilesMatch>

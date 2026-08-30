@@ -25,6 +25,11 @@
  *
  * Never cached:
  *   - Anything that is not a GET.
+ *   - Google Places photos, and the /api/places proxy that resolves them.
+ *     Google Maps Platform's terms allow only temporary caching of Places
+ *     content, and a resolved photo URI is a short-lived signed URL — keeping
+ *     either in Cache Storage across reloads is not permitted. See
+ *     NEVER_CACHE_HOSTS below.
  *   - MapTiler style/tile/geocoding requests. They carry the MapTiler key in
  *     the query string, and although that key is public by design and
  *     origin-restricted (see core/config.js), writing URLs containing ANY
@@ -72,6 +77,18 @@ function entryAssetsFrom(html) {
 /* Hosts whose GET responses are safe to reuse offline. */
 const WEATHER_HOSTS = new Set(["api.open-meteo.com", "air-quality-api.open-meteo.com"]);
 const PHOTO_HOSTS = new Set(["images.pexels.com", "upload.wikimedia.org"]);
+
+/* Hosts that must NEVER be cached, checked before any allow-list.
+ *
+ * Google Places photo bytes are served from these CDNs behind a short-lived
+ * signed URL, and Google Maps Platform's terms do not permit persisting or
+ * re-publishing them — "temporary caching for performance" is not a licence
+ * to keep a copy in Cache Storage across reloads. Being an unknown host would
+ * already make them network-only by default; naming them makes it a decision
+ * rather than an accident, so adding a future photo host to PHOTO_HOSTS
+ * cannot silently sweep these in with it. The same rule covers the
+ * /api/places proxy below. */
+const NEVER_CACHE_HOSTS = [/(^|\.)googleusercontent\.com$/i, /(^|\.)ggpht\.com$/i];
 /* Commons' JSON API — the metadata half of the photo lookup. */
 const PHOTO_API_HOSTS = new Set(["commons.wikimedia.org"]);
 
@@ -101,6 +118,8 @@ function strategyFor(req) {
   if (req.mode === "navigate") return "shell";
 
   if (!req.sameOrigin) {
+    /* Licence-restricted content, before any allow-list can claim it. */
+    if (NEVER_CACHE_HOSTS.some((re) => re.test(req.host))) return "network-only";
     if (WEATHER_HOSTS.has(req.host)) return "stale-while-revalidate";
     if (PHOTO_HOSTS.has(req.host)) return "cache-first";
     if (PHOTO_API_HOSTS.has(req.host)) return "stale-while-revalidate";
@@ -111,7 +130,9 @@ function strategyFor(req) {
   /* Our own photo proxy: the response holds public photo URLs and credits,
      never the Pexels key, which stays server-side (see api/pexels.js). */
   if (req.pathname.endsWith("/api/pexels")) return "stale-while-revalidate";
-  /* Other same-origin API routes are not known to be replay-safe. */
+  /* Other same-origin API routes — /api/places included — are not known to be
+     replay-safe. For Places that is a licensing requirement, not a guess: its
+     photo responses carry short-lived signed URIs that must not be retained. */
   if (req.pathname.includes("/api/")) return "network-only";
 
   if (IMMUTABLE_PATH.test(req.pathname)) return "cache-first";

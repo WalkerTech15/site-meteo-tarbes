@@ -442,6 +442,55 @@ export function photoProxyPayload(query) {
   return { photo, photos: [photo] };
 }
 
+/* ── Google Places ─────────────────────────────────────────────────────────
+   Like Pexels, this is a SAME-ORIGIN proxy (/api/places) holding a server-side
+   key, so it is intercepted rather than reached. Two operations share the
+   route: `?query=` returns place candidates (metadata only), `?photo=`
+   resolves one reference to a signed image URI.
+
+   The default answer is NO PLACES. That is what keeps every pre-existing test
+   in the suite describing exactly the behaviour it always did — with Google
+   silent, the chain starts where it used to, at Wikimedia and Pexels. A test
+   that wants a Google photo passes its own `placesProxy` override, or uses
+   `googlePlacesPayload` below. */
+export const GOOGLE_PHOTO_URL = "https://lh3.googleusercontent.com/mock-place-photo";
+export const GOOGLE_CONTRIBUTOR = "A Google Contributor";
+export const GOOGLE_MAPS_URI = "https://maps.google.com/?cid=mock";
+
+/* A candidate built FROM the request the client actually made: its name is
+   the first segment of the query and its coordinates are the ones the client
+   sent as a bias. Both are what a real Places answer for that place would
+   look like, and together they satisfy the identity checks in
+   services/places-api.js (right name, right type, co-located) rather than
+   sneaking past them. */
+export function googlePlacesPayload(url, over = {}) {
+  const params = new URL(url).searchParams;
+  const query = params.get("query") || "";
+  const name = query.split(",")[0].trim();
+  const lat = Number(params.get("lat"));
+  const lon = Number(params.get("lon"));
+  return {
+    places: [
+      {
+        id: `ChIJ-${name.replace(/\W+/g, "")}`,
+        name,
+        address: query,
+        lat: Number.isFinite(lat) ? lat : null,
+        lon: Number.isFinite(lon) ? lon : null,
+        types: ["locality", "political"],
+        mapsUri: GOOGLE_MAPS_URI,
+        photo: {
+          ref: "places/ChIJmock/photos/AelY_mockreference",
+          width: 1600,
+          height: 900,
+          attributions: [{ name: GOOGLE_CONTRIBUTOR, uri: "https://maps.google.com/contrib/1" }],
+        },
+        ...over,
+      },
+    ],
+  };
+}
+
 /* Wikimedia Commons is called DIRECTLY from the browser (public, keyless API
    — see services/wikimedia-api.js), never through a same-origin proxy, so it
    is matched by its real cross-origin host rather than a local path like the
@@ -569,7 +618,13 @@ export const json = (body) => ({
 /* ── Installer ─────────────────────────────────────────────────────────── */
 
 export async function installMocks(page, overrides = {}) {
-  const { weatherStatus = 200, photoProxy, wikimediaProxy, reverseDelayMs } = overrides;
+  const {
+    weatherStatus = 200,
+    photoProxy,
+    wikimediaProxy,
+    placesProxy,
+    reverseDelayMs,
+  } = overrides;
   /* "calm" by default. Pass a function to vary the weather per request — the
      URL carries the coordinates, which is how a test gives two cities two
      different forecasts. */
@@ -678,6 +733,27 @@ export async function installMocks(page, overrides = {}) {
      again, fail loudly instead of silently succeeding. */
   await page.route("**://api.pexels.com/**", (route) => {
     console.warn("[e2e] BLOCKED direct browser call to api.pexels.com");
+    return route.abort();
+  });
+
+  /* The Google Places proxy — same-origin, same reasoning as Pexels above:
+     the dev middleware behind it would hold a real, BILLED key, so no test
+     may ever reach it. Empty by default (see googlePlacesPayload). */
+  await page.route("**/api/places*", (route) => {
+    if (typeof placesProxy === "function") return placesProxy(route);
+    return route.fulfill(json({ places: [] }));
+  });
+
+  /* The image bytes behind a resolved Google photo URI. Registered
+     unconditionally so a test that mocks the proxy never has to remember it. */
+  await page.route(`${GOOGLE_PHOTO_URL}*`, (route) =>
+    route.fulfill({ status: 200, contentType: "image/gif", body: PIXEL_BYTES }),
+  );
+
+  /* If a future change ever calls Google directly from the browser — which
+     would publish a billed API key — fail loudly instead of succeeding. */
+  await page.route("**://places.googleapis.com/**", (route) => {
+    console.warn("[e2e] BLOCKED direct browser call to places.googleapis.com");
     return route.abort();
   });
 

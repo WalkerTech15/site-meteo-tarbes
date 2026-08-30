@@ -12,7 +12,12 @@
      server and is reached through the same-origin proxy below — api/pexels.js
      (Vercel serverless function) on the current deploy target, or
      public/api/pexels.php on the alternate Hostinger/Apache path, or a Vite
-     middleware in dev. See README.md "API keys & security". */
+     middleware in dev. See README.md "API keys & security".
+   - Google Places: NOT here either, for the same reason and one more. Places
+     API (New) is called with an X-Goog-Api-Key header, which a browser cannot
+     send without publishing the key, and a Places key is billed per request.
+     GOOGLE_PLACES_API_KEY therefore lives only on the server, behind the
+     second same-origin proxy below. */
 export const MAPTILER_KEY = import.meta.env.VITE_MAPTILER_KEY || "";
 
 export const MAP_STYLE = `https://api.maptiler.com/maps/hybrid-v4/style.json?key=${MAPTILER_KEY}`;
@@ -20,6 +25,10 @@ export const MAP_STYLE = `https://api.maptiler.com/maps/hybrid-v4/style.json?key
 /* Same-origin photo proxy. BASE_URL-relative rather than a leading slash so the
    build keeps working from a subdirectory as well as from a domain root. */
 export const PEXELS_PROXY_URL = `${import.meta.env.BASE_URL}api/pexels`;
+
+/* Same-origin Google Places proxy — place candidates and, separately, the
+   short-lived signed URI for one chosen photo. See services/places-api.js. */
+export const GOOGLE_PLACES_PROXY_URL = `${import.meta.env.BASE_URL}api/places`;
 
 /* Request timeouts */
 export const FETCH_TIMEOUT_MS = 8000;

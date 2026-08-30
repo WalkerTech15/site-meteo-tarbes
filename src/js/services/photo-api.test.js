@@ -29,6 +29,27 @@ import { LOCATIONS } from "../data/locations.js";
 import { COUNTRY_FLAG_CODES } from "../data/country-flag-codes.js";
 
 const PROXY_PATH = "api/pexels";
+const PLACES_PATH = "api/places";
+const GOOGLE_PHOTO_ID = "mock-google-photo.jpg";
+
+/* One Google Places candidate, in the shape the proxy re-projects onto (see
+   api/places.js): metadata only — the image URI is resolved separately. */
+const googlePlace = (over = {}) => ({
+  id: "ChIJmockPlaceId",
+  name: "Tarbes",
+  address: "65000 Tarbes, France",
+  lat: 43.2333,
+  lon: 0.0782,
+  types: ["locality", "political"],
+  mapsUri: "https://maps.google.com/?cid=1",
+  photo: {
+    ref: "places/ChIJmockPlaceId/photos/AelY_mockPhotoReference",
+    width: 1600,
+    height: 900,
+    attributions: [{ name: "A Google Contributor", uri: "https://maps.google.com/contrib/1" }],
+  },
+  ...over,
+});
 
 /* One counter-shaped stub so each test can assert what was requested. */
 function stubFetch(impl) {
@@ -1002,24 +1023,40 @@ describe(".htaccess — Hostinger rewrite from the browser route to the PHP file
     expect(htaccess).toMatch(/RewriteRule\s+\^api\/pexels\$\s+api\/pexels\.php\s+\[L\]/);
   });
 
-  it("guards the rule with mod_rewrite so a host without it doesn't 500", () => {
+  /* The Google Places proxy uses the identical arrangement — one browser
+     route (GOOGLE_PLACES_PROXY_URL), three server implementations — so it
+     needs its own rewrite or the Hostinger deploy 404s on every photo. */
+  it("rewrites the Google Places route to its PHP file too", () => {
+    expect(htaccess).toMatch(/RewriteRule\s+\^api\/places\$\s+api\/places\.php\s+\[L\]/);
+  });
+
+  it("guards the rules with mod_rewrite so a host without it doesn't 500", () => {
     const guarded =
-      /<IfModule mod_rewrite\.c>[\s\S]*?RewriteRule\s+\^api\/pexels\$[\s\S]*?<\/IfModule>/;
+      /<IfModule mod_rewrite\.c>[\s\S]*?RewriteRule\s+\^api\/pexels\$[\s\S]*?RewriteRule\s+\^api\/places\$[\s\S]*?<\/IfModule>/;
     expect(htaccess).toMatch(guarded);
   });
 
-  it("scopes the rule to exactly api/pexels — no broader catch-all", () => {
+  /* Every rule must be fully anchored to one exact route. A count assertion
+     would only have to be raised each time a proxy is added; what actually
+     matters is that no rule can ever claim a path it wasn't written for. */
+  it("scopes every rule to one exact route — no broader catch-all", () => {
     const rewriteLines = htaccess.split("\n").filter((l) => /^\s*RewriteRule/.test(l));
-    expect(rewriteLines).toHaveLength(1);
-    expect(rewriteLines[0]).toContain("^api/pexels$");
+    expect(rewriteLines.length).toBeGreaterThan(0);
+    for (const line of rewriteLines) {
+      expect(line).toMatch(/RewriteRule\s+\^api\/[a-z]+\$\s+api\/[a-z]+\.php\s+\[L\]/);
+    }
+    expect(rewriteLines.some((l) => l.includes("^api/pexels$"))).toBe(true);
+    expect(rewriteLines.some((l) => l.includes("^api/places$"))).toBe(true);
   });
 });
 
 /* ── Fallback chain, ranking and the area fallback ────────────────────────
    The order the whole feature turns on (see fetchBestPhoto):
      1. curated exact image        (hydrateLocPhoto, before the chain)
-     2. verified Commons geosearch — coordinate-accurate, so it goes first
-     3. verified Pexels            — attractive and representative
+     2. Google Places              — the place entity's own photo
+     3. verified Commons geosearch — coordinate-accurate
+     3b. verified Commons text     — encyclopaedic place naming
+     3c. verified Pexels           — attractive and representative
      3b. Commons text search       — exact geography Pexels often lacks
      4. verified region → country  — labelled honestly as the AREA's photo
      5. gradient/emoji             — represented here by a null return */
@@ -1066,9 +1103,26 @@ const isAreaCall = (c) =>
   isAreaQuery(new URL(c.url, "http://local").searchParams.get("query") || "");
 
 /* Routes one stubbed fetch per provider, so a test states what each source
-   answers instead of matching URLs by hand. "fail" = a 500 from that source. */
-function stubProviders({ pexels = [], geo = [], text = [], areaPexels = null } = {}) {
+   answers instead of matching URLs by hand. "fail" = a 500 from that source.
+
+   `places` is the Google candidate list. It defaults to EMPTY, which is what
+   keeps every pre-existing test in this file describing the same behaviour it
+   always did: with no Google answer the chain starts, as before, at the
+   Commons geosearch. */
+function stubProviders({ pexels = [], geo = [], text = [], areaPexels = null, places = [] } = {}) {
   return stubFetch((url) => {
+    if (url.includes(PLACES_PATH)) {
+      if (places === "fail") return jsonResponse(500, {});
+      const params = new URL(url, "http://local").searchParams;
+      /* Two operations on one route: resolve a chosen photo reference to its
+         signed URI, or search for candidates. See api/places.js. */
+      if (params.get("photo")) {
+        return jsonResponse(200, {
+          photo: { src: `https://lh3.googleusercontent.com/${GOOGLE_PHOTO_ID}`, width: 1280 },
+        });
+      }
+      return jsonResponse(200, { places });
+    }
     if (url.includes(PROXY_PATH)) {
       const query = new URL(url, "http://local").searchParams.get("query") || "";
       if (areaPexels && areaPexels.match(query)) {
@@ -1100,8 +1154,33 @@ const town = (over = {}) => ({
 });
 
 describe("fetchBestPhoto — fallback order", () => {
-  it("prefers a coordinate-verified Commons geosearch result over a Pexels one", async () => {
+  /* The required order, top to bottom:
+       1. curated exact image   (hydrateLocPhoto, before this is called)
+       2. Google Places         — the place ENTITY's own photo
+       3. Commons geosearch     — coordinate-verified
+       4. Commons text search   — encyclopaedic naming
+       5. Pexels                — ranked stock candidates
+       6. region/country area photo, honestly labelled
+       7. null → the gradient/emoji fallback                             */
+
+  it("prefers a Google Places photo over every other provider", async () => {
     const calls = stubProviders({
+      places: [googlePlace()],
+      geo: [commonsPage("Tarbes cathedral", { lat: 43.2333, lon: 0.0782 })],
+      text: [commonsPage("Tarbes Occitanie")],
+      pexels: [pexelsPhoto("Tarbes town centre")],
+    });
+    const photo = await fetchBestPhoto(town());
+    expect(photo.source).toBe("google");
+    expect(photo.src).toContain(GOOGLE_PHOTO_ID);
+    /* Nothing below Google is even asked once it has answered. */
+    expect(calls.some((c) => c.url.includes(PROXY_PATH))).toBe(false);
+    expect(calls.some((c) => c.url.includes("commons.wikimedia.org"))).toBe(false);
+  });
+
+  it("falls through to a coordinate-verified Commons geosearch when Google has nothing", async () => {
+    const calls = stubProviders({
+      places: [],
       pexels: [pexelsPhoto("Tarbes town centre")],
       geo: [commonsPage("Tarbes cathedral", { lat: 43.2333, lon: 0.0782 })],
     });
@@ -1111,26 +1190,56 @@ describe("fetchBestPhoto — fallback order", () => {
     expect(calls.some((c) => c.url.includes(PROXY_PATH))).toBe(false);
   });
 
-  it("falls through to Pexels when geosearch finds nothing", async () => {
-    stubProviders({ pexels: [pexelsPhoto("Tarbes Occitanie rooftops")], geo: [] });
+  it("falls through to a Commons text search when geosearch finds nothing", async () => {
+    const calls = stubProviders({
+      pexels: [pexelsPhoto("Tarbes Occitanie rooftops")],
+      geo: [],
+      text: [commonsPage("Tarbes Occitanie")],
+    });
+    expect((await fetchBestPhoto(town())).source).toBe("wikimedia");
+    /* Commons names places; a stock caption names a mood. Pexels stays last. */
+    expect(calls.some((c) => c.url.includes(PROXY_PATH))).toBe(false);
+  });
+
+  it("falls through to Pexels only when both Commons legs are empty", async () => {
+    stubProviders({ pexels: [pexelsPhoto("Tarbes Occitanie rooftops")], geo: [], text: [] });
     const photo = await fetchBestPhoto(town());
-    expect(photo.source).not.toBe("wikimedia");
+    expect(photo.source).toBeUndefined();
     expect(photo.alt).toBe("Tarbes Occitanie rooftops");
   });
 
-  it("falls through to a Commons text search when Pexels has nothing relevant", async () => {
-    stubProviders({ pexels: [], geo: [], text: [commonsPage("Tarbes Occitanie")] });
-    expect((await fetchBestPhoto(town())).source).toBe("wikimedia");
-  });
-
   it("returns null when every provider answers empty, so the gradient stays", async () => {
-    stubProviders({ pexels: [], geo: [], text: [] });
+    stubProviders({ places: [], pexels: [], geo: [], text: [] });
     expect(await fetchBestPhoto(town())).toBeNull();
   });
 
   it("survives every provider failing outright", async () => {
-    stubProviders({ pexels: "fail", geo: "fail", text: "fail" });
+    stubProviders({ places: "fail", pexels: "fail", geo: "fail", text: "fail" });
     expect(await fetchBestPhoto(town())).toBeNull();
+  });
+
+  /* Google has no ocean or sea entity, so asking would return a coastal
+     business — the "a result exists, so display it" failure the whole chain
+     exists to avoid. */
+  it("never asks Google for an ocean or a sea", async () => {
+    const calls = stubProviders({
+      places: [googlePlace()],
+      geo: [commonsPage("Atlantic swell", { lat: 33.2, lon: -41.5 })],
+    });
+    const sea = {
+      id: "coord-33.2--41.5",
+      kind: "ocean",
+      waterKind: "ocean",
+      lat: 33.2,
+      lon: -41.5,
+      name: { en: "Atlantic Ocean", fr: "Océan Atlantique" },
+      region: {},
+      country: {},
+      aliases: [],
+    };
+    const photo = await fetchBestPhoto(sea);
+    expect(photo.source).toBe("wikimedia");
+    expect(calls.some((c) => c.url.includes(PLACES_PATH))).toBe(false);
   });
 });
 

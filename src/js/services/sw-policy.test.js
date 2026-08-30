@@ -96,6 +96,37 @@ describe("service worker — what is never cached", () => {
   it("passes through same-origin API routes other than the photo proxy", () => {
     expect(hooks.strategyFor(req({ pathname: "/api/secret-thing" }))).toBe("network-only");
   });
+
+  /* Google Maps Platform's terms allow only TEMPORARY caching of Places
+     content, and a resolved photo URI is a short-lived signed URL — keeping
+     either in Cache Storage across reloads is not permitted. These two rules
+     are what make that a decision rather than an accident of "unknown host". */
+  it("never caches Google Places photo bytes, whatever CDN subdomain they use", () => {
+    const hosts = [
+      "lh3.googleusercontent.com",
+      "lh5.googleusercontent.com",
+      "maps.googleusercontent.com",
+      "lh3.ggpht.com",
+    ];
+    for (const host of hosts) {
+      expect(hooks.strategyFor(req({ sameOrigin: false, host, pathname: "/places/p" }))).toBe(
+        "network-only",
+      );
+    }
+  });
+
+  it("never caches the /api/places proxy, which resolves those URIs", () => {
+    expect(hooks.strategyFor(req({ pathname: "/api/places" }))).toBe("network-only");
+    expect(hooks.strategyFor(req({ pathname: "/site-meteo/api/places" }))).toBe("network-only");
+  });
+
+  /* The deny-list is checked BEFORE the photo allow-list, so adding a future
+     host to PHOTO_HOSTS can never sweep a licence-restricted one in with it. */
+  it("checks the never-cache rule ahead of the photo allow-list", () => {
+    expect(source.indexOf("NEVER_CACHE_HOSTS.some")).toBeLessThan(
+      source.indexOf("PHOTO_HOSTS.has(req.host)"),
+    );
+  });
 });
 
 describe("service worker — app shell", () => {

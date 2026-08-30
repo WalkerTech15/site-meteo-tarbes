@@ -1,6 +1,6 @@
 /**
- * Fails the build if a Pexels credential — or any sign that one was expected in
- * client code — can be found in dist/.
+ * Fails the build if a Pexels or Google Places credential — or any sign that
+ * one was expected in client code — can be found in dist/.
  *
  * Run after `npm run build` (it is part of `npm run check`).
  *
@@ -44,11 +44,38 @@ const RULES = [
     // Pexels keys are 56 lowercase-alphanumeric characters
     test: /\b[a-zA-Z0-9]{56}\b/,
   },
+  /* Google Places. `googleusercontent.com` is NOT matched: a resolved photo
+     URI legitimately appears at runtime, never in the bundle, and the word
+     "Google" is expected in the attribution strings. The rules target the
+     credential and the direct-from-browser calling pattern instead. */
+  {
+    name: "GOOGLE_PLACES_API_KEY reference in client code",
+    // the server-side variable name must never reach the browser bundle
+    test: /GOOGLE_PLACES_API_KEY/,
+  },
+  {
+    name: "direct call to the Google Places API from the browser",
+    // all Places traffic must go through the same-origin proxy
+    test: /places\.googleapis\.com/,
+  },
+  {
+    name: "Google API key header in client code",
+    // X-Goog-Api-Key is how a Places key is presented — it belongs server-side
+    test: /X-Goog-Api-Key/i,
+  },
+  {
+    name: "bare Google-shaped API key (AIza…)",
+    // Google API keys are "AIza" followed by 35 URL-safe characters
+    test: /\bAIza[0-9A-Za-z_-]{35}\b/,
+  },
 ];
 
 /* If a key is configured in this environment, also check for that exact value.
-   It is compared, never printed. */
-const liveKey = (process.env.PEXELS_API_KEY || "").trim();
+   Compared, never printed. */
+const LIVE_KEYS = [
+  ["the configured Pexels key itself", (process.env.PEXELS_API_KEY || "").trim()],
+  ["the configured Google Places key itself", (process.env.GOOGLE_PLACES_API_KEY || "").trim()],
+];
 
 function walk(dir) {
   const out = [];
@@ -74,12 +101,10 @@ for (const file of walk(DIST)) {
     const match = rule.test.exec(text);
     if (match) findings.push({ where, rule: rule.name, offset: match.index });
   }
-  if (liveKey && liveKey.length >= 16 && text.includes(liveKey)) {
-    findings.push({
-      where,
-      rule: "the configured Pexels key itself",
-      offset: text.indexOf(liveKey),
-    });
+  for (const [name, liveKey] of LIVE_KEYS) {
+    if (liveKey && liveKey.length >= 16 && text.includes(liveKey)) {
+      findings.push({ where, rule: name, offset: text.indexOf(liveKey) });
+    }
   }
 }
 
@@ -93,4 +118,6 @@ if (findings.length > 0) {
   process.exit(1);
 }
 
-console.log("verify-no-secrets: OK — no Pexels credential or direct API call found in dist/.");
+console.log(
+  "verify-no-secrets: OK — no Pexels or Google Places credential, and no direct API call, found in dist/.",
+);
