@@ -549,12 +549,17 @@ if ($status !== 200 || !is_array($data)) {
     respond(502, ['error' => 'upstream_error']);
 }
 
+$raw    = is_array($data['places'] ?? null) ? $data['places'] : [];
 $places = [];
-foreach (is_array($data['places'] ?? null) ? $data['places'] : [] as $place) {
+foreach ($raw as $place) {
     $payload = to_place_payload($place);
     if ($payload !== null) {
         $places[] = $payload;
     }
 }
 
-respond(200, ['places' => $places]);
+/* See api/places.js: a count taken BEFORE filtering, so an operator can tell
+   "Google had nothing for this query" apart from "Google answered, but none
+   of those places had an attributable photo". It is a count, never any
+   upstream content. */
+respond(200, ['places' => $places, 'received' => count($raw)]);

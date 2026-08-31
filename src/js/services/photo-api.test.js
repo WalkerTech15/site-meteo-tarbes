@@ -30,6 +30,23 @@ import { COUNTRY_FLAG_CODES } from "../data/country-flag-codes.js";
 
 const PROXY_PATH = "api/pexels";
 const PLACES_PATH = "api/places";
+const MAPILLARY_PATH = "api/mapillary";
+
+/* One Mapillary image, in the shape the proxy re-projects onto (see
+   api/mapillary.js): geotagged, attributed, no caption at all. */
+const mapillaryImage = (over = {}) => ({
+  id: "123456789",
+  src: "https://scontent-cdg4-1.xx.fbcdn.net/m/mock.jpg",
+  width: 2048,
+  height: 1152,
+  lat: 43.2333,
+  lon: 0.0782,
+  capturedAt: Date.now() - 30 * 24 * 3600 * 1000,
+  isPano: false,
+  creator: "a_contributor",
+  link: "https://www.mapillary.com/app/?pKey=123456789&focus=photo",
+  ...over,
+});
 const GOOGLE_PHOTO_ID = "mock-google-photo.jpg";
 
 /* One Google Places candidate, in the shape the proxy re-projects onto (see
@@ -1030,9 +1047,13 @@ describe(".htaccess — Hostinger rewrite from the browser route to the PHP file
     expect(htaccess).toMatch(/RewriteRule\s+\^api\/places\$\s+api\/places\.php\s+\[L\]/);
   });
 
+  it("rewrites the Mapillary route to its PHP file too", () => {
+    expect(htaccess).toMatch(/RewriteRule\s+\^api\/mapillary\$\s+api\/mapillary\.php\s+\[L\]/);
+  });
+
   it("guards the rules with mod_rewrite so a host without it doesn't 500", () => {
     const guarded =
-      /<IfModule mod_rewrite\.c>[\s\S]*?RewriteRule\s+\^api\/pexels\$[\s\S]*?RewriteRule\s+\^api\/places\$[\s\S]*?<\/IfModule>/;
+      /<IfModule mod_rewrite\.c>[\s\S]*?RewriteRule\s+\^api\/pexels\$[\s\S]*?RewriteRule\s+\^api\/places\$[\s\S]*?RewriteRule\s+\^api\/mapillary\$[\s\S]*?<\/IfModule>/;
     expect(htaccess).toMatch(guarded);
   });
 
@@ -1109,8 +1130,19 @@ const isAreaCall = (c) =>
    keeps every pre-existing test in this file describing the same behaviour it
    always did: with no Google answer the chain starts, as before, at the
    Commons geosearch. */
-function stubProviders({ pexels = [], geo = [], text = [], areaPexels = null, places = [] } = {}) {
+function stubProviders({
+  pexels = [],
+  geo = [],
+  text = [],
+  areaPexels = null,
+  places = [],
+  mapillary = [],
+} = {}) {
   return stubFetch((url) => {
+    if (url.includes(MAPILLARY_PATH)) {
+      if (mapillary === "fail") return jsonResponse(500, {});
+      return jsonResponse(200, { images: mapillary });
+    }
     if (url.includes(PLACES_PATH)) {
       if (places === "fail") return jsonResponse(500, {});
       const params = new URL(url, "http://local").searchParams;
@@ -1215,6 +1247,72 @@ describe("fetchBestPhoto — fallback order", () => {
 
   it("survives every provider failing outright", async () => {
     stubProviders({ places: "fail", pexels: "fail", geo: "fail", text: "fail" });
+    expect(await fetchBestPhoto(town())).toBeNull();
+  });
+
+  /* Provider 4. Ahead of the Commons TEXT search and Pexels because it can
+     PROVE where the frame was taken, which neither of those can. */
+  it("falls through to Mapillary when both Google and Commons geosearch are empty", async () => {
+    const calls = stubProviders({
+      places: [],
+      geo: [],
+      mapillary: [mapillaryImage()],
+      text: [commonsPage("Tarbes Occitanie")],
+      pexels: [pexelsPhoto("Tarbes rooftops")],
+    });
+    const photo = await fetchBestPhoto(town());
+    expect(photo.source).toBe("mapillary");
+    /* Nothing below Mapillary is asked once it has answered. */
+    expect(calls.some((c) => c.url.includes(PROXY_PATH))).toBe(false);
+  });
+
+  it("labels every Mapillary result as nearby, never as the place itself", async () => {
+    stubProviders({ places: [], geo: [], mapillary: [mapillaryImage()] });
+    expect((await fetchBestPhoto(town())).provenance).toBe("nearby");
+  });
+
+  it("carries the CC BY-SA licence through, which its terms require", async () => {
+    stubProviders({ places: [], geo: [], mapillary: [mapillaryImage()] });
+    expect((await fetchBestPhoto(town())).license).toBe("CC BY-SA 4.0");
+  });
+
+  it("keeps Commons geosearch ahead of Mapillary", async () => {
+    stubProviders({
+      places: [],
+      geo: [commonsPage("Tarbes cathedral", { lat: 43.2333, lon: 0.0782 })],
+      mapillary: [mapillaryImage()],
+    });
+    expect((await fetchBestPhoto(town())).source).toBe("wikimedia");
+  });
+
+  it("falls past Mapillary to the Commons text search when nothing is geotagged", async () => {
+    stubProviders({
+      places: [],
+      geo: [],
+      mapillary: [],
+      text: [commonsPage("Tarbes Occitanie")],
+    });
+    expect((await fetchBestPhoto(town())).source).toBe("wikimedia");
+  });
+
+  it("never asks Mapillary for a region or a country — one street says nothing", async () => {
+    const calls = stubProviders({ places: [], geo: [], mapillary: [mapillaryImage()], text: [] });
+    const region = {
+      id: "r-occitanie",
+      kind: "region",
+      lat: 43.6,
+      lon: 1.44,
+      name: { en: "Occitania", fr: "Occitanie" },
+      region: {},
+      country: { en: "France", fr: "France" },
+      aliases: [],
+    };
+    await fetchBestPhoto(region);
+    expect(calls.some((c) => c.url.includes(MAPILLARY_PATH))).toBe(false);
+  });
+
+  it("survives Mapillary failing outright", async () => {
+    stubProviders({ places: [], geo: [], mapillary: "fail", text: [], pexels: [] });
     expect(await fetchBestPhoto(town())).toBeNull();
   });
 

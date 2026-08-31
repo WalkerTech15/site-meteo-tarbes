@@ -245,10 +245,18 @@ export default async function handler(req, res) {
     if (!r.ok) return send(res, 502, { error: "upstream_error" });
 
     const data = await r.json();
-    const places = (Array.isArray(data?.places) ? data.places : [])
-      .map(toPlacePayload)
-      .filter(Boolean);
-    return send(res, 200, { places });
+    const raw = Array.isArray(data?.places) ? data.places : [];
+    const places = raw.map(toPlacePayload).filter(Boolean);
+    /* `received` is the count BEFORE filtering, and exists purely so an
+       operator can tell two very different situations apart from outside:
+         received 0, places 0  → Google genuinely has nothing for this query
+         received 5, places 0  → Google answered, but none of those places had
+                                 an attributable photo (the common case for
+                                 administrative entities — see the landmark
+                                 tier in services/places-api.js)
+       That ambiguity is what made the original "no usable photo candidates"
+       report hard to diagnose. It is a count, never any upstream content. */
+    return send(res, 200, { places, received: raw.length });
   } catch {
     return send(res, 502, { error: "upstream_error" });
   }

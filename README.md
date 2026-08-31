@@ -23,10 +23,13 @@ vanilla JavaScript (ES modules) and Vite. No UI framework.
   takes over and the UI stays explorable. The map and photo features simply fall
   back to their placeholders when their API keys are absent.
 
-> **This is not an offline app.** There is no service worker and nothing is
-> precached, so loading the site from scratch still requires a network
-> connection. The demo dataset is an in-session fallback for failed API calls,
-> not offline support.
+> **Offline support is partial, by design.** A service worker (`public/sw.js`,
+> registered in production only) precaches the app shell and replays weather
+> and photo data the visitor has already loaded, and the hero switches its live
+> pill to "Offline" with a "last updated" timestamp so cached readings are
+> never presented as current. A first visit still requires a network
+> connection, and licence-restricted imagery (Google Places, Mapillary) is
+> never cached at all.
 
 ## Architecture
 
@@ -49,8 +52,10 @@ src/
     ├── data/                static/lookup data: locations, translations,
     │                        weather codes, icons, flags
     ├── services/           network + caching: weather-api, geocoding-api,
-    │                        photo-api (calls the same-origin Pexels proxy —
-    │                        never Pexels directly), plus the cache helper
+    │                        photo-api (the provider chain), places-api and
+    │                        mapillary-api (each calls its OWN same-origin
+    │                        proxy, never the provider directly),
+    │                        wikimedia-api, photo-relevance, offline, cache
     ├── features/            state transitions + event wiring: search,
     │                        geolocation, favorites, settings, map, location
     ├── ui/                  DOM rendering: render-home, render-map,
@@ -58,14 +63,19 @@ src/
     │                        notifications (toast), charts
     └── main.js              bootstrap — wires every feature's events and
                               kicks off the initial render
-api/pexels.js               Vercel serverless function — the Pexels proxy for
-                              a Vercel deployment; holds no key itself, reads
-                              PEXELS_API_KEY from the platform's env vars
+api/                        Vercel serverless functions — the photo proxies.
+├── pexels.js                Each holds no key itself and reads an UNPREFIXED
+├── places.js                environment variable, so no credential can ever
+└── mapillary.js             be compiled into the client bundle.
 public/                     copied verbatim into dist/ by Vite
-├── api/pexels.php          server-side Pexels proxy for a Hostinger/Apache
-│                            deployment — holds no key itself, reads one from
-│                            outside the web root
-├── .htaccess               Apache security headers + caching
+├── api/pexels.php          the same three proxies for a Hostinger/Apache
+├── api/places.php           deployment — they hold no keys either, reading
+├── api/mapillary.php        them from a file outside the web root
+├── sw.js                   service worker: app-shell + replayable-data
+│                            caching, with a deny-list for licence-restricted
+│                            imagery (Google Places, Mapillary)
+├── .htaccess               Apache security headers, caching, and the
+│                            extensionless /api/* → *.php rewrites
 └── assets/flags/           SVG flag assets, served as-is (never imported
                               as JS — referenced by URL at runtime)
 deploy/                     templates that are NOT part of the site
@@ -116,21 +126,21 @@ npm run dev                        # start the dev server
 
 ## Scripts
 
-| Command                  | What it does                                                                          |
-| ------------------------ | ------------------------------------------------------------------------------------- |
-| `npm run dev`            | Start the Vite dev server with hot reload                                             |
-| `npm run build`          | Production build to `dist/`                                                           |
-| `npm run preview`        | Serve the `dist/` build locally, to sanity-check the production output                |
-| `npm run test`           | Run the unit tests once (Vitest)                                                      |
-| `npm run test:watch`     | Run the unit tests in watch mode                                                      |
-| `npm run test:e2e`       | Run the Playwright browser tests (starts its own dev server; APIs are mocked)         |
-| `npm run lint`           | ESLint (JS) + Stylelint (CSS)                                                         |
-| `npm run lint:fix`       | Same, auto-fixing what it safely can                                                  |
-| `npm run format`         | Format everything with Prettier                                                       |
-| `npm run format:check`   | Check formatting without writing changes                                              |
-| `npm run verify:secrets` | Scan `dist/` for Pexels credentials — fails the build if one leaked (run after build) |
-| `npm run check`          | lint + format:check + test + build + verify:secrets — the full pre-push gate          |
-| `npm run optimize:flags` | Re-run SVGO over `public/assets/flags/` (only needed if you add/replace a flag SVG)   |
+| Command                  | What it does                                                                                           |
+| ------------------------ | ------------------------------------------------------------------------------------------------------ |
+| `npm run dev`            | Start the Vite dev server with hot reload                                                              |
+| `npm run build`          | Production build to `dist/`                                                                            |
+| `npm run preview`        | Serve the `dist/` build locally, to sanity-check the production output                                 |
+| `npm run test`           | Run the unit tests once (Vitest)                                                                       |
+| `npm run test:watch`     | Run the unit tests in watch mode                                                                       |
+| `npm run test:e2e`       | Run the Playwright browser tests (starts its own dev server; APIs are mocked)                          |
+| `npm run lint`           | ESLint (JS) + Stylelint (CSS)                                                                          |
+| `npm run lint:fix`       | Same, auto-fixing what it safely can                                                                   |
+| `npm run format`         | Format everything with Prettier                                                                        |
+| `npm run format:check`   | Check formatting without writing changes                                                               |
+| `npm run verify:secrets` | Scan `dist/` for Pexels/Google/Mapillary credentials — fails the build if one leaked (run after build) |
+| `npm run check`          | lint + format:check + test + build + verify:secrets — the full pre-push gate                           |
+| `npm run optimize:flags` | Re-run SVGO over `public/assets/flags/` (only needed if you add/replace a flag SVG)                    |
 
 `verify:secrets` never prints a matched value — only the file, the rule that
 fired, and a byte offset.
@@ -145,6 +155,7 @@ gradient/emoji visual instead of a real photo).
 VITE_MAPTILER_KEY=       # map tiles + geocoding  — https://cloud.maptiler.com/account/keys/
 PEXELS_API_KEY=          # optional location photos — https://www.pexels.com/api/
 GOOGLE_PLACES_API_KEY=   # optional, most accurate photos — https://console.cloud.google.com/
+MAPILLARY_ACCESS_TOKEN=  # optional street-level photos — https://www.mapillary.com/dashboard/developers
 ```
 
 ### The prefix is the security boundary
@@ -281,28 +292,202 @@ Leaving `GOOGLE_PLACES_API_KEY` blank is fully supported — the proxy answers
 503, the client stops asking for the rest of the session, and the photo chain
 falls straight through to Wikimedia and Pexels exactly as before.
 
+#### `MAPILLARY_ACCESS_TOKEN` — server-side only
+
+Also unprefixed. A Mapillary client token (`MLY|<app id>|<secret>`) cannot be
+origin-restricted, so it never reaches the browser: one route
+(`/api/mapillary`, see `MAPILLARY_PROXY_URL`), three implementations
+(`api/mapillary.js` on Vercel, `public/api/mapillary.php` on Apache, a Vite
+middleware in dev).
+
+| Request              | Response                                                       |
+| -------------------- | -------------------------------------------------------------- |
+| `?lat=&lon=&radius=` | `{"images":[{id,src,lat,lon,capturedAt,isPano,creator,link}]}` |
+
+**What it is for.** Geotagged street-level photography — the only coverage
+available for the villages and small towns Google, Wikimedia and Pexels have
+never photographed. Every Mapillary image carries the coordinate it was taken
+at, which is a claim about _where_, never about _what_. So its results are
+always labelled **nearby**, never as a photo of the place itself, and it is
+only ever queried for a settlement (city 1000 m, town 800 m, village 500 m,
+POI 200 m, address 150 m). Regions, states, provinces, countries and open
+water are never asked: one roadside frame says nothing about a territory.
+
+**Licensing.** Mapillary imagery is **CC BY-SA 4.0**. The contributor's
+username and the licence are displayed with every image, and an image that
+cannot be attributed is refused rather than shown bare. The licence would
+permit caching, but the `thumb_1024_url` values are **signed CDN URLs that
+expire**, so they are held in memory for ~10 minutes only and
+`googleusercontent.com` / `ggpht.com` / `fbcdn.net` / `mapillary.com` are all
+on the service worker's `NEVER_CACHE_HOSTS` deny-list.
+
+Create a token at <https://www.mapillary.com/dashboard/developers>. Leaving it
+blank is fully supported — the proxy answers 503, the client stops asking for
+the session, and the chain falls through to the Wikimedia text search.
+
+> **KartaView is deliberately NOT used by this project.** Mapillary is the
+> only street-level imagery provider configured. There is no KartaView code,
+> proxy, token or mock anywhere in the repository, and a test
+> (`mapillary-vercel-route.test.js`) asserts none is ever added silently. Do
+> not add another street-level provider without reviewing its licence and its
+> attribution requirements first.
+
 #### The photo provider chain
 
 Ordered by how well each source can **prove** the picture shows the selected
 place, not by how attractive it is (`services/photo-api.js`, `fetchBestPhoto`):
 
-1. **Curated verified image** — a reviewed Pexels ID or a local file
-2. **Google Places** — a photo filed against the place _entity_, matched on
-   Place ID → administrative type → coordinate proximity
-3. **Wikimedia Commons geosearch** — chosen by proximity to the location's own
-   coordinates, which no caption can fake
-4. **Wikimedia Commons text search** — encyclopaedic place naming
-5. **Pexels** — ranked across several candidates
-6. Region, then country, photo — labelled honestly as the _area's_, not the
-   place's
-7. The neutral gradient/emoji fallback
+| #   | Source                            | Provenance it can claim |
+| --- | --------------------------------- | ----------------------- |
+| 1   | **Curated verified image**        | exact                   |
+| 2   | **Google Places**                 | exact, or nearby        |
+| 3   | **Wikimedia Commons geosearch**   | exact                   |
+| 4   | **Mapillary**                     | nearby (always)         |
+| 5   | **Wikimedia Commons text search** | exact                   |
+| 6   | **Pexels**                        | exact                   |
+| 7   | Region, then country, photo       | regional / country      |
+| 8   | Neutral gradient/emoji            | —                       |
 
 A step that finds nothing sufficiently relevant, or fails outright, falls
 through to the next. Nothing is ever displayed merely because a result
 existed.
 
+#### Provenance: what the visitor is told
+
+These steps do not all make the same claim, so every photo carries a tier and
+the credit says which (`ui/photo-provenance.js`):
+
+| Tier         | Shown as                                                        | When                                                          |
+| ------------ | --------------------------------------------------------------- | ------------------------------------------------------------- |
+| **exact**    | no qualifier — just the source                                  | the photo is of the selected place                            |
+| **nearby**   | "Nearby · &lt;source&gt;", full sentence in the accessible name | a landmark inside the place, or a Mapillary frame taken at it |
+| **regional** | "&lt;Region&gt; · &lt;source&gt;"                               | the area fallback, at region level                            |
+| **country**  | "&lt;Country&gt; · &lt;source&gt;"                              | the area fallback, at country level                           |
+
+`exact` deliberately shows no qualifier: adding "exact photo" to the common
+case would be noise, and an absent qualifier already means "this is the
+place". The other three are always announced, in both languages, in the
+visible badge **and** in the link's accessible name — so a screen-reader user
+is told exactly what a sighted user reads.
+
+**Why the `nearby` tier exists.** Google's place photos are attached
+overwhelmingly to businesses and points of interest; administrative entities
+(a `locality`, an `administrative_area_level_1`, a `country`) very often carry
+no photos at all. Without a second tier, a city/region/country selection could
+get candidates back and still show nothing. A photo of the cathedral in a town
+is a useful picture _of_ that town — it is simply not the town itself, so it is
+ranked below every genuine match and labelled. Only genuinely civic or scenic
+Google types qualify (`tourist_attraction`, `museum`, `church`, `park`,
+`city_hall`, …); `establishment` and `point_of_interest` are deliberately
+excluded because Google attaches them to every business, which would make a
+hotel car park a "landmark".
+
+#### Known worldwide coverage limitations
+
+- **Countries named by an endonym.** A country has no distance gate (its
+  representative point is arbitrary), so it can only be confirmed by name. The
+  proxy requests Google's display name in the interface language, so this
+  normally matches; if Google answered "Ísland" for Iceland the candidate is
+  refused and the chain falls through. Refusing is deliberate — the
+  alternative is accepting a country entity on no evidence.
+- **Non-Latin-script place names** yield no comparable text tokens, so they
+  are confirmed by coordinate proximity alone. That works for Google and
+  Mapillary (both geotagged) but means a Commons/Pexels text search can rarely
+  confirm them.
+- **Oceans and seas** are never sent to Google (no ocean entity exists) or
+  Mapillary (no streets). They rely on Commons geosearch and text search.
+- **Regions, states and provinces** get no Mapillary tier and a wide (120 km)
+  Google landmark radius, so a regional photo is often a well-known landmark
+  somewhere in the region, labelled `nearby`.
+- **Small towns outside Mapillary's coverage** (much of rural Africa, Central
+  Asia and inland South America) will still reach the region/country fallback.
+  That is the honest outcome, and it is labelled.
+- Photo availability for any specific place cannot be asserted offline; the
+  test suite exercises the query construction and the matching rules, not
+  Google's or Mapillary's live coverage.
+
 `.env.local` is git-ignored (see `.gitignore`); only `.env.local.example`
 (placeholders, no real values) is committed.
+
+### Vercel environment variables
+
+The Vercel deployment reads three server-side secrets from the project's
+environment variables. They must be set for **Production** (and Preview, if
+preview deployments should show photos):
+
+| Variable                 | Required?       | Effect when missing                                   |
+| ------------------------ | --------------- | ----------------------------------------------------- |
+| `GOOGLE_PLACES_API_KEY`  | optional        | `/api/places` answers `503`; chain skips Google       |
+| `MAPILLARY_ACCESS_TOKEN` | optional        | `/api/mapillary` answers `503`; chain skips Mapillary |
+| `PEXELS_API_KEY`         | optional        | `/api/pexels` answers `503`; chain skips Pexels       |
+| `VITE_MAPTILER_KEY`      | needed for maps | map tiles and geocoding fall back to placeholders     |
+
+Only `VITE_MAPTILER_KEY` is prefixed, and that is deliberate — it is the one
+key designed to be public and origin-restricted. **A missing key is never a
+crash:** each proxy answers `503`, the client marks that provider unavailable
+for the session, and the photo chain continues. That also means _a blank photo
+is indistinguishable from a missing key by looking at the page_ — check the
+endpoint directly instead:
+
+```bash
+# 503 => the key is not set on this deployment (or was denied)
+curl -s -o /dev/null -w '%{http_code}\n' 'https://<your-domain>/api/places?query=Tarbes,%20France'
+curl -s -o /dev/null -w '%{http_code}\n' 'https://<your-domain>/api/mapillary?lat=43.23&lon=0.07'
+curl -s 'https://<your-domain>/api/places?query=Tarbes,%20Occitanie,%20France' | head -c 400
+```
+
+| Status                             | Meaning                                                                                                                                                                                  |
+| ---------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `200` with a non-empty array       | working                                                                                                                                                                                  |
+| `200` `{"places":[],"received":0}` | the key works; Google genuinely has nothing for that query                                                                                                                               |
+| `200` `{"places":[],"received":5}` | the key works and Google answered, but none of those places had an attributable photo — the usual case for administrative entities, and what the `nearby` landmark tier exists to handle |
+| `503`                              | **key not set on the deployment**, or the key was denied/over quota (403)                                                                                                                |
+| `429`                              | rate limited — the proxy's own limiter, or the provider's                                                                                                                                |
+| `502`                              | provider unreachable, timed out, or returned something malformed                                                                                                                         |
+
+The response body never contains the key, the upstream body, or a file path,
+so these commands are safe to run and safe to paste.
+
+### Provider quotas, costs and caching restrictions
+
+| Provider                | Auth               | Billed?                              | Caching permitted                                                                |
+| ----------------------- | ------------------ | ------------------------------------ | -------------------------------------------------------------------------------- |
+| **Google Places (New)** | server key         | **Yes — per request**                | Place metadata: temporarily. Photo URIs: **not persisted** (short-lived signed)  |
+| **Mapillary**           | server token       | No (fair-use rate limits)            | CC BY-SA permits it, but thumb URLs **expire** — memory only                     |
+| **Pexels**              | server key         | No (200 req/hr, 20k/month free tier) | Yes — process-lifetime cache, incl. negative results                             |
+| **Wikimedia Commons**   | none (keyless)     | No                                   | Yes — process-lifetime cache                                                     |
+| **MapTiler**            | public browser key | **Yes** above the free tier          | Tiles/styles cached by the browser; **never** by the service worker (key in URL) |
+
+**What the app already does to contain cost**
+
+- Google is asked **at most twice per location** (one text search, then one
+  photo resolve for the single winning candidate — never one resolve per
+  candidate), and only for non-marine kinds.
+- Every provider client de-duplicates in-flight requests and caches results,
+  including negative ones, so re-selecting a place costs nothing.
+- A `503` from Google or Mapillary sets a session-wide "provider unavailable"
+  flag, so an unconfigured deployment makes **one** wasted request, not one
+  per location.
+- The chain short-circuits: if Google answers, Commons, Mapillary and Pexels
+  are never called at all.
+- The PHP proxies carry a per-IP sliding-window rate limit (Places 20/min,
+  Mapillary 30/min, Pexels 40/min) that fails open.
+
+**What still requires manual configuration — this project cannot do it for
+you, and deliberately does not try:**
+
+1. **Set a Google Cloud budget and a quota cap on the Places API.** This is
+   the only real cost exposure in the stack. Without a per-day quota cap, a
+   traffic spike (or a scraper hitting `/api/places`) bills your account.
+   Console → APIs & Services → Places API (New) → Quotas.
+2. **Restrict the Google key** to the Places API (New) _and_ to your server's
+   IP address. Not an HTTP referrer — this is a server-to-server call.
+3. **Confirm the MapTiler key's allowed-origins list.** It is public by
+   design; the origin list is the only thing making that safe.
+4. Optionally raise the Pexels tier if the site exceeds 200 requests/hour.
+
+Nothing in this repository changes billing, creates keys, or alters cloud
+permissions, and no billing alerts are configured automatically.
 
 ### If your Pexels key was ever in a `VITE_` variable, rotate it
 

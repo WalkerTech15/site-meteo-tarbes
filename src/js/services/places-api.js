@@ -83,10 +83,9 @@ export function placesQuery(loc) {
 
 /* ── Matching a returned place to the selected location ──────────────────
    The place types Google reports for each administrative tier. A settlement
-   query that comes back as a restaurant, a hotel or a city hall is not a
-   worse match for the town — it is a different subject entirely, so the
-   requirement to "reject clearly unrelated or generic results" is enforced
-   here as a hard gate rather than as a score penalty. */
+   query that comes back as a restaurant, a hotel or a city hall is not the
+   town itself, so it can never be presented AS the town — but see
+   LANDMARK_TYPES below for why it is not simply thrown away either. */
 const KIND_TYPES = {
   city: ["locality", "postal_town", "administrative_area_level_3", "sublocality"],
   town: ["locality", "postal_town", "administrative_area_level_3", "sublocality"],
@@ -99,6 +98,70 @@ const KIND_TYPES = {
      types are the correct answer rather than the wrong one. */
   poi: ["tourist_attraction", "point_of_interest", "establishment", "park", "premise"],
   address: ["premise", "street_address", "route", "point_of_interest", "establishment"],
+};
+
+/* Landmarks and public places that stand INSIDE a settlement or region.
+ *
+ * This list exists because of a real production failure. Google's place
+ * photos are overwhelmingly attached to businesses and points of interest;
+ * administrative entities — a `locality`, an `administrative_area_level_1`, a
+ * `country` — very often carry no `photos` array at all. The proxy drops a
+ * place with no photo (it cannot answer the question), and the type gate
+ * above dropped everything that did have one. Between the two, a city, region
+ * or country query could return candidates and still yield nothing usable,
+ * which is exactly the "no usable photo candidates" symptom.
+ *
+ * A photo of the cathedral in a town is a legitimate, useful picture OF that
+ * town — but it is NOT the town itself, so it is accepted only as the
+ * `nearby` provenance tier, always ranked below a genuine match, and the UI
+ * labels it as such (see ui/photo-provenance and renderPhotoCredit). That is
+ * the difference between "showing a landmark" and "passing a landmark off as
+ * the city", which is the line the requirements draw. */
+const LANDMARK_TYPES = [
+  "tourist_attraction",
+  "historical_landmark",
+  "historical_place",
+  "cultural_landmark",
+  "monument",
+  "observation_deck",
+  "museum",
+  "art_gallery",
+  "church",
+  "mosque",
+  "synagogue",
+  "hindu_temple",
+  "place_of_worship",
+  "city_hall",
+  "courthouse",
+  "library",
+  "park",
+  "national_park",
+  "state_park",
+  "garden",
+  "botanical_garden",
+  "plaza",
+  "natural_feature",
+];
+/* Deliberately NOT in that list: `establishment` and `point_of_interest`.
+   Google attaches both to essentially every business, so including them
+   would make a hotel, a car park or a fast-food outlet a "landmark
+   representing the town" — which is precisely the generic result the
+   requirements say to reject. The list above is an allow-list of things that
+   are actually civic or scenic, and it is meant to be short. */
+
+/* A landmark must sit genuinely INSIDE the place to represent it, so this is
+   much tighter than the identity tolerance below: a cathedral 40 km from a
+   town is in a different town. Anything without a coordinate is refused
+   outright at this tier — proximity IS the evidence here. */
+const LANDMARK_RADIUS_KM = {
+  city: 15,
+  town: 8,
+  village: 6,
+  region: 120,
+  state: 120,
+  province: 120,
+  /* A country is too big for "inside it" to mean anything about whether the
+     picture represents the country, so no landmark tier is offered. */
 };
 
 /* How far Google's own point for a place may sit from the geocoder's before
@@ -161,10 +224,19 @@ function identityOnly(loc) {
   };
 }
 
+/* Every accepted EXACT match outranks every accepted NEARBY one, whatever
+   their raw scores. Keeping the two tiers apart by a wide constant — rather
+   than hoping the arithmetic works out — is what guarantees a landmark can
+   never displace a genuine photo of the place itself. */
+const EXACT_TIER_BONUS = 100;
+
 /**
  * Score one Google place against the selected location.
  *
- * @returns {{score: number, reason: string}|null} null = reject outright.
+ * @returns {{score: number, reason: string, provenance: "exact"|"nearby"}|null}
+ *   null = reject outright. `provenance` is what the UI must disclose: an
+ *   "exact" candidate IS the selected place; a "nearby" one is a landmark
+ *   standing inside it and is labelled as such, never as the place.
  */
 export function scorePlaceCandidate(loc, place) {
   if (!loc || !place || !place.photo) return null;
@@ -173,45 +245,59 @@ export function scorePlaceCandidate(loc, place) {
      it IS the place, so nothing below can override it. Only ever present
      when a curated entry recorded one; nothing infers a Place ID. */
   if (loc.placeId && place.id && loc.placeId === place.id) {
-    return { score: EXACT_PLACE_ID_SCORE, reason: "place-id" };
+    return { score: EXACT_PLACE_ID_SCORE, reason: "place-id", provenance: "exact" };
   }
 
-  /* 2. Right kind of thing? A hotel is not a town. */
-  const expected = KIND_TYPES[loc.kind];
   const types = Array.isArray(place.types) ? place.types : [];
-  if (expected && !types.some((t) => expected.includes(t))) return null;
-
-  /* 3. Close enough to be the same place? */
-  const gate = MAX_DISTANCE_KM[loc.kind];
-  const km = distanceKm(loc.lat, loc.lon, place.lat, place.lon);
-  if (gate && km !== null && km > gate) return null;
-  const proximity = placeProximityScore(km, gate);
-
-  /* 4. Text agreement, both as corroboration and as the tie-breaker between
-     two equally close candidates of the right type. The full score counts
-     region and country words; the evidence test below deliberately does not. */
   const shape = scoringShape(place);
-  const text = scorePhotoForLocation(loc, shape);
-
-  /* Something must actually connect this place to the location: either it is
-     called by the location's OWN name, or it sits comfortably inside the
-     tier's tolerance. A candidate with neither is "whatever Google ranked
-     first", which is precisely the result this pipeline must refuse.
-
-     Deliberately not `text.confidence !== "none"`: a candidate carrying no
-     coordinates at all would otherwise be accepted purely because its
-     formatted address ends in "France", which every French result does. */
+  const km = distanceKm(loc.lat, loc.lon, place.lat, place.lon);
+  /* The location's OWN name, not its region or country: every Google result
+     in the right country repeats the country in its formatted address, so
+     that signal alone proves nothing. */
   const namesTheLocation = scorePhotoForLocation(identityOnly(loc), shape).confidence === "text";
-  const coordinateEvidence = proximity >= 4;
-  if (!namesTheLocation && !coordinateEvidence) return null;
 
+  /* 2. Is this the place itself? Right administrative kind, close enough,
+     and either named or co-located. */
+  const expected = KIND_TYPES[loc.kind];
+  const isRightKind = !expected || types.some((t) => expected.includes(t));
+  if (isRightKind) {
+    const gate = MAX_DISTANCE_KM[loc.kind];
+    if (!gate || km === null || km <= gate) {
+      const proximity = placeProximityScore(km, gate);
+      if (namesTheLocation || proximity >= 4) {
+        const text = scorePhotoForLocation(loc, shape);
+        return {
+          score: EXACT_TIER_BONUS + proximity + text.score,
+          reason: namesTheLocation ? "text" : "coordinate",
+          provenance: "exact",
+        };
+      }
+    }
+  }
+
+  /* 3. Not the place itself — but is it a landmark standing INSIDE it?
+     Accepted only on proximity, never on words: a museum whose name happens
+     to contain the town's name but which sits 200 km away is not in the
+     town. This is the tier that keeps settlement and region selections
+     working at all, because administrative entities so rarely carry photos
+     of their own. A country has no such tier — see LANDMARK_RADIUS_KM. */
+  const radius = LANDMARK_RADIUS_KM[loc.kind];
+  if (!radius || km === null || km > radius) return null;
+  if (!types.some((t) => LANDMARK_TYPES.includes(t))) return null;
   return {
-    score: proximity + text.score,
-    reason: namesTheLocation ? "text" : "coordinate",
+    /* Closer is better, and a landmark that also names the place (the "Musée
+       de Tarbes") is a better representative than one that does not. */
+    score: placeProximityScore(km, radius) + (namesTheLocation ? 2 : 0),
+    reason: "landmark",
+    provenance: "nearby",
   };
 }
 
-/** Best candidate, or null when none clears the bar. */
+/**
+ * Best candidate, or null when none clears the bar.
+ *
+ * @returns {{place: object, provenance: string}|null}
+ */
 export function pickBestPlace(loc, places) {
   let best = null;
   let bestScore = -Infinity;
@@ -221,7 +307,7 @@ export function pickBestPlace(loc, places) {
     /* Strictly greater, so a tie keeps Google's own relevance order. */
     if (scored.score > bestScore) {
       bestScore = scored.score;
-      best = place;
+      best = { place, provenance: scored.provenance };
     }
   }
   return best;
@@ -337,9 +423,9 @@ export async function fetchGooglePlacePhoto(loc) {
      the right provider for marine locations and runs next. */
   if (isMarineKind(loc.kind)) return null;
 
-  const places = await fetchPlaceCandidates(loc);
-  const best = pickBestPlace(loc, places);
-  if (!best) return null;
+  const picked = pickBestPlace(loc, await fetchPlaceCandidates(loc));
+  if (!picked) return null;
+  const { place: best, provenance } = picked;
 
   const src = await resolvePlacePhoto(best.photo.ref);
   if (!src) return null;
@@ -373,5 +459,11 @@ export async function fetchGooglePlacePhoto(loc) {
     height: best.photo.height,
     placeId: best.id,
     source: "google",
+    /* "exact" = this IS the selected place; "nearby" = a landmark standing
+       inside it. The UI must say which — see ui/photo-provenance.js. */
+    provenance,
+    /* What the "nearby" label names, so the credit can say WHICH landmark is
+       pictured rather than vaguely admitting it is not the place. */
+    subjectName: provenance === "nearby" ? best.name : "",
   };
 }

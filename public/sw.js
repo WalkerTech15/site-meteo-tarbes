@@ -88,7 +88,15 @@ const PHOTO_HOSTS = new Set(["images.pexels.com", "upload.wikimedia.org"]);
  * rather than an accident, so adding a future photo host to PHOTO_HOSTS
  * cannot silently sweep these in with it. The same rule covers the
  * /api/places proxy below. */
-const NEVER_CACHE_HOSTS = [/(^|\.)googleusercontent\.com$/i, /(^|\.)ggpht\.com$/i];
+const NEVER_CACHE_HOSTS = [
+  /(^|\.)googleusercontent\.com$/i,
+  /(^|\.)ggpht\.com$/i,
+  /* Mapillary thumbnails are signed CDN URLs that EXPIRE. Here the reason is
+     correctness rather than licensing: a cached one turns into a broken image
+     the moment its signature lapses, which is worse than no photo at all. */
+  /(^|\.)fbcdn\.net$/i,
+  /(^|\.)mapillary\.com$/i,
+];
 /* Commons' JSON API — the metadata half of the photo lookup. */
 const PHOTO_API_HOSTS = new Set(["commons.wikimedia.org"]);
 

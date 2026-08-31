@@ -1,5 +1,5 @@
 /**
- * Fails the build if a Pexels or Google Places credential — or any sign that
+ * Fails the build if a Pexels, Google Places or Mapillary credential — or any sign that
  * one was expected in client code — can be found in dist/.
  *
  * Run after `npm run build` (it is part of `npm run check`).
@@ -68,6 +68,26 @@ const RULES = [
     // Google API keys are "AIza" followed by 35 URL-safe characters
     test: /\bAIza[0-9A-Za-z_-]{35}\b/,
   },
+  /* Mapillary. As with the others, the provider's own image/attribution URLs
+     are expected in the bundle, so the rules target the credential and the
+     direct-from-browser calling pattern instead of the word "mapillary". */
+  {
+    name: "MAPILLARY_ACCESS_TOKEN reference in client code",
+    test: /MAPILLARY_ACCESS_TOKEN/,
+  },
+  {
+    name: "direct call to the Mapillary Graph API from the browser",
+    // all Mapillary traffic must go through the same-origin proxy
+    test: /graph\.mapillary\.com/,
+  },
+  {
+    name: "bare Mapillary-shaped client token (MLY|…)",
+    test: /\bMLY\|[0-9]+\|[0-9a-f]{16,}/i,
+  },
+  {
+    name: "OAuth token in client code",
+    test: /["'\s:]OAuth\s+[A-Za-z0-9|_-]{16,}/,
+  },
 ];
 
 /* If a key is configured in this environment, also check for that exact value.
@@ -75,6 +95,7 @@ const RULES = [
 const LIVE_KEYS = [
   ["the configured Pexels key itself", (process.env.PEXELS_API_KEY || "").trim()],
   ["the configured Google Places key itself", (process.env.GOOGLE_PLACES_API_KEY || "").trim()],
+  ["the configured Mapillary token itself", (process.env.MAPILLARY_ACCESS_TOKEN || "").trim()],
 ];
 
 function walk(dir) {
@@ -119,5 +140,5 @@ if (findings.length > 0) {
 }
 
 console.log(
-  "verify-no-secrets: OK — no Pexels or Google Places credential, and no direct API call, found in dist/.",
+  "verify-no-secrets: OK — no Pexels, Google Places or Mapillary credential, and no direct API call, found in dist/.",
 );

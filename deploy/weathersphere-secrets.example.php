@@ -23,6 +23,7 @@
  *     /home/<user>/private/weathersphere-secrets.php   <- the real key (600)
  *     /home/<user>/public_html/api/pexels.php          <- reads the file above
  *     /home/<user>/public_html/api/places.php          <- reads it too
+ *     /home/<user>/public_html/api/mapillary.php       <- and so does this
  *     /home/<user>/public_html/index.html              <- the built app
  *
  * public/api/pexels.php and public/api/places.php find this file by looking
@@ -37,9 +38,16 @@
  * Enable "Places API (New)" at https://console.cloud.google.com/ and restrict
  * the key to that API and to this server's IP address — a Places key is billed
  * per request, so it must never be reachable from a browser.
+ *
+ * Create a Mapillary client token at https://www.mapillary.com/dashboard/developers
+ * (free). Mapillary imagery is CC BY-SA 4.0 — the contributor and the licence
+ * must be shown with every image, which the app does automatically.
+ * NOTE: KartaView is deliberately NOT used by this project. Mapillary is the
+ * only street-level imagery provider configured.
  */
 
 return [
     'pexels_api_key' => 'REPLACE_ON_SERVER',
     'google_places_api_key' => 'REPLACE_ON_SERVER',
+    'mapillary_access_token' => 'REPLACE_ON_SERVER',
 ];

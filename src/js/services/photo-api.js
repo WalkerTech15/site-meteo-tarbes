@@ -14,20 +14,31 @@
         first (services/places-api.js, via its own same-origin proxy);
      3. Wikimedia Commons GEOSEARCH: candidates chosen by proximity to the
         location's own coordinates, which no caption can fake;
-     4. a Commons TEXT search, for exact geography stock libraries lack — a
+     4. MAPILLARY: geotagged street-level imagery, for the villages and small
+        towns none of the others have ever photographed. Always labelled as a
+        NEARBY photo, never as a photo of the place (services/mapillary-api.js).
+        KartaView is deliberately not used — Mapillary is the only
+        street-level provider this project is configured for;
+     5. a Commons TEXT search, for exact geography stock libraries lack — a
         named sea, a village, a monument;
-     5. Pexels, ranked across several candidates, for attractive and
+     6. Pexels, ranked across several candidates, for attractive and
         representative city/town/landscape/ocean photography (the same-origin
         proxy keeps the API key server-side — PEXELS_PROXY_URL in
         core/config.js);
-     6. a verified photo of the surrounding region, then country, labelled
+     7. a verified photo of the surrounding region, then country, labelled
         honestly as the AREA's photo rather than the place's;
-     7. the gradient/emoji fallback.
+     8. the gradient/emoji fallback.
 
-   Steps 3–5 are ordered by evidence, not by beauty: Commons names places
+   Steps 3–6 are ordered by evidence, not by beauty: Commons names places
    encyclopaedically and Pexels' library is stock photography, so a Commons
    text match is a stronger statement about WHICH place is pictured than a
    Pexels relevance rank is.
+
+   PROVENANCE. These steps do not all make the same claim, so every photo
+   carries a tier — exact / nearby / regional / country — and the credit says
+   which (ui/photo-provenance.js). A landmark inside a town and a photo of
+   the town are both useful; presenting them identically is what would make
+   the weaker one a lie.
 
    Commons is public and keyless, so it is called directly — no proxy
    involved (services/wikimedia-api.js). Google and Pexels both require a
@@ -39,6 +50,13 @@ import { locCountry } from "../core/location.js";
 import { t } from "../core/i18n.js";
 import { wikimediaGeosearch, wikimediaSearch } from "./wikimedia-api.js";
 import { fetchGooglePlacePhoto, __resetPlacesCacheForTests } from "./places-api.js";
+import { fetchMapillaryPhoto, __resetMapillaryCacheForTests } from "./mapillary-api.js";
+import {
+  photoProvenance,
+  provenanceLabel,
+  provenanceBadge,
+  photoAltText,
+} from "../ui/photo-provenance.js";
 import {
   normalizeForMatch,
   significantWords,
@@ -116,6 +134,7 @@ export function __resetPhotoCacheForTests() {
   AREA_CACHE.clear();
   AREA_IN_FLIGHT.clear();
   __resetPlacesCacheForTests();
+  __resetMapillaryCacheForTests();
 }
 
 /* Small enough that a wide "cityscape" shot would mostly show empty
@@ -670,8 +689,11 @@ async function fetchAreaPhoto(loc) {
       photo = await run;
     }
     /* Marked, never mutated: the cached area photo is shared by every town in
-       the area, so the label travels on a copy. */
-    if (photo) return { ...photo, approximate: true, approximateOf: target.name };
+       the area, so the label travels on a copy. `areaKind` is what lets the
+       credit distinguish a REGIONAL photo from a COUNTRY one — two different
+       admissions, and the country one is much the weaker. */
+    if (photo)
+      return { ...photo, approximate: true, approximateOf: target.name, areaKind: target.kind };
   }
   return null;
 }
@@ -712,7 +734,17 @@ export async function fetchBestPhoto(loc) {
   } catch {
     /* fall through */
   }
-  /* 4. Commons text search — exact geography stock libraries often lack (a
+  /* 4. Mapillary — geotagged street-level imagery. The last source that can
+     prove WHERE a photo was taken, and the only one with any coverage of
+     small villages. Returns nothing for regions, countries and open water,
+     where a single roadside frame would say nothing at all. */
+  try {
+    const street = await fetchMapillaryPhoto(loc);
+    if (street) return street;
+  } catch {
+    /* fall through */
+  }
+  /* 5. Commons text search — exact geography stock libraries often lack (a
      named sea, a village, a monument). Text-matched rather than coordinate-
      verified, but Commons titles and categories name PLACES, where a stock
      caption names a mood, so this is still the stronger of the two
@@ -723,7 +755,7 @@ export async function fetchBestPhoto(loc) {
   } catch {
     /* fall through */
   }
-  /* 5. Pexels' ranked pool — the last source that can show the place itself,
+  /* 6. Pexels' ranked pool — the last source that can show the place itself,
      and the one most likely to be merely evocative, so it goes last. */
   try {
     const ranked = rankPexelsCandidates(loc, await fetchPexelsPhotoCandidates(pexelsQuery(loc)));
@@ -731,7 +763,7 @@ export async function fetchBestPhoto(loc) {
   } catch {
     /* fall through */
   }
-  /* 6. A verified photo of the surrounding region, then country, labelled
+  /* 7. A verified photo of the surrounding region, then country, labelled
      honestly as being of the area rather than the place. */
   try {
     return await fetchAreaPhoto(loc);
@@ -770,49 +802,65 @@ function renderPhotoCredit(host, photo, extraClass = "") {
   host.querySelector(":scope > .loc-credit")?.remove();
   /* the URL comes from a third-party API — only ever follow a real https link */
   if (!photo.photographer || !/^https:\/\//i.test(photo.link || "")) return;
-  const isWikimedia = photo.source === "wikimedia";
-  const isGoogle = photo.source === "google";
-  /* Commons requires the license to travel with the credit; Google requires
-     the contributor's authorAttribution AND an identification of Google as
-     the source; Pexels' terms call for neither, so its short "Pexels ↗"
-     label is unchanged. */
-  const base = isGoogle
-    ? t("photoCreditGoogle").replace("{photographer}", photo.photographer)
-    : isWikimedia
-      ? t("photoCreditWikimedia")
-          .replace("{photographer}", photo.photographer)
-          .replace("{license}", photo.license || "")
-      : t("photoCredit").replace("{photographer}", photo.photographer);
-  /* An area fallback (step 4) must never read as a photo OF the place. The
-     area name is prefixed to the visible credit and spelled out in full in
-     the accessible name, so neither a sighted nor a screen-reader user is
-     told this is something it is not. */
-  const label = photo.approximate
-    ? `${t("photoApproximate").replace("{area}", photo.approximateOf || "")} — ${base}`
-    : base;
+  /* Per-provider attribution, exactly as each provider's terms require:
+       Commons  — licence must travel with the credit
+       Google   — the contributor's authorAttribution AND Google as source
+       Mapillary— contributor AND the CC BY-SA licence
+       Pexels   — neither is required, so its short label is unchanged. */
+  const base = ATTRIBUTION[photo.source]?.(photo) || fallbackAttribution(photo);
+
+  /* What the photo actually shows. An `exact` photo adds nothing here; every
+     weaker tier says so plainly, so neither a sighted nor a screen-reader
+     user is told this is something it is not. */
+  const qualifier = provenanceLabel(photo);
+  const label = qualifier ? `${qualifier} — ${base}` : base;
+
   const a = document.createElement("a");
   a.className = `loc-credit ${extraClass}`.trim();
   a.href = photo.link;
   a.target = "_blank";
   a.rel = "noopener noreferrer";
-  /* Google's attribution policy requires BOTH the contributor's name and
-     Google itself to be visible next to the photo — not merely reachable
-     through the tooltip, which is where the other two providers put the
-     photographer. So the Google label carries the contributor's name in the
-     visible text, where the Pexels/Commons labels carry only the source. */
-  const source = isGoogle
-    ? `${photo.photographer} · Google ↗`
-    : isWikimedia
-      ? "Wikimedia Commons ↗"
-      : "Pexels ↗";
-  a.textContent = photo.approximate ? `${photo.approximateOf} · ${source}` : source;
+  /* Google's and Mapillary's policies require the CONTRIBUTOR to be visible
+     next to the photo, not merely reachable through the tooltip, which is
+     where Pexels and Commons put the photographer. */
+  const source = SOURCE_LABEL[photo.source]?.(photo) || "Pexels ↗";
+  const badge = provenanceBadge(photo);
+  a.textContent = badge ? `${badge} · ${source}` : source;
+
+  const tier = photoProvenance(photo);
+  a.dataset.provenance = tier;
+  /* Kept for the existing area-fallback tests and styling hooks. */
   if (photo.approximate) a.dataset.approximate = "true";
   if (photo.source) a.dataset.provider = photo.source;
   a.setAttribute("aria-label", label);
   a.title = label;
   host.dataset.credit = label;
+  host.dataset.provenance = tier;
   host.appendChild(a);
 }
+
+/* One entry per provider whose terms demand specific wording. Pexels is
+   absent on purpose — it is the default. */
+const ATTRIBUTION = {
+  google: (p) => t("photoCreditGoogle").replace("{photographer}", p.photographer),
+  wikimedia: (p) =>
+    t("photoCreditWikimedia")
+      .replace("{photographer}", p.photographer)
+      .replace("{license}", p.license || ""),
+  mapillary: (p) =>
+    t("photoCreditMapillary")
+      .replace("{photographer}", p.photographer)
+      .replace("{license}", p.license || "CC BY-SA 4.0"),
+};
+function fallbackAttribution(photo) {
+  return t("photoCredit").replace("{photographer}", photo.photographer);
+}
+
+const SOURCE_LABEL = {
+  google: (p) => `${p.photographer} · Google ↗`,
+  wikimedia: () => "Wikimedia Commons ↗",
+  mapillary: (p) => `${p.photographer} · Mapillary ↗`,
+};
 
 /* Fire-and-forget cache warmup — no DOM, no swap, just the network lookup.
    Measured with Lighthouse: on Home, the hero photo used to sit behind
@@ -918,10 +966,15 @@ export async function hydrateLocPhoto(el, loc, opts = {}) {
         if (opts.priority) img.fetchPriority = "high";
         el.appendChild(img);
       }
-      /* Pexels supplies a description ("Eiffel Tower at dusk"); curated and
-         fallback visuals stay decorative with an empty alt. Assigned via the
+      /* Pexels supplies a description ("Eiffel Tower at dusk") and Commons a
+         file description; curated and fallback visuals stay decorative with
+         an empty alt. Mapillary supplies NOTHING, so photoAltText composes a
+         sentence naming the place and the tier rather than leaving a
+         screen-reader user at an unlabelled image. Assigned via the
          property, so the value is escaped by the DOM rather than by us. */
-      img.alt = opts.decorative ? "" : (photo && photo.alt) || "";
+      img.alt = opts.decorative
+        ? ""
+        : photoAltText(photo, (loc.name && (loc.name[state.lang] || loc.name.en)) || "");
       if (srcset) {
         img.sizes = sizesAttr;
         img.srcset = srcset;
@@ -966,11 +1019,17 @@ export async function hydrateLocPhoto(el, loc, opts = {}) {
      accepted on the place ENTITY's id/type/coordinates (services/places-api.js),
      and re-checking its caption words here would reject a correct photo of a
      town whose Google display name is spelled differently. */
+  /* Mapillary is exempt for the strongest reason of all: it carries no
+     caption to check, and its claim is purely positional — the image is
+     geotagged within a few hundred metres of the place (services/mapillary-
+     api.js). Running a text filter over an empty caption would reject every
+     result it ever returns. */
   const verified =
     byId ||
     photo?.approximate ||
     photo?.source === "wikimedia" ||
     photo?.source === "google" ||
+    photo?.source === "mapillary" ||
     isRelevantPhoto(loc, photo);
   if (photo && photo.src && verified) swap(photo.src, photo);
   else done(); // keep gradient/SVG fallback

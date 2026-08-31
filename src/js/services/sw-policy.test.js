@@ -120,6 +120,23 @@ describe("service worker — what is never cached", () => {
     expect(hooks.strategyFor(req({ pathname: "/site-meteo/api/places" }))).toBe("network-only");
   });
 
+  /* Mapillary thumbnails are signed URLs that EXPIRE. Here the reason is
+     correctness rather than licensing: a cached one becomes a broken image
+     the moment its signature lapses, which is worse than no photo at all. */
+  it("never caches Mapillary imagery or its proxy", () => {
+    for (const host of [
+      "scontent-cdg4-1.xx.fbcdn.net",
+      "scontent.xx.fbcdn.net",
+      "images.mapillary.com",
+      "graph.mapillary.com",
+    ]) {
+      expect(hooks.strategyFor(req({ sameOrigin: false, host, pathname: "/m/x.jpg" }))).toBe(
+        "network-only",
+      );
+    }
+    expect(hooks.strategyFor(req({ pathname: "/api/mapillary" }))).toBe("network-only");
+  });
+
   /* The deny-list is checked BEFORE the photo allow-list, so adding a future
      host to PHOTO_HOSTS can never sweep a licence-restricted one in with it. */
   it("checks the never-cache rule ahead of the photo allow-list", () => {

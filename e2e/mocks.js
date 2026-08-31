@@ -491,6 +491,44 @@ export function googlePlacesPayload(url, over = {}) {
   };
 }
 
+/* ── Mapillary ─────────────────────────────────────────────────────────────
+   Provider 4: geotagged street-level imagery, behind its own same-origin
+   proxy (/api/mapillary) because the access token is a credential.
+
+   Empty by default, for the same reason as Google Places: with Mapillary
+   silent, every pre-existing test in the suite describes exactly the
+   behaviour it always did. A test that wants street-level imagery passes its
+   own `mapillaryProxy` override or uses `mapillaryPayload`.
+
+   KartaView is NOT mocked anywhere because it is NOT used anywhere. */
+export const MAPILLARY_THUMB_URL = "https://scontent-cdg4-1.xx.fbcdn.net/m/mock-street.jpg";
+export const MAPILLARY_CONTRIBUTOR = "a_contributor";
+
+/* An image built FROM the request the client made: its coordinates are the
+   ones the client asked about, which is what a real geotagged frame at that
+   place would look like — so it satisfies the proximity checks in
+   services/mapillary-api.js rather than sneaking past them. */
+export function mapillaryPayload(url, over = {}) {
+  const params = new URL(url).searchParams;
+  return {
+    images: [
+      {
+        id: "123456789",
+        src: MAPILLARY_THUMB_URL,
+        width: 2048,
+        height: 1152,
+        lat: Number(params.get("lat")),
+        lon: Number(params.get("lon")),
+        capturedAt: Date.now() - 30 * 24 * 3600 * 1000,
+        isPano: false,
+        creator: MAPILLARY_CONTRIBUTOR,
+        link: "https://www.mapillary.com/app/?pKey=123456789&focus=photo",
+        ...over,
+      },
+    ],
+  };
+}
+
 /* Wikimedia Commons is called DIRECTLY from the browser (public, keyless API
    — see services/wikimedia-api.js), never through a same-origin proxy, so it
    is matched by its real cross-origin host rather than a local path like the
@@ -623,6 +661,7 @@ export async function installMocks(page, overrides = {}) {
     photoProxy,
     wikimediaProxy,
     placesProxy,
+    mapillaryProxy,
     reverseDelayMs,
   } = overrides;
   /* "calm" by default. Pass a function to vary the weather per request — the
@@ -754,6 +793,24 @@ export async function installMocks(page, overrides = {}) {
      would publish a billed API key — fail loudly instead of succeeding. */
   await page.route("**://places.googleapis.com/**", (route) => {
     console.warn("[e2e] BLOCKED direct browser call to places.googleapis.com");
+    return route.abort();
+  });
+
+  /* The Mapillary proxy — same-origin, same reasoning: the dev middleware
+     behind it would hold a real access token. Empty by default. */
+  await page.route("**/api/mapillary*", (route) => {
+    if (typeof mapillaryProxy === "function") return mapillaryProxy(route);
+    return route.fulfill(json({ images: [] }));
+  });
+
+  /* The image bytes behind a Mapillary thumbnail URL. */
+  await page.route(`${MAPILLARY_THUMB_URL}*`, (route) =>
+    route.fulfill({ status: 200, contentType: "image/gif", body: PIXEL_BYTES }),
+  );
+
+  /* Same belt and braces: a direct browser call would publish the token. */
+  await page.route("**://graph.mapillary.com/**", (route) => {
+    console.warn("[e2e] BLOCKED direct browser call to graph.mapillary.com");
     return route.abort();
   });
 

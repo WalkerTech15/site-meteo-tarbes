@@ -319,10 +319,11 @@ function placesDevProxy(apiKey) {
       if (r.status === 403) return sendJson(res, 503, { error: "unavailable" });
       if (!r.ok) return sendJson(res, 502, { error: "upstream_error" });
       const data = await r.json();
-      const places = (Array.isArray(data?.places) ? data.places : [])
-        .map(toPlacePayload)
-        .filter(Boolean);
-      return sendJson(res, 200, { places });
+      const raw = Array.isArray(data?.places) ? data.places : [];
+      const places = raw.map(toPlacePayload).filter(Boolean);
+      /* See api/places.js: a count before filtering, so an operator can tell
+         "Google had nothing" apart from "nothing had an attributable photo". */
+      return sendJson(res, 200, { places, received: raw.length });
     } catch {
       return sendJson(res, 502, { error: "upstream_error" });
     }
@@ -330,6 +331,122 @@ function placesDevProxy(apiKey) {
 
   return {
     name: "weathersphere-places-dev-proxy",
+    apply: "serve",
+    configureServer(server) {
+      server.middlewares.use(handler);
+    },
+    configurePreviewServer(server) {
+      server.middlewares.use(handler);
+    },
+  };
+}
+
+/* Development stand-in for the production Mapillary proxy — same arrangement
+ * again (api/mapillary.js on Vercel, public/api/mapillary.php on Apache, this
+ * in dev), answering the one route the built app calls: /api/mapillary.
+ *
+ * The token is read from MAPILLARY_ACCESS_TOKEN — unprefixed, so Vite cannot
+ * compile it into the client bundle.
+ */
+const MAPILLARY_ENDPOINT = "/api/mapillary";
+const MAPILLARY_GRAPH_URL = "https://graph.mapillary.com/images";
+/* Mirrors FIELDS in api/mapillary.js / public/api/mapillary.php. */
+const MAPILLARY_FIELDS = "id,thumb_1024_url,captured_at,is_pano,geometry,creator,width,height";
+const MAPILLARY_CANDIDATE_COUNT = 12;
+const MAPILLARY_MIN_RADIUS_M = 100;
+const MAPILLARY_MAX_RADIUS_M = 2000;
+const MAPILLARY_DEFAULT_RADIUS_M = 800;
+const MAPILLARY_THUMB_HOST_PATTERN =
+  /^https:\/\/[a-z0-9._-]+\.(mapillary\.com|fbcdn\.net|facebook\.com)\//i;
+
+function mapillaryBbox(lat, lon, radiusM) {
+  const dLat = radiusM / 111320;
+  const dLon = radiusM / (111320 * Math.max(0.05, Math.cos((lat * Math.PI) / 180)));
+  return [lon - dLon, lat - dLat, lon + dLon, lat + dLat].map((n) => n.toFixed(6)).join(",");
+}
+
+/* Mirror of the re-projection in api/mapillary.js: only these fields ever
+   reach the browser, and an image with no named contributor is dropped —
+   CC BY-SA requires the attribution to travel with the image. */
+function toMapillaryPayload(image) {
+  if (!image || typeof image !== "object") return null;
+  const src = typeof image.thumb_1024_url === "string" ? image.thumb_1024_url : "";
+  if (!MAPILLARY_THUMB_HOST_PATTERN.test(src)) return null;
+  const coords = image.geometry?.coordinates;
+  const lon = Array.isArray(coords) ? finiteOrNull(coords[0], 180) : null;
+  const lat = Array.isArray(coords) ? finiteOrNull(coords[1], 90) : null;
+  if (lat === null || lon === null) return null;
+  const creator = String(image.creator?.username || "").slice(0, 120);
+  if (!creator) return null;
+  const id = String(image.id || "").slice(0, 64);
+  if (!/^[0-9]+$/.test(id)) return null;
+  return {
+    id,
+    src: src.slice(0, 2048),
+    width: finiteOrNull(image.width, 100000) || 0,
+    height: finiteOrNull(image.height, 100000) || 0,
+    lat,
+    lon,
+    capturedAt: finiteOrNull(image.captured_at, 1e15) || 0,
+    isPano: image.is_pano === true,
+    creator,
+    link: `https://www.mapillary.com/app/?pKey=${id}&focus=photo`,
+  };
+}
+
+function mapillaryDevProxy(token) {
+  const handler = async (req, res, next) => {
+    const url = new URL(req.url, "http://localhost");
+    if (url.pathname !== MAPILLARY_ENDPOINT) return next();
+
+    if (req.method !== "GET") {
+      res.setHeader("Allow", "GET");
+      return sendJson(res, 405, { error: "method_not_allowed" });
+    }
+
+    const lat = finiteOrNull(url.searchParams.get("lat"), 90);
+    const lon = finiteOrNull(url.searchParams.get("lon"), 180);
+    if (lat === null || lon === null) return sendJson(res, 400, { error: "invalid_coordinates" });
+    if (!token) return sendJson(res, 503, { error: "unavailable" });
+
+    const asked = finiteOrNull(url.searchParams.get("radius"), MAPILLARY_MAX_RADIUS_M);
+    const radius = Math.min(
+      MAPILLARY_MAX_RADIUS_M,
+      Math.max(MAPILLARY_MIN_RADIUS_M, asked || MAPILLARY_DEFAULT_RADIUS_M),
+    );
+
+    try {
+      const r = await fetch(
+        `${MAPILLARY_GRAPH_URL}?` +
+          new URLSearchParams({
+            fields: MAPILLARY_FIELDS,
+            bbox: mapillaryBbox(lat, lon, radius),
+            limit: String(MAPILLARY_CANDIDATE_COUNT),
+          }),
+        {
+          headers: { Authorization: `OAuth ${token}`, Accept: "application/json" },
+          signal: AbortSignal.timeout(UPSTREAM_TIMEOUT_MS),
+        },
+      );
+      if (r.status === 429) {
+        res.setHeader("Retry-After", "60");
+        return sendJson(res, 429, { error: "rate_limited" });
+      }
+      if (r.status === 401 || r.status === 403) return sendJson(res, 503, { error: "unavailable" });
+      if (!r.ok) return sendJson(res, 502, { error: "upstream_error" });
+      const data = await r.json();
+      const images = (Array.isArray(data?.data) ? data.data : [])
+        .map(toMapillaryPayload)
+        .filter(Boolean);
+      /* Signed, expiring URLs — briefly reusable, never by a shared cache. */
+      return sendJson(res, 200, { images }, { store: false });
+    } catch {
+      return sendJson(res, 502, { error: "upstream_error" });
+    }
+  };
+
+  return {
+    name: "weathersphere-mapillary-dev-proxy",
     apply: "serve",
     configureServer(server) {
       server.middlewares.use(handler);
@@ -352,13 +469,18 @@ export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, process.cwd(), "");
   const pexelsKey = process.env.PEXELS_API_KEY ?? env.PEXELS_API_KEY ?? "";
   const placesKey = process.env.GOOGLE_PLACES_API_KEY ?? env.GOOGLE_PLACES_API_KEY ?? "";
+  const mapillaryToken = process.env.MAPILLARY_ACCESS_TOKEN ?? env.MAPILLARY_ACCESS_TOKEN ?? "";
 
   return {
     root: "src",
     base: "./",
     publicDir: "../public",
     envDir: "../",
-    plugins: [pexelsDevProxy(pexelsKey), placesDevProxy(placesKey)],
+    plugins: [
+      pexelsDevProxy(pexelsKey),
+      placesDevProxy(placesKey),
+      mapillaryDevProxy(mapillaryToken),
+    ],
     build: {
       outDir: "../dist",
       emptyOutDir: true,

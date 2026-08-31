@@ -30,6 +30,12 @@ export const PEXELS_PROXY_URL = `${import.meta.env.BASE_URL}api/pexels`;
    short-lived signed URI for one chosen photo. See services/places-api.js. */
 export const GOOGLE_PLACES_PROXY_URL = `${import.meta.env.BASE_URL}api/places`;
 
+/* Same-origin Mapillary proxy — geotagged street-level imagery for places the
+   other providers have never photographed. See services/mapillary-api.js.
+   (KartaView is deliberately NOT used: Mapillary is the only street-level
+   provider configured for this project.) */
+export const MAPILLARY_PROXY_URL = `${import.meta.env.BASE_URL}api/mapillary`;
+
 /* Request timeouts */
 export const FETCH_TIMEOUT_MS = 8000;
 export const GEOCODE_FALLBACK_TIMEOUT_MS = 6000;

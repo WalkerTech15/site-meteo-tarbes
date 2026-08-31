@@ -241,14 +241,14 @@ describe("pickBestPlace", () => {
   it("returns the closest qualifying candidate regardless of input order", () => {
     const near = place({ id: "near", lat: 43.2333, lon: 0.0782 });
     const far = place({ id: "far", lat: 43.55, lon: 0.4 });
-    expect(pickBestPlace(town(), [far, near]).id).toBe("near");
-    expect(pickBestPlace(town(), [near, far]).id).toBe("near");
+    expect(pickBestPlace(town(), [far, near]).place.id).toBe("near");
+    expect(pickBestPlace(town(), [near, far]).place.id).toBe("near");
   });
 
   it("keeps Google's own order when two candidates tie", () => {
     const first = place({ id: "first" });
     const second = place({ id: "second" });
-    expect(pickBestPlace(town(), [first, second]).id).toBe("first");
+    expect(pickBestPlace(town(), [first, second]).place.id).toBe("first");
   });
 
   it("returns null when every candidate is rejected", () => {
@@ -679,5 +679,135 @@ describe("known limitation — a country named by its endonym", () => {
       lon: -19,
     });
     expect(scorePlaceCandidate(iceland, entry)).toBeNull();
+  });
+});
+
+/* ── The landmark tier ─────────────────────────────────────────────────────
+   Why this exists, recorded because it was a real production failure rather
+   than a hypothetical: Google's place photos are attached overwhelmingly to
+   businesses and points of interest. Administrative entities — a `locality`,
+   an `administrative_area_level_1`, a `country` — very often carry no photos
+   at all, so the proxy drops them (a place with no photo cannot answer the
+   question) and the type gate dropped everything that did have one. Between
+   the two, a city/region/country query could return candidates and still
+   yield nothing usable: "no usable photo candidates".
+
+   The fix is a second, clearly-labelled tier — never a loosening of the
+   first. A landmark INSIDE the place is offered as a `nearby` photo, always
+   ranked below any genuine match, and the UI says so. */
+describe("landmark tier — what unblocks a city with no photo of its own", () => {
+  const cathedral = (over = {}) =>
+    place({
+      id: "ChIJcathedral",
+      name: "Cathédrale de la Sède",
+      address: "Place du Chapitre, 65000 Tarbes, France",
+      types: ["church", "place_of_worship", "tourist_attraction"],
+      lat: 43.2331,
+      lon: 0.0771,
+      ...over,
+    });
+
+  it("accepts a landmark inside the town when the town itself has no photo", () => {
+    const scored = scorePlaceCandidate(town(), cathedral());
+    expect(scored).not.toBeNull();
+    expect(scored.provenance).toBe("nearby");
+    expect(scored.reason).toBe("landmark");
+  });
+
+  /* The line the requirements draw: showing a landmark is fine, passing it
+     off as the city is not. */
+  it("never labels a landmark as an exact photo of the place", () => {
+    expect(scorePlaceCandidate(town(), cathedral()).provenance).not.toBe("exact");
+  });
+
+  it("always ranks the place itself above any landmark inside it", () => {
+    const picked = pickBestPlace(town(), [cathedral(), place()]);
+    expect(picked.place.id).toBe("ChIJTarbes");
+    expect(picked.provenance).toBe("exact");
+  });
+
+  it("keeps ranking the place first even when the landmark is closer", () => {
+    /* A landmark exactly on the town's coordinate still loses to the town. */
+    const onTheSpot = cathedral({ lat: town().lat, lon: town().lon });
+    const citySlightlyOff = place({ lat: 43.24, lon: 0.09 });
+    const picked = pickBestPlace(town(), [onTheSpot, citySlightlyOff]);
+    expect(picked.provenance).toBe("exact");
+  });
+
+  it("rejects a landmark that is not actually inside the place", () => {
+    /* Right type, right country, but 200 km away — a different town's
+       cathedral is not a photo of this one's surroundings. */
+    expect(scorePlaceCandidate(town(), cathedral({ lat: 44.84, lon: -0.58 }))).toBeNull();
+  });
+
+  it("rejects a landmark with no coordinate — proximity IS the evidence", () => {
+    expect(scorePlaceCandidate(town(), cathedral({ lat: null, lon: null }))).toBeNull();
+  });
+
+  /* Google attaches `establishment` and `point_of_interest` to essentially
+     every business, so those are deliberately not landmark types. */
+  it("still rejects ordinary businesses, however close they are", () => {
+    for (const types of [
+      ["lodging", "point_of_interest", "establishment"],
+      ["restaurant", "food", "establishment"],
+      ["car_repair", "establishment"],
+      ["gas_station", "point_of_interest", "establishment"],
+      ["shopping_mall", "establishment"],
+    ]) {
+      expect(scorePlaceCandidate(town(), cathedral({ types }))).toBeNull();
+    }
+  });
+
+  it("prefers the nearer of two landmarks, and the named one on a tie", () => {
+    const near = cathedral({ id: "near", lat: 43.2334, lon: 0.0783 });
+    const far = cathedral({ id: "far", lat: 43.2395, lon: 0.0782 });
+    expect(pickBestPlace(town(), [far, near]).place.id).toBe("near");
+  });
+
+  it("offers no landmark tier for a country — 'inside it' means nothing there", () => {
+    const japan = { kind: "country", name: { en: "Japan", fr: "Japon" }, lat: 36.2, lon: 138.25 };
+    const shrine = place({
+      name: "Meiji Jingu",
+      address: "Tokyo, Japan",
+      types: ["tourist_attraction", "place_of_worship"],
+      lat: 35.676,
+      lon: 139.699,
+    });
+    expect(scorePlaceCandidate(japan, shrine)).toBeNull();
+  });
+
+  it("offers a wide landmark radius for a region, which is a wide thing", () => {
+    const tuscany = {
+      kind: "region",
+      name: { en: "Tuscany", fr: "Toscane" },
+      region: {},
+      country: { en: "Italy", fr: "Italie" },
+      lat: 43.7711,
+      lon: 11.2486,
+    };
+    const tower = place({
+      name: "Torre pendente di Pisa",
+      address: "Pisa, Italy",
+      types: ["tourist_attraction", "historical_landmark"],
+      lat: 43.723,
+      lon: 10.3966,
+    });
+    const scored = scorePlaceCandidate(tuscany, tower);
+    expect(scored).not.toBeNull();
+    expect(scored.provenance).toBe("nearby");
+  });
+
+  it("carries the landmark's name through, so the credit can say what it is", async () => {
+    stubPlaces([cathedral()]);
+    const photo = await fetchGooglePlacePhoto(town());
+    expect(photo.provenance).toBe("nearby");
+    expect(photo.subjectName).toBe("Cathédrale de la Sède");
+  });
+
+  it("leaves subjectName empty for an exact match, which needs no qualifier", async () => {
+    stubPlaces([place()]);
+    const photo = await fetchGooglePlacePhoto(town());
+    expect(photo.provenance).toBe("exact");
+    expect(photo.subjectName).toBe("");
   });
 });
