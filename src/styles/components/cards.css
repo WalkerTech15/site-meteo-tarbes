@@ -283,23 +283,28 @@ body[data-theme="dark"] .forecast-card.is-today {
   padding: 3px 7px;
   font-size: 9.5px;
   line-height: 1.2;
-  color: rgba(255, 255, 255, 0.9);
+  /* Contrast, not decoration. This label sits over an ARBITRARY photo and
+     carries the provenance disclosure ("Nearby — not a photo of the place
+     itself"), so it has to stay readable on a white sky as well as a dark
+     street. The previous `opacity: 0.62` multiplied the text AND the scrim
+     together, leaving 1.84:1 over a bright photo — a WCAG failure at 9.5px,
+     where 4.5:1 is required. Restraint now comes from the small size and the
+     corner placement; the scrim carries the legibility. Worst case measured
+     over pure white is 8.06:1. */
+  color: rgba(255, 255, 255, 0.96);
   text-decoration: none;
-  background: rgba(2, 6, 23, 0.45);
+  background: rgba(2, 6, 23, 0.72);
   -webkit-backdrop-filter: blur(4px);
   backdrop-filter: blur(4px);
   border-top-left-radius: 8px;
-  opacity: 0.62;
   transition:
     color 0.2s,
-    background 0.2s,
-    opacity 0.2s;
+    background 0.2s;
 }
 .loc-credit:hover,
 .loc-credit:focus-visible {
   color: #fff;
-  background: rgba(2, 6, 23, 0.7);
-  opacity: 1;
+  background: rgba(2, 6, 23, 0.85);
   text-decoration: underline;
 }
 /* Variant for light card bodies, where the credit is a normal line of muted

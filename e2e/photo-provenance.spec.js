@@ -98,7 +98,8 @@ test.describe("provenance — a nearby photo says so", () => {
     await searchFor(page, GEOCODE_LABEL);
     await expect(heroPhoto(page)).toHaveCount(1);
 
-    await expect(credit(page)).toContainText("Nearby");
+    /* Default language is French; the badge is localized. */
+    await expect(credit(page)).toContainText(/À proximité|Nearby/);
     await expect(credit(page)).toHaveAttribute("aria-label", /not a photo of the place itself/i);
   });
 
@@ -355,5 +356,121 @@ test.describe("provenance — mobile", () => {
       () => document.documentElement.scrollWidth - document.documentElement.clientWidth,
     );
     expect(overflow).toBeLessThanOrEqual(0);
+  });
+});
+
+/* ── Regression: the Redwood, New York case, in a real browser ──────────────
+ *
+ * Commons' geosearch radius is a flat 10 km, so selecting a small place used
+ * to inherit a photo of whatever named neighbour happened to be photographed
+ * — shown with no qualifier, i.e. as a photo of the place itself. The unit
+ * tests pin the tier; these pin what a visitor actually SEES. */
+test.describe("provenance — a distant coordinate match is labelled, not disguised", () => {
+  const FAR_TITLE = "Roadcut at Chippewa Bay, New York";
+  /* ~30 km from the geocoded location: well inside Commons' 10 km search of
+     its own centre is impossible, so this stands in for the real case where
+     the only geotagged photo around is of somewhere else. */
+  const farCommons = (route) =>
+    route.fulfill(
+      json(
+        wikimediaPhotoPage({
+          title: FAR_TITLE,
+          alt: "",
+          photographer: "A Commons Contributor",
+          license: "CC BY-SA 4.0",
+          lat: 64.4,
+          lon: -21.8954,
+        }),
+      ),
+    );
+
+  test("shows the photo but calls it nearby, naming what it really shows", async ({ page }) => {
+    await openHome(page, {
+      placesProxy: (route) => route.fulfill(json({ places: [], received: 0 })),
+      wikimediaProxy: farCommons,
+      photoProxy: silentPexels,
+    });
+    await searchFor(page, GEOCODE_LABEL);
+
+    await expect(credit(page)).toHaveAttribute("data-provenance", "nearby");
+    await expect(credit(page)).not.toHaveAttribute("data-provenance", "exact");
+    await expect(credit(page)).toContainText(/À proximité|Nearby/);
+    /* Names the actual subject, so the visitor can see WHAT they are looking
+       at rather than only being told what it is not. */
+    await expect(credit(page)).toHaveAttribute("aria-label", new RegExp(FAR_TITLE, "i"));
+    /* The raw Commons file name must never reach the visitor. */
+    await expect(credit(page)).not.toContainText(".jpg");
+    await expect(credit(page)).toHaveAttribute("aria-label", /^(?!.*\.jpg).*$/);
+    /* Attribution and licence survive the downgrade. */
+    await expect(credit(page)).toHaveAttribute("aria-label", /A Commons Contributor/);
+    await expect(credit(page)).toHaveAttribute("aria-label", /CC BY-SA 4\.0/);
+    /* The photo is still displayed — labelling it is the fix, hiding it is not. */
+    await expect(heroPhoto(page)).toBeVisible();
+  });
+});
+
+/* ── Regression: the disclosure has to be READABLE ──────────────────────────
+ *
+ * The credit is the only place the visitor is told a photo is not of the
+ * place they picked, and it sits over a photograph nobody controls. It used
+ * to combine `opacity: 0.62` with a 45%-opacity scrim, which multiplied text
+ * and backdrop together and left 1.84:1 over a bright photo — a WCAG failure
+ * at 9.5px, where 4.5:1 is required. Measured here in the browser from the
+ * COMPUTED style, against pure white, which is the worst case any photo can
+ * present. */
+test.describe("provenance — the label is legible over any photo", () => {
+  test("the credit clears WCAG AA against a white photo", async ({ page }) => {
+    await openHome(page, {
+      placesProxy: (route) => route.fulfill(json({ places: [], received: 0 })),
+      wikimediaProxy: (route) =>
+        route.fulfill(
+          json(
+            wikimediaPhotoPage({
+              title: "Somewhere else entirely",
+              photographer: "A Commons Contributor",
+              license: "CC BY-SA 4.0",
+              lat: 64.4,
+              lon: -21.8954,
+            }),
+          ),
+        ),
+      photoProxy: silentPexels,
+    });
+    await searchFor(page, GEOCODE_LABEL);
+    await expect(credit(page)).toBeVisible();
+
+    const measured = await credit(page).evaluate((el) => {
+      const cs = getComputedStyle(el);
+      const parse = (s) => {
+        const n = s.match(/[\d.]+/g).map(Number);
+        return { rgb: n.slice(0, 3), a: n.length > 3 ? n[3] : 1 };
+      };
+      const lin = (c) => {
+        c /= 255;
+        return c <= 0.03928 ? c / 12.92 : Math.pow((c + 0.055) / 1.055, 2.4);
+      };
+      const L = ([r, g, b]) => 0.2126 * lin(r) + 0.7152 * lin(g) + 0.0722 * lin(b);
+      const text = parse(cs.color);
+      const scrim = parse(cs.backgroundColor);
+      const op = Number(cs.opacity);
+      const PHOTO = [255, 255, 255]; // worst case
+      // text over scrim inside the element's own layer, then layer over photo
+      const layerA = text.a + scrim.a * (1 - text.a);
+      const layer = text.rgb.map(
+        (c, i) => (c * text.a + scrim.rgb[i] * scrim.a * (1 - text.a)) / layerA,
+      );
+      const effA = layerA * op;
+      const textPx = layer.map((c, i) => c * effA + PHOTO[i] * (1 - effA));
+      const bgA = scrim.a * op;
+      const bgPx = scrim.rgb.map((c, i) => c * bgA + PHOTO[i] * (1 - bgA));
+      const [hi, lo] = [L(textPx), L(bgPx)].sort((m, n) => n - m);
+      return { ratio: (hi + 0.05) / (lo + 0.05), fontSize: parseFloat(cs.fontSize) };
+    });
+
+    /* 4.5:1 is the AA threshold for text this small. */
+    expect(measured.ratio).toBeGreaterThanOrEqual(4.5);
+    /* If the type ever grows past the large-text threshold this test should be
+       revisited rather than silently relaxed. */
+    expect(measured.fontSize).toBeLessThan(18);
   });
 });

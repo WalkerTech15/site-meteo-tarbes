@@ -24,6 +24,7 @@ import {
   bumpPhotoToken,
   __resetPhotoCacheForTests,
 } from "./photo-api.js";
+import { photoProvenance } from "../ui/photo-provenance.js";
 import { state } from "../core/state.js";
 import { LOCATIONS } from "../data/locations.js";
 import { COUNTRY_FLAG_CODES } from "../data/country-flag-codes.js";
@@ -1556,5 +1557,92 @@ describe("landmark evidence in the relevance filter", () => {
     expect(relevanceKeywords(town())).toEqual(
       expect.arrayContaining(["tarbes", "occitania", "france"]),
     );
+  });
+});
+
+/* ── Regression: a geosearch hit is not automatically a photo OF the place ──
+ *
+ * Reported case: selecting Redwood, New York showed a Commons photo titled
+ * "Roadcut at Chippewa Bay, New York" — a different, named settlement about
+ * 6.5 km away — presented with no qualifier at all, i.e. as an exact photo of
+ * Redwood.
+ *
+ * The cause is structural, not specific to Redwood: `trustCoordinates` skips
+ * the text filter (correctly — a terse or non-English caption must not sink a
+ * genuinely local photo), but nothing then downgraded the CLAIM. Commons'
+ * geosearch radius is 10 km, which is a reasonable catchment for a city and
+ * far too generous for a hamlet, so any village with a photographed
+ * neighbour inherited that neighbour's photo as its own.
+ *
+ * The rule under test applies worldwide: a coordinate-only match is `exact`
+ * only when the photo is within the place's own built-up radius, or when its
+ * text names the place. Otherwise it is shown, but labelled `nearby`. */
+describe("Commons geosearch — provenance reflects distance, not just the radius", () => {
+  const REDWOOD = {
+    id: "us-redwood-ny",
+    kind: "village",
+    cc: "US",
+    lat: 44.2903,
+    lon: -75.8071,
+    name: { en: "Redwood", fr: "Redwood" },
+    region: { en: "New York", fr: "New York" },
+    country: { en: "United States", fr: "États-Unis" },
+    aliases: [],
+    landmark: null,
+  };
+  /* ~6.5 km north-east of Redwood: inside the 10 km geosearch radius, well
+     outside anything a reasonable person would call "a photo of Redwood". */
+  const CHIPPEWA = { lat: 44.34, lon: -75.76 };
+
+  it("labels a distant geosearch hit as nearby, not as a photo of the village", async () => {
+    stubProviders({
+      places: [],
+      geo: [commonsPage("Roadcut at Chippewa Bay, New York", CHIPPEWA)],
+      text: [],
+      pexels: [],
+    });
+    const photo = await fetchBestPhoto(REDWOOD);
+    expect(photo).not.toBeNull();
+    expect(photo.source).toBe("wikimedia");
+    /* The photo is still shown — it is real, local and open-licensed. What
+       must not happen is showing it as Redwood itself. */
+    expect(photoProvenance(photo)).toBe("nearby");
+    expect(photo.subjectName).toContain("Chippewa Bay");
+    /* The visible credit reads "Nearby: <subject>", so the raw Commons file
+       name must not reach it with its extension or underscores intact. */
+    expect(photo.subjectName).toBe("Roadcut at Chippewa Bay, New York");
+  });
+
+  it("still calls a genuinely local geosearch hit an exact photo", async () => {
+    stubProviders({
+      places: [],
+      geo: [commonsPage("Barn on County Route 3", { lat: 44.2915, lon: -75.8055 })],
+      text: [],
+      pexels: [],
+    });
+    const photo = await fetchBestPhoto(REDWOOD);
+    expect(photoProvenance(photo)).toBe("exact");
+  });
+
+  it("trusts a distant hit that names the place in its own title", async () => {
+    stubProviders({
+      places: [],
+      geo: [commonsPage("Redwood Cemetery, New York", CHIPPEWA)],
+      text: [],
+      pexels: [],
+    });
+    const photo = await fetchBestPhoto(REDWOOD);
+    expect(photoProvenance(photo)).toBe("exact");
+  });
+
+  it("keeps a city's wider catchment — 6 km from a city centre is still the city", async () => {
+    stubProviders({
+      places: [],
+      geo: [commonsPage("Old stone bridge", { lat: 43.2833, lon: 0.0782 })],
+      text: [],
+      pexels: [],
+    });
+    const photo = await fetchBestPhoto(town({ kind: "city" }));
+    expect(photoProvenance(photo)).toBe("exact");
   });
 });

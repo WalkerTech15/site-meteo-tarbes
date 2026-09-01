@@ -139,6 +139,24 @@ export function locationTokens(loc) {
    title and description; Pexels supplies alt text and a photographer name.
    Both are folded into one haystack so a rule never has to branch on which
    provider a photo came from. */
+/* A view of the location carrying ONLY its own identity — no region, no
+   country. Asking "does this text name the PLACE?" against the full location
+   is answered by the country word alone, and every result in the right
+   country repeats the country, so the question has to be narrowed to be
+   worth asking. Used by the Google landmark tier (services/places-api.js)
+   and the Commons geosearch provenance check (services/photo-api.js). */
+export function identityOnly(loc) {
+  if (!loc) return null;
+  return {
+    kind: loc.kind,
+    name: loc.name,
+    aliases: loc.aliases,
+    landmark: loc.landmark,
+    region: {},
+    country: {},
+  };
+}
+
 export function photoHaystack(photo) {
   if (!photo) return "";
   return normalizeForMatch(

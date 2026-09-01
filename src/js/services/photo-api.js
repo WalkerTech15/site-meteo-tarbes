@@ -63,6 +63,9 @@ import {
   pickBestPhoto,
   isMarineKind,
   namesConflictingPlace,
+  identityOnly,
+  distanceKm,
+  scorePhotoForLocation,
 } from "./photo-relevance.js";
 import { LOCATIONS } from "../data/locations.js";
 import { isOffline } from "./offline.js";
@@ -510,6 +513,56 @@ async function requestPhotoList(cacheKey, url, cache) {
    to a text search instead (see resolveWikimediaPhoto). */
 const GEOSEARCH_KINDS = new Set(["city", "town", "village", "address", "poi", "ocean", "sea"]);
 
+/* How close a coordinate-matched photo has to be before it can be called a
+   photo OF the place rather than one taken NEAR it.
+
+   Commons' geosearch radius is a flat 10 km (services/wikimedia-api.js).
+   That is a fair catchment for a city and a nonsense one for a hamlet: it is
+   how selecting Redwood, New York came to show a photo titled "Roadcut at
+   Chippewa Bay" — a different, named settlement 6.5 km away — with no
+   qualifier at all. `trustCoordinates` deliberately skips the text filter so
+   a terse or non-English caption cannot sink a genuinely local photo, but
+   skipping the filter must not also upgrade the CLAIM.
+
+   So the photo is still shown — it is real, local and openly licensed — and
+   the tier is set from the evidence instead: within the place's own built-up
+   radius, or naming the place in its own text, means exact; anything else is
+   honestly labelled nearby. Radii are deliberately generous, since being
+   wrong in this direction only costs a "Nearby" label on a good photo. */
+const EXACT_RADIUS_KM = { city: 8, town: 4, village: 2.5, address: 1, poi: 1 };
+
+/* What to call the thing in the photo, in the visible "Nearby: …" credit.
+   A Commons title keeps its file extension once the "File:" prefix is gone
+   ("Roadcut at Chippewa Bay, New York.jpg"), and underscores where the wiki
+   put them, so neither is fit to show a visitor as-is. */
+function subjectName(photo) {
+  const raw = String(photo.title || photo.alt || "");
+  return raw
+    .replace(/.(jpe?g|png|gif|webp|tiff?|svg)$/i, "")
+    .replace(/_/g, " ")
+    .trim();
+}
+
+/* Returns the photo, or a labelled COPY of it — never a mutation, because the
+   same object is shared through WIKIMEDIA_CACHE. */
+function withGeoProvenance(loc, photo) {
+  if (!loc || !photo) return photo;
+  /* An ocean or sea IS the surrounding area, so "nearby" would be a
+     distinction without a difference. */
+  if (isMarineKind(loc.kind)) return photo;
+  const limit = EXACT_RADIUS_KM[loc.kind];
+  if (!limit) return photo;
+  /* Naming the place in the title or description outranks distance: a photo
+     called "Redwood Cemetery" is about Redwood wherever its pin sits. */
+  if (scorePhotoForLocation(identityOnly(loc), photo).confidence === "text") return photo;
+  const km = distanceKm(loc.lat, loc.lon, photo.lat, photo.lon);
+  /* No coordinates on the candidate means nothing can be measured; geosearch
+     already vouched for it being within 10 km, so this keeps the previous
+     behaviour rather than inventing a downgrade from missing data. */
+  if (km === null || km <= limit) return photo;
+  return { ...photo, provenance: "nearby", subjectName: subjectName(photo) };
+}
+
 /* Wikimedia Commons lookup: geosearch first (when eligible — precise
    coordinates back it with real proximity evidence), then a text search as
    the fallback every kind gets. Cached by location identity so re-selecting
@@ -541,7 +594,7 @@ async function resolveWikimediaPhoto(loc, cacheKey) {
   try {
     if (cacheKey.startsWith("geo:")) {
       const geo = await wikimediaGeosearch(loc.lat, loc.lon);
-      best = rankWikimediaCandidates(loc, geo, { trustCoordinates: true });
+      best = withGeoProvenance(loc, rankWikimediaCandidates(loc, geo, { trustCoordinates: true }));
     }
     if (!best) {
       const text = await wikimediaSearch(wikimediaQuery(loc));
@@ -569,9 +622,12 @@ async function wikimediaGeoPhoto(loc) {
   const run = (async () => {
     let best = null;
     try {
-      best = rankWikimediaCandidates(loc, await wikimediaGeosearch(loc.lat, loc.lon), {
-        trustCoordinates: true,
-      });
+      best = withGeoProvenance(
+        loc,
+        rankWikimediaCandidates(loc, await wikimediaGeosearch(loc.lat, loc.lon), {
+          trustCoordinates: true,
+        }),
+      );
     } catch {
       best = null;
     }

@@ -33,7 +33,12 @@
 import { GOOGLE_PLACES_PROXY_URL, FETCH_TIMEOUT_MS } from "../core/config.js";
 import { state } from "../core/state.js";
 import { locCountry } from "../core/location.js";
-import { scorePhotoForLocation, distanceKm, isMarineKind } from "./photo-relevance.js";
+import {
+  scorePhotoForLocation,
+  distanceKm,
+  isMarineKind,
+  identityOnly,
+} from "./photo-relevance.js";
 
 /* Deliberately short. See "LICENSING AND CACHING" above: these are ceilings
    chosen to stay well inside the terms, not performance tuning. */
@@ -213,16 +218,6 @@ const EXACT_PLACE_ID_SCORE = 1000;
    country is making a generic keyword match, and every Google candidate in
    the right country repeats the country in its formatted address, so that
    signal alone proves nothing at all. */
-function identityOnly(loc) {
-  return {
-    kind: loc.kind,
-    name: loc.name,
-    aliases: loc.aliases,
-    landmark: loc.landmark,
-    region: {},
-    country: {},
-  };
-}
 
 /* Every accepted EXACT match outranks every accepted NEARBY one, whatever
    their raw scores. Keeping the two tiers apart by a wide constant — rather
